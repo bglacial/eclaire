@@ -1,0 +1,468 @@
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+import './style.css';
+import { Geolocation } from '@capacitor/geolocation';
+import { buildRoadGraph, nearestNode } from './graph';
+import { createMap, pointMarker } from './map';
+import { ExplorationRenderer } from './animation';
+import { GpsGuidance } from './guidance';
+import { navigationRoute } from './navigation';
+import { cancelNationalRoute, checkNationalService, decodeNationalMessage, franceBounds, isInFrance, nationalRoute, searchFrance } from './national';
+import type { Criterion, Dataset, ExplorationEvent, Place, RoadGeometry, RoadGraph, SearchResult, WorkerResponse } from './types';
+
+const paths: Record<string, string> = {
+  bolt: '<path d="m13 2-9 12h7l-1 8 10-13h-8l1-7Z"/>',
+  arrow: '<path d="M5 12h14m-6-6 6 6-6 6"/>',
+  swap: '<path d="M8 3v16m-4-4 4 4 4-4m4 6V5m-4 4 4-4 4 4"/>',
+  locate: '<circle cx="12" cy="12" r="6"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3"/><circle cx="12" cy="12" r="1"/>',
+  pin: '<path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/>',
+  time: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  route: '<circle cx="6" cy="5" r="2"/><circle cx="18" cy="19" r="2"/><path d="M8 5h7a4 4 0 0 1 0 8H9a3 3 0 0 0 0 6h7"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>', minus: '<path d="M5 12h14"/>',
+  expand: '<path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/>',
+  info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10v.1"/>',
+  close: '<path d="m6 6 12 12M6 18 18 6"/>',
+  reset: '<path d="M3 10a9 9 0 1 1 2 8M3 4v6h6"/>',
+  car: '<path d="m5 6 2-3h10l2 3 2 7v6h-3v-3H6v3H3v-6l2-7Zm0 0h14M3 12h18M7 13v1m10-1v1"/>',
+  check: '<path d="m5 12 4 4L19 6"/>',
+  stop: '<rect x="6" y="6" width="12" height="12" rx="1"/>',
+  layers: '<path d="m12 3 10 6-10 6L2 9l10-6Zm-9 11 9 5 9-5M3 18l9 5 9-5"/>',
+};
+const icon = (name: string) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name]}</svg>`;
+
+document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
+  <header class="topbar">
+    <a class="brand" href="./" aria-label="Éclaire, accueil"><span class="brand-symbol">${icon('bolt')}</span>éclaire<span class="brand-dot">.</span></a>
+    <span class="tagline">Le chemin prend vie.</span>
+    <div class="header-right"><span class="edition"><span></span> FRANCE</span><button class="help-button" id="help" aria-label="Le concept" aria-expanded="false" aria-controls="about">${icon('info')}<span>Le concept</span></button></div>
+  </header>
+  <main>
+    <div id="map" aria-label="Carte interactive de France. Utilisez les boutons Choisir sur la carte, puis touchez une route." role="region"></div>
+    <div class="map-vignette" aria-hidden="true"></div>
+    <section class="planner" aria-labelledby="planner-title">
+      <div class="planner-intro"><p class="eyebrow">L’EXPLORATEUR D’ITINÉRAIRES</p><h1 id="planner-title">Deux points.<br> Une rencontre.</h1><p>Voyez les routes chercher votre chemin.</p></div>
+      <div class="location-fields">
+        <div class="field-wrap start-field"><span class="field-point" aria-hidden="true">A</span><div class="field-body"><label for="start">DÉPART</label><input id="start" type="search" placeholder="Une adresse, un lieu…" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="start-results" /><div id="start-results" class="suggestions" role="listbox" aria-label="Suggestions de départ" hidden></div></div><button class="icon-button pick" data-pick="start" title="Choisir le départ sur la carte" aria-label="Choisir le départ sur la carte">${icon('pin')}</button></div>
+        <span class="field-connector" aria-hidden="true"></span>
+        <button id="swap" class="swap-button" aria-label="Permuter le départ et l’arrivée" title="Permuter">${icon('swap')}</button>
+        <div class="field-wrap end-field"><span class="field-point" aria-hidden="true">B</span><div class="field-body"><label for="end">ARRIVÉE</label><input id="end" type="search" placeholder="Une adresse, un lieu…" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="end-results" /><div id="end-results" class="suggestions" role="listbox" aria-label="Suggestions d’arrivée" hidden></div></div><button class="icon-button pick" data-pick="end" title="Choisir l’arrivée sur la carte" aria-label="Choisir l’arrivée sur la carte">${icon('pin')}</button></div>
+      </div>
+      <button id="geolocate" class="location-button">${icon('locate')} Utiliser ma position</button>
+      <fieldset class="criteria"><legend>À chaque envie, son chemin</legend><label><input type="radio" name="criterion" value="time" checked><span>${icon('time')} Le plus rapide</span></label><label><input type="radio" name="criterion" value="distance"><span>${icon('route')} Le plus court</span></label></fieldset>
+      <div class="launch-row"><button id="launch" class="primary" disabled>${icon('bolt')}<span>Chargement des routes…</span>${icon('arrow')}</button><button id="reset" class="icon-button reset-button" aria-label="Recommencer avec le parcours initial" title="Recommencer">${icon('reset')}</button></div>
+      <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+      <div id="route-result" class="route-result" role="status" aria-live="polite" hidden><div class="result-heading"><span>${icon('check')} LE CHEMIN EST TROUVÉ</span><span id="result-criterion"></span></div><div class="metrics"><div><strong id="duration"></strong><span>durée estimée</span></div><div><strong id="distance"></strong><span>distance</span></div></div><p>Estimation sans trafic en direct.</p><button id="navigation-start" class="primary" hidden>${icon('locate')} Démarrer le guidage GPS</button><p id="navigation-availability"></p></div>
+      <div class="planner-footer">${icon('car')} En voiture <span>·</span><span id="coverage">Connexion au service France…</span></div>
+    </section>
+    <aside class="map-title" aria-hidden="true"><span class="eyebrow">UN NOUVEAU REGARD SUR LES ROUTES</span><span>La France, à la lueur des routes.</span></aside>
+    <div class="map-tools"><button id="france" class="icon-button france-button" aria-label="Voir toute la France" title="Voir toute la France">FR</button><button id="fit" class="icon-button" aria-label="Recentrer sur les deux points" title="Recentrer">${icon('expand')}</button><div class="zoom-controls"><button id="zoom-in" class="icon-button" aria-label="Zoom avant">${icon('plus')}</button><button id="zoom-out" class="icon-button" aria-label="Zoom arrière">${icon('minus')}</button></div><button id="lite" class="icon-button" aria-label="Mode léger" aria-pressed="false" title="Mode léger">${icon('layers')}</button></div>
+    <div id="pick-hint" class="pick-hint" role="status" hidden><span></span><button id="cancel-pick" class="icon-button" aria-label="Annuler la sélection">${icon('close')}</button></div>
+    <section id="playback" class="playback" aria-label="État de l’exploration" hidden><span class="activity-dot"></span><div><strong id="playback-title">Les routes s’éveillent</strong><span id="playback-count">Préparation du calcul…</span></div><span id="playback-percent"></span><div class="playback-track"><span id="playback-progress"></span></div></section>
+    <section id="navigation" class="navigation" aria-label="Guidage GPS" hidden>
+      <p class="eyebrow">EN ROUTE AVEC ÉCLAIRE</p><div id="navigation-next"><strong id="navigation-turn-distance">GPS</strong><h2 id="navigation-instruction" role="status" aria-live="polite" aria-atomic="true">Recherche de votre position…</h2></div>
+      <div class="navigation-metrics"><div><strong id="navigation-remaining">—</strong><span>restants</span></div><div><strong id="navigation-time">—</strong><span>durée estimée</span></div></div>
+      <p id="navigation-status"></p>
+      <button id="navigation-recalculate" class="primary" hidden>Recalculer depuis ma position</button><button id="navigation-resume" class="primary" hidden>Reprendre le GPS</button>
+      <div class="navigation-actions"><button id="navigation-follow" aria-pressed="true">Position suivie</button><button id="navigation-voice" aria-pressed="false">Activer la voix</button><button id="navigation-stop">Quitter le guidage</button></div>
+      <small>Gardez l’application visible. Guidage expérimental : respectez la signalisation.</small>
+    </section>
+    <div class="map-legend"><span><i class="cyan"></i>Depuis le départ</span><span><i class="amber"></i>Depuis l’arrivée</span><span><i class="final"></i>Le meilleur chemin</span></div>
+    <div class="map-proof"><span class="proof-dot"></span><span>De vraies routes. Un vrai calcul.</span><button id="algorithm-info" aria-label="Comprendre le calcul">${icon('info')}</button></div>
+    <aside id="about" class="about" aria-labelledby="about-title" hidden><button id="close-about" class="icon-button" aria-label="Fermer les explications">${icon('close')}</button><p class="eyebrow">SOUS LA LUMIÈRE, UN ALGORITHME</p><h2 id="about-title">Deux fronts.<br>Une preuve.</h2><p>Un Dijkstra bidirectionnel explore les routes depuis A et depuis B, en sens inverse. Les éclairs suivent des segments réellement visités, sans mouvement inventé hors des routes.</p><p>La première rencontre ne suffit pas : le trajet est révélé quand les coûts restants prouvent qu’aucun meilleur chemin n’existe dans le réseau retenu.</p><dl><div><dt>Le plus court</dt><dd>Longueur des routes</dd></div><div><dt>Le plus rapide</dt><dd>Temps estimé selon les vitesses OSM</dd></div></dl><p>En France, le service GraphHopper calcule puis transmet sa trace pour une lecture animée. Les longues explorations sont échantillonnées sur les deux fronts pour préserver le téléphone ; le calcul et le trajet final restent complets. Sans service, la démo Paris utilise le worker embarqué.</p><p id="data-info"></p><p>Le service raccorde les points à une route accessible à 2 km maximum. Les accès privés et de desserte sont exclus. Aucun trafic en direct. Le guidage GPS expérimental utilise les manœuvres du moteur, avec l’application visible ; certaines restrictions OSM ne sont pas prises en charge. Vérifiez l’accès final et respectez la signalisation.</p><p>Le GPS reste sur l’appareil pendant le suivi. Un recalcul transmet la position au service routier configuré. La recherche nationale utilise le géocodage IGN et lui transmet le texte recherché. Le fournisseur des tuiles reçoit les zones de carte consultées ; les données détaillées de Paris restent embarquées.</p><a href="/data/provenance.json" target="_blank" rel="noopener">Provenance de la démo Paris ↗</a></aside>
+    <div id="loading" class="loading" role="status"><span class="loading-bolt">${icon('bolt')}</span><strong>Paris se dessine.</strong><p>Chargement des données OpenStreetMap…</p><button id="retry" class="primary" hidden>Réessayer</button></div>
+  </main>`;
+
+const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
+const inputs = { start: $<HTMLInputElement>('start'), end: $<HTMLInputElement>('end') };
+const launch = $<HTMLButtonElement>('launch');
+type Endpoint = 'start' | 'end';
+type Selection = Place & { node: number; snapDistance: number };
+let data: Dataset;
+let roads: RoadGraph;
+let map: L.Map;
+let renderer: ExplorationRenderer;
+let guidance: GpsGuidance | undefined;
+let routeGeometry: RoadGeometry;
+let resumeGuidance = false;
+let worker: Worker | undefined;
+let workerReady = false;
+let selections: Record<Endpoint, Selection | null> = { start: null, end: null };
+let markers: Partial<Record<Endpoint, L.Marker>> = {};
+let picking: Endpoint | null = null;
+let run = 0;
+let playing = false;
+let queue: ExplorationEvent[] = [];
+let cursor = 0;
+let result: SearchResult | null | undefined;
+let playbackFrame = 0;
+let lastTick = 0;
+let carry = 0;
+let searchIndex: Place[] = [];
+let nationalReady = false;
+let routeAbort: AbortController | undefined;
+let routeId: string | undefined;
+let traceStride = 1;
+let nationalPlayback = false;
+const defaults: Record<Endpoint, Place> = {
+  start: { name: 'Musée du Louvre', lat: 48.8608, lon: 2.3376 },
+  end: { name: 'Panthéon', lat: 48.8462, lon: 2.3464 },
+};
+
+function notice(message: string, kind: 'error' | 'info' = 'info') {
+  $('notice').textContent = message;
+  $('notice').className = `notice ${kind}`;
+  $('notice').hidden = !message;
+}
+
+function updateLaunch() {
+  launch.disabled = !workerReady || !selections.start || !selections.end;
+  launch.innerHTML = playing ? `${icon('stop')}<span>Interrompre l’exploration</span>` : `${icon('bolt')}<span>Explorer le trajet</span>${icon('arrow')}`;
+}
+
+function stop(clear = true) {
+  guidance?.setRoute(null); resumeGuidance = false;
+  routeAbort?.abort(); routeAbort = undefined;
+  if (routeId) { void cancelNationalRoute(routeId); routeId = undefined; }
+  run++;
+  cancelAnimationFrame(playbackFrame);
+  playing = false;
+  queue = []; cursor = 0; result = undefined;
+  $('playback').hidden = true;
+  $('route-result').hidden = true;
+  if (clear) renderer?.clear();
+  updateLaunch();
+}
+
+function selectPoint(side: Endpoint, place: Place, announce = true) {
+  if (!isInFrance(place)) {
+    notice('Choisissez un point en France métropolitaine ou en Corse.', 'error'); return false;
+  }
+  const snap = nearestNode(roads, place);
+  stop();
+  const node = snap ? roads.nodes[snap.index] : place;
+  selections[side] = { ...place, node: snap?.index ?? -1, snapDistance: snap?.distance ?? 0 };
+  inputs[side].value = place.name;
+  markers[side]?.remove();
+  markers[side] = pointMarker(map, node.lat, node.lon, side, place.name);
+  closeSuggestions(side);
+  updateLaunch();
+  if (announce) notice(snap ? `Point ${side === 'start' ? 'de départ' : 'd’arrivée'} raccordé à ${roads.edges[(roads.outgoing[snap.index][0] ?? roads.incoming[snap.index][0])].name}, à ${Math.round(snap.distance)} m.` : 'Point choisi. Le service France le raccordera au réseau automobile.');
+  return true;
+}
+
+function fitPoints() {
+  if (guidance?.active) return;
+  const a = selections.start, b = selections.end;
+  if (!a || !b) return;
+  map.invalidateSize({ pan: false, animate: false });
+  const mobile = matchMedia('(max-width: 720px)').matches;
+  const plannerHeight = document.querySelector('.planner')!.getBoundingClientRect().height;
+  map.fitBounds(L.latLngBounds(markers.start!.getLatLng(), markers.end!.getLatLng()), {
+    paddingTopLeft: mobile ? [75, playing ? 160 : 90] : [430, 90], paddingBottomRight: mobile ? [75, plannerHeight + 55] : [110, 130], maxZoom: 16, animate: !renderer.reducedMotion,
+  });
+}
+
+function makeWorker() {
+  worker?.terminate();
+  workerReady = false;
+  worker = new Worker(new URL('./routing.worker.ts', import.meta.url), { type: 'module' });
+  worker.onmessage = ({ data: message }: MessageEvent<WorkerResponse>) => {
+    if (message.type === 'ready') { workerReady = true; updateLaunch(); return; }
+    if (message.run !== run) return;
+    if (message.type === 'batch') queue.push(...message.events);
+    if (message.type === 'result') result = message.result;
+    if (message.type === 'error') { stop(); notice(message.message, 'error'); }
+  };
+  worker.onerror = () => {
+    stop(); workerReady = false; updateLaunch();
+    notice('Le moteur de calcul ne répond plus. Rechargez la page pour réessayer.', 'error');
+  };
+  worker.postMessage({ type: 'init', roads });
+}
+
+function complete() {
+  playing = false;
+  updateLaunch();
+  if (!result) {
+    $('playback').hidden = true;
+    notice('Aucun itinéraire automobile dans le réseau chargé. Les accès, sens uniques ou coupures peuvent empêcher le trajet. Essayez d’autres points.', 'error');
+    return;
+  }
+  renderer.finish(result);
+  try { guidance?.setRoute(navigationRoute(routeGeometry, result)); }
+  catch { guidance?.setRoute(null); }
+  const minutes = Math.ceil(result.seconds / 60);
+  $('duration').textContent = minutes < 1 ? '< 1 min' : minutes < 60 ? `${minutes} min` : `${Math.floor(minutes / 60)} h${minutes % 60 ? ` ${String(minutes % 60).padStart(2, '0')}` : ''}`;
+  $('distance').textContent = result.length >= 1000 ? `${(result.length / 1000).toLocaleString('fr-FR', { maximumFractionDigits: result.length >= 1_000_000 ? 0 : result.length >= 100_000 ? 1 : 2 })} km` : `${Math.round(result.length)} m`;
+  $('result-criterion').textContent = criterion() === 'time' ? 'LE PLUS RAPIDE' : 'LE PLUS COURT';
+  $('route-result').hidden = false;
+  $('playback-title').textContent = 'La rencontre a eu lieu.';
+  $('playback-count').textContent = `${result.visited.toLocaleString('fr-FR')} états explorés · optimalité confirmée`;
+  $('playback-percent').innerHTML = icon('check');
+  $('playback-progress').style.transform = 'scaleX(1)';
+  $('playback').classList.add('complete');
+  notice(nationalPlayback && traceStride > 1 ? `${result.visited.toLocaleString('fr-FR', { notation: 'compact', maximumFractionDigits: 2 })} états explorés · trace 1/${traceStride} par front.` : '');
+  $('playback').hidden = true;
+  if (resumeGuidance) { resumeGuidance = false; void guidance?.start(); }
+  else if (matchMedia('(max-width: 720px)').matches) requestAnimationFrame(fitPoints);
+}
+
+const criterion = () => document.querySelector<HTMLInputElement>('input[name="criterion"]:checked')!.value as Criterion;
+
+function tick(now: number) {
+  if (!playing) return;
+  const elapsed = Math.min(80, now - lastTick);
+  lastTick = now;
+  const speed = resumeGuidance || renderer.reducedMotion ? 100_000 : Math.max(45, queue.length / (nationalPlayback ? 10 : 7.5));
+  carry = queue.length > cursor ? carry + elapsed * speed / 1000 : 0;
+  const count = Math.min(queue.length - cursor, Math.floor(carry));
+  if (count > 0) { renderer.visit(queue.slice(cursor, cursor + count), now); cursor += count; carry -= count; }
+  const progress = result !== undefined ? (queue.length ? cursor / queue.length : 1) : 0;
+  $('playback-count').textContent = queue.length || !nationalPlayback ? `${cursor.toLocaleString('fr-FR')} ${nationalPlayback ? 'segments affichés' : 'états explorés'}${traceStride > 1 ? ` · trace 1/${traceStride}` : ' · deux fronts actifs'}` : 'Calcul sur le graphe national…';
+  $('playback-percent').textContent = result !== undefined ? `${Math.round(progress * 100)} %` : '…';
+  $('playback-progress').style.transform = `scaleX(${progress})`;
+  if (result !== undefined && cursor === queue.length) { complete(); return; }
+  playbackFrame = requestAnimationFrame(tick);
+}
+
+function explore() {
+  if (playing) {
+    renderer.interrupt();
+    stop(false);
+    // Termination cancels computation as well as trace playback; a fresh worker prevents stale results.
+    makeWorker();
+    notice('Exploration interrompue. Relancez-la quand vous voulez.');
+    return;
+  }
+  if (!selections.start || !selections.end || !workerReady) return;
+  stop();
+  notice(''); setPicking(null); closeSuggestions('start'); closeSuggestions('end');
+  playing = true; carry = 0;
+  nationalPlayback = nationalReady || selections.start.node === -1 || selections.end.node === -1;
+  traceStride = 1;
+  $('playback').hidden = false;
+  $('playback').classList.remove('complete');
+  $('playback-title').textContent = nationalPlayback ? 'Le réseau français s’éveille…' : renderer.reducedMotion ? 'Exploration en mode réduit' : 'Les routes cherchent leur chemin…';
+  updateLaunch(); fitPoints();
+  if (nationalPlayback) void exploreNational(run, selections.start, selections.end, criterion());
+  else { routeGeometry = roads; renderer.setGraph(roads); worker!.postMessage({ type: 'route', run, start: selections.start.node, end: selections.end.node, criterion: criterion() }); }
+  lastTick = performance.now(); playbackFrame = requestAnimationFrame(tick);
+}
+
+async function exploreNational(activeRun: number, start: Place, end: Place, preference: Criterion) {
+  if (typeof crypto.randomUUID !== 'function') { stop(); notice('Ouvrez l’application en HTTPS ou sur localhost pour le calcul national.', 'error'); return; }
+  const controller = new AbortController(); routeAbort = controller;
+  const requestId = crypto.randomUUID(); routeId = requestId;
+  const geometry = { nodes: [], edges: [] } as Pick<RoadGraph, 'nodes' | 'edges'>;
+  routeGeometry = geometry;
+  const index = new Map<number, number>(); renderer.setGraph(geometry);
+  let receivedResult = false;
+  try {
+    for await (const message of nationalRoute(start, end, preference, requestId, controller.signal)) {
+      if (activeRun !== run) return;
+      if ('snapped' in message) {
+        if (!Array.isArray(message.snapped) || message.snapped.length !== 2 || !message.snapped.every(isInFrance) || !Number.isInteger(message.traceStride) || message.traceStride < 1) throw new Error('Métadonnées routières invalides.');
+        traceStride = message.traceStride;
+        nationalReady = true;
+        $('coverage').textContent = 'France métropolitaine · Corse';
+        $('playback-title').textContent = renderer.reducedMotion ? 'Exploration nationale en mode réduit' : 'Deux fronts à travers la France…';
+        (['start', 'end'] as const).forEach((side, i) => { const point = message.snapped[i]; markers[side]?.remove(); markers[side] = pointMarker(map, point.lat, point.lon, side, selections[side]!.name); });
+        fitPoints(); continue;
+      }
+      const decoded = decodeNationalMessage(message, geometry, index);
+      if (decoded.events) queue.push(...decoded.events);
+      if ('result' in decoded) { result = decoded.result; receivedResult = true; }
+    }
+    if (!receivedResult && activeRun === run) throw new Error('Flux routier interrompu avant le résultat.');
+  } catch (error) {
+    if (activeRun !== run || controller.signal.aborted) return;
+    stop(); notice(error instanceof TypeError ? 'Le service France ne répond pas. Vérifiez son lancement.' : error instanceof DOMException && error.name === 'TimeoutError' ? 'Le service France a mis trop de temps à répondre. Réessayez.' : error instanceof Error ? error.message : 'Le service France ne répond pas.', 'error');
+  } finally { if (routeId === requestId) { routeId = undefined; routeAbort = undefined; } }
+}
+
+function setPicking(side: Endpoint | null) {
+  picking = side;
+  $('pick-hint').hidden = !side;
+  $('map').classList.toggle('picking', !!side);
+  document.querySelectorAll<HTMLButtonElement>('.pick').forEach(b => b.classList.toggle('selected', b.dataset.pick === side));
+  if (side) $('pick-hint').querySelector('span')!.textContent = `Touchez une route pour placer ${side === 'start' ? 'le départ A' : 'l’arrivée B'}`;
+}
+
+function closeSuggestions(side: Endpoint) {
+  $(`${side}-results`).hidden = true;
+  inputs[side].setAttribute('aria-expanded', 'false');
+  inputs[side].removeAttribute('aria-activedescendant');
+}
+
+const normalize = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+function setupSearch(side: Endpoint) {
+  const input = inputs[side];
+  const list = $(`${side}-results`);
+  let active = -1;
+  let matches: Place[] = [];
+  let timer = 0;
+  let sequence = 0;
+  let controller: AbortController | undefined;
+  const render = (places: Place[]) => {
+    matches = places;
+    active = -1;
+    list.replaceChildren();
+    matches.forEach((place, i) => {
+      const option = document.createElement('div');
+      option.role = 'option'; option.id = `${side}-option-${i}`; option.className = 'suggestion'; option.setAttribute('aria-selected', 'false');
+      const name = document.createElement('span'); name.textContent = place.name;
+      const detail = document.createElement('small'); detail.textContent = place.detail || 'France';
+      option.append(name, detail);
+      option.addEventListener('pointerdown', e => { e.preventDefault(); selectPoint(side, place); input.blur(); });
+      list.append(option);
+    });
+    if (!matches.length) { const empty = document.createElement('p'); empty.textContent = 'Aucun lieu trouvé dans cette zone.'; list.append(empty); }
+    list.hidden = false; input.setAttribute('aria-expanded', 'true');
+  };
+  const show = () => {
+    const text = input.value.trim(), query = normalize(text), current = ++sequence;
+    clearTimeout(timer); controller?.abort();
+    const local = query.length < 2 ? [...Object.values(defaults), ...nationalCities.slice(0, 3)] : searchIndex.filter(p => normalize(p.name).includes(query)).slice(0, 7);
+    render(local);
+    if (query.length < 3) return;
+    timer = window.setTimeout(async () => {
+      controller = new AbortController();
+      const timeout = window.setTimeout(() => controller?.abort(), 6000);
+      try {
+        const remote = await searchFrance(text, controller.signal);
+        if (current !== sequence || document.activeElement !== input) return;
+        const names = new Set<string>();
+        render([...remote, ...local].filter(p => { const name = normalize(p.name); if (names.has(name)) return false; names.add(name); return true; }).slice(0, 7));
+      } catch {
+        if (current === sequence && document.activeElement === input && !local.length) list.textContent = 'Recherche IGN indisponible. Choisissez un point sur la carte.';
+      } finally { clearTimeout(timeout); }
+    }, 300);
+  };
+  input.addEventListener('input', () => {
+    stop(); selections[side] = null; markers[side]?.remove(); updateLaunch(); show();
+  });
+  input.addEventListener('focus', () => { if (roads) show(); });
+  input.addEventListener('blur', () => { sequence++; clearTimeout(timer); controller?.abort(); closeSuggestions(side); });
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { closeSuggestions(side); return; }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (list.hidden) show();
+      active = Math.max(0, Math.min(matches.length - 1, active + (e.key === 'ArrowDown' ? 1 : -1)));
+      Array.from(list.children).forEach((child, i) => child.setAttribute('aria-selected', String(i === active)));
+      if (matches[active]) input.setAttribute('aria-activedescendant', `${side}-option-${active}`);
+    }
+    if (e.key === 'Enter' && !list.hidden && matches.length) { e.preventDefault(); selectPoint(side, matches[Math.max(0, active)]); input.blur(); }
+  });
+}
+
+const nationalCities: Place[] = [
+  { name: 'Paris', lat: 48.8566, lon: 2.3522, detail: 'Île-de-France' },
+  { name: 'Lyon', lat: 45.7578, lon: 4.832, detail: 'Auvergne-Rhône-Alpes' },
+  { name: 'Marseille', lat: 43.2965, lon: 5.3698, detail: 'Provence-Alpes-Côte d’Azur' },
+  { name: 'Bordeaux', lat: 44.8378, lon: -0.5792, detail: 'Nouvelle-Aquitaine' },
+  { name: 'Brest', lat: 48.3904, lon: -4.4861, detail: 'Bretagne' },
+  { name: 'Ajaccio', lat: 41.9192, lon: 8.7386, detail: 'Corse' },
+];
+
+function buildSearchIndex() {
+  const names = new Set<string>();
+  const places: Place[] = [...Object.values(defaults), ...nationalCities];
+  const edgeByWay = new Map(roads.edges.map(e => [e.way, e]));
+  for (const way of data.ways) {
+    if (!way.tags.name || names.has(way.tags.name)) continue;
+    const road = edgeByWay.get(way.id);
+    if (!road) continue;
+    const node = roads.nodes[road.from];
+    names.add(way.tags.name);
+    places.push({ name: way.tags.name, lat: node.lat, lon: node.lon, detail: 'Rue · Paris centre' });
+  }
+  places.push(...data.places);
+  searchIndex = places.filter(p => { const key = normalize(p.name); if (names.has(`place:${key}`)) return false; names.add(`place:${key}`); return true; });
+}
+
+async function initialize() {
+  try {
+    $('retry').hidden = true;
+    const response = await fetch('./data/paris.json', { signal: AbortSignal.timeout(25_000) });
+    if (!response.ok) throw new Error('Network');
+    data = await response.json();
+    if (!Array.isArray(data.nodes) || !Array.isArray(data.ways) || !data.metadata?.bounds || !data.basemap?.features) throw new Error('Invalid data');
+    roads = buildRoadGraph(data);
+    ({ map } = createMap(data, roads));
+    renderer = new ExplorationRenderer(map, roads);
+    guidance = new GpsGuidance(map, () => { renderer.clear(); showAbout(false); }, () => requestAnimationFrame(fitPoints), fix => {
+      if (selectPoint('start', { name: 'Ma position GPS', lat: fix.lat, lon: fix.lon })) {
+        explore(); resumeGuidance = true; notice('Recalcul depuis votre position. Le guidage reprendra après confirmation du trajet.');
+      }
+    });
+    $<HTMLButtonElement>('lite').setAttribute('aria-pressed', String(renderer.lite));
+    buildSearchIndex();
+    selectPoint('start', defaults.start, false); selectPoint('end', defaults.end, false);
+    setupSearch('start'); setupSearch('end');
+    makeWorker();
+    const date = new Date(data.metadata.osmTimestamp).toLocaleDateString('fr-FR');
+    $('data-info').textContent = `Extrait OpenStreetMap du ${date} : ${roads.edges.length.toLocaleString('fr-FR')} segments orientés, ${roads.restrictions.length} restrictions automobiles. ${roads.excludedWays} voies exclues par prudence ou par leurs conditions d’accès.`;
+    void checkNationalService().then(health => {
+      nationalReady = true;
+      $('coverage').textContent = 'France métropolitaine · Corse';
+      $('data-info').textContent = `Réseau national : ${health.nodes.toLocaleString('fr-FR')} nœuds et ${health.edges.toLocaleString('fr-FR')} arêtes. Données OSM ${health.dataTimestamp || 'datées dans le service'}. Démo Paris embarquée en secours.`;
+    }).catch(() => { $('coverage').textContent = 'Service France à démarrer · démo Paris disponible'; });
+    map.on('click', e => {
+      if (!picking) return;
+      const side = picking;
+      const snap = nearestNode(roads, { lat: e.latlng.lat, lon: e.latlng.lng });
+      const name = snap ? roads.edges[(roads.outgoing[snap.index][0] ?? roads.incoming[snap.index][0])].name : `Point ${e.latlng.lat.toFixed(4)}, ${e.latlng.lng.toFixed(4)}`;
+      if (selectPoint(side, { name, lat: e.latlng.lat, lon: e.latlng.lng })) setPicking(null);
+    });
+    map.on('resize', fitPoints);
+    $('loading').hidden = true;
+    requestAnimationFrame(() => { map.invalidateSize(); fitPoints(); });
+  } catch {
+    $('loading').querySelector('strong')!.textContent = 'Paris attend la connexion.';
+    $('loading').querySelector('p')!.textContent = 'Les données n’ont pas pu être chargées. Vérifiez votre connexion puis réessayez.';
+    $('retry').hidden = false;
+    launch.innerHTML = `${icon('bolt')}<span>Routes indisponibles</span>`;
+  }
+}
+
+launch.addEventListener('click', explore);
+$('retry').addEventListener('click', () => { map?.remove(); void initialize(); });
+$('reset').addEventListener('click', () => { if (!roads) return; stop(); setPicking(null); selectPoint('start', defaults.start, false); selectPoint('end', defaults.end, false); notice(''); fitPoints(); });
+$('swap').addEventListener('click', () => {
+  if (!roads) return;
+  const a = selections.start, b = selections.end;
+  if (!a || !b) return;
+  selectPoint('start', b, false); selectPoint('end', a, false); notice('Départ et arrivée permutés.');
+});
+document.querySelectorAll<HTMLButtonElement>('.pick').forEach(button => button.addEventListener('click', () => { if (roads) setPicking(picking === button.dataset.pick ? null : button.dataset.pick as Endpoint); }));
+$('cancel-pick').addEventListener('click', () => setPicking(null));
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { setPicking(null); showAbout(false); } });
+document.querySelectorAll<HTMLInputElement>('input[name="criterion"]').forEach(radio => radio.addEventListener('change', () => { stop(); notice('Critère modifié. Lancez une nouvelle exploration.'); }));
+$('fit').addEventListener('click', () => { if (roads) fitPoints(); });
+$('france').addEventListener('click', () => {
+  if (!map) return;
+  map.invalidateSize({ pan: false });
+  map.fitBounds([[franceBounds[0], franceBounds[1]], [franceBounds[2], franceBounds[3]]], { paddingTopLeft: matchMedia('(max-width: 720px)').matches ? [20, 55] : [410, 50], paddingBottomRight: matchMedia('(max-width: 720px)').matches ? [40, document.querySelector('.planner')!.getBoundingClientRect().height + 35] : [70, 100], animate: !renderer.reducedMotion });
+});
+$('zoom-in').addEventListener('click', () => map?.zoomIn());
+$('zoom-out').addEventListener('click', () => map?.zoomOut());
+$('lite').addEventListener('click', () => { if (!renderer) return; renderer.setLite(!renderer.lite); $<HTMLButtonElement>('lite').setAttribute('aria-pressed', String(renderer.lite)); notice(renderer.lite ? 'Mode léger activé : halo réduit et moins de fronts lumineux.' : 'Mode complet activé.'); });
+function showAbout(show: boolean) { $('about').hidden = !show; $('help').setAttribute('aria-expanded', String(show)); }
+$('help').addEventListener('click', () => showAbout($('about').hidden));
+$('algorithm-info').addEventListener('click', () => showAbout($('about').hidden));
+$('close-about').addEventListener('click', () => showAbout(false));
+$('geolocate').addEventListener('click', async () => {
+  if (!roads) return;
+  const button = $<HTMLButtonElement>('geolocate');
+  button.disabled = true; notice('Recherche de votre position…');
+  try {
+    const position = await Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 12_000, maximumAge: 60_000 });
+    if (selectPoint('start', { name: 'Ma position', lat: position.coords.latitude, lon: position.coords.longitude })) fitPoints();
+  } catch (error) {
+    const code = (error as { code?: string | number }).code;
+    notice(code === 1 || code === 'OS-PLUG-GLOC-0003' ? 'Localisation refusée. Autorisez-la dans les réglages ou choisissez le départ sur la carte.' : 'Position indisponible. Choisissez le départ sur la carte ou recherchez une adresse.', 'error');
+  } finally { button.disabled = false; }
+});
+
+void initialize();

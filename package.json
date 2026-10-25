@@ -1,0 +1,34 @@
+{
+  "name": "eclaire",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "data:import": "node scripts/import-osm.mjs",
+    "server:build": "./server/mvnw -f server/pom.xml package",
+    "server:test": "./server/mvnw -f server/pom.xml test",
+    "server:start": "java -Xmx12g -jar server/target/eclaire-routing.jar",
+    "android:sync": "npm run build && cap sync android",
+    "android:open": "cap open android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.0.0",
+    "@capacitor/core": "^8.0.0",
+    "@capacitor/geolocation": "^8.0.0",
+    "leaflet": "^1.9.4"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.0.0",
+    "@types/leaflet": "^1.9.20",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.1"
+  },
+  "overrides": {
+    "xcode": { "uuid": "^11.1.1" }
+  }
+}

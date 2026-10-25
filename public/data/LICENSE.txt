@@ -1,0 +1,16 @@
+OpenStreetMap extract and derived road network
+Copyright OpenStreetMap contributors.
+
+This database is made available under the Open Database License (ODbL) 1.0.
+https://opendatacommons.org/licenses/odbl/1-0/
+
+Individual database contents may be subject to the Database Contents License:
+https://opendatacommons.org/licenses/dbcl/1-0/
+
+Attribution: © OpenStreetMap contributors
+https://www.openstreetmap.org/copyright
+
+Files: paris.json and provenance.json. The bounding box, extraction query,
+source instance and timestamps are recorded in provenance.json.
+The road graph is derived locally from the nodes, ways and restriction
+relations included in paris.json. No Google Maps data is included.

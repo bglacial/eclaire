@@ -1,0 +1,19 @@
+{
+  "name": "Paris · Centre",
+  "bounds": [
+    48.845,
+    2.324,
+    48.87,
+    2.367
+  ],
+  "source": "https://overpass-api.de/api/interpreter",
+  "osmTimestamp": "2026-10-25T19:35:36Z",
+  "importedAt": "2026-10-25T19:36:46.504Z",
+  "attribution": "© les contributeurs OpenStreetMap",
+  "license": "ODbL-1.0",
+  "restrictionCount": 148,
+  "query": "[out:json][timeout:90];(\n  way[highway](48.845,2.324,48.87,2.367);\n  relation[type=restriction](48.845,2.324,48.87,2.367);\n  way[building](48.845,2.324,48.87,2.367);\n  way[natural=water](48.845,2.324,48.87,2.367);\n  way[waterway=riverbank](48.845,2.324,48.87,2.367);\n  way[leisure=park](48.845,2.324,48.87,2.367);\n  way[landuse=grass](48.845,2.324,48.87,2.367);\n  node[\"addr:street\"][\"addr:housenumber\"](48.845,2.324,48.87,2.367);\n  nwr[tourism=attraction][name](48.845,2.324,48.87,2.367);\n);out body;>;out body qt;",
+  "nodes": 70751,
+  "ways": 18174,
+  "polygons": 11166
+}

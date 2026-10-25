@@ -1,0 +1,10 @@
+services:
+  eclaire:
+    build: .
+    ports:
+      - "127.0.0.1:8787:8787"
+    volumes:
+      - ./server/data:/data
+    environment:
+      ECLAIRE_ORIGINS: "http://localhost:8787,http://127.0.0.1:8787,https://localhost,http://localhost,capacitor://localhost"
+    init: true

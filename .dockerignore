@@ -1,0 +1,9 @@
+node_modules
+dist
+.git
+graft
+server/data
+server/target
+server/.m2
+.env*
+docs/*.png

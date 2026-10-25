@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Éclaire</string>
+    <string name="title_activity_main">Éclaire</string>
+    <string name="package_name">fr.eclaire.app</string>
+    <string name="custom_url_scheme">fr.eclaire.app</string>
+</resources>

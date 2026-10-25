@@ -1,0 +1,19 @@
+node_modules/
+dist/
+.DS_Store
+*.local
+.env
+.env.*
+!.env.example
+android/.gradle/
+android/local.properties
+android/**/build/
+android/app/src/main/assets/public/
+.openai-local/
+test-results/
+server/data/
+server/target/
+server/.m2/
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/
