@@ -5,7 +5,7 @@ Vérifications réalisées le 25 octobre 2026. La recette du navigateur ne const
 ## Automatisé
 
 - **25 tests TypeScript** : routage local, 400 graphes comparés à Bellman-Ford pour deux critères, sens uniques, absence de chemin, restrictions, optimalité, polylignes d’animation, séquence de confirmation, extinction finie, protocole national, manœuvres invalides, UTF-8, réponse tronquée et six tests de progression GPS.
-- **6 tests Java** : critères différents, direction légale des arêtes de la trace inverse, invariance avec l’algorithme non instrumenté, sens uniques, absence de trajet, même point, restrictions de virage, première rencontre, interruption, budget dépassé et consignes françaises issues du chemin réel.
+- **7 tests Java** : critères différents, direction légale des arêtes de la trace inverse, invariance avec l’algorithme non instrumenté, sens uniques, absence de trajet, même point, restrictions de virage, première rencontre, interruption, budget dépassé, consignes françaises et 200 comparaisons du mode landmarks à Dijkstra.
 - Vérification TypeScript et build Vite réussis.
 - Synchronisation Capacitor Android réussie, avec permission de géolocalisation et identification de l’application.
 - Lanceur Maven embarqué vérifié : Maven 3.9.11, Java 21.
@@ -64,3 +64,16 @@ Le navigateur de recette ne permet pas d’accorder la permission de géolocalis
 - Refus de localisation simulé : état en pause, **0 suivi GPS** ; reprise autorisée : un seul suivi. Arrivée confirmée sur deux mises à jour espacées de plus de trois secondes : « Vous êtes arrivé au point routier », **0 suivi GPS**.
 - **320 × 640**, préférence de mouvement réduit : résultat et bouton GPS accessibles sans débordement (bouton entre 543 et 589 px). Le guidage affiche la consigne. La simulation de masquage met le guidage en pause et libère le suivi (0), avec action de reprise.
 - Le son vocal, les permissions réelles du système, le déplacement sur route, le passage en arrière-plan Android et l’autonomie n’ont pas été validés sur matériel physique.
+
+## Déploiement Raspberry — 26 octobre 2026
+
+- Raspberry Debian 13 ARM64, **2 Go de RAM**, service utilisateur persistant sur `127.0.0.1:8788`, Java Temurin 21.0.13 ARM64 vérifié par SHA-256. Le port Hermes 8787 est conservé.
+- Dijkstra complet ne tient pas dans le budget du Pi. A* avec simple borne géographique a également épuisé 900 Mo sur Brest–Marseille. Deux index de huit landmarks ont donc été préparés sur le Mac (environ 201 s + 177 s), puis transférés avec le graphe. La lecture utilise bien la trace du nouvel algorithme, sans raccourcis CH.
+- Le réglage final emploie les **huit** repères actifs. Un essai à quatre repères dépassait le budget de deux millions d’états sur Brest–Marseille ; il n’a pas été présenté comme optimal. Le mode final passe les cinq cas de `ops/smoke-routing.py` directement sur le Raspberry, avec 512 Mo de tas Java.
+- Optima retrouvés : Paris–Lyon rapide 463 722,17 m / 15 527,616 s ; Paris–Lyon court 441 131,69 m ; Brest–Marseille rapide 1 282 555,69 m / 43 053,182 s ; Brest–Marseille court 1 096 550,70 m ; Ajaccio–Bastia rapide 147 634,49 m / 8 096,547 s.
+- La référence Dijkstra indépendante du trajet court Brest–Marseille a aussi été calculée sur le Mac : coût 1 096 550,6994009018, **20 632 714 états**, identique au résultat indexé à la précision numérique près.
+- Après la recette Pi : environ **771 Mio de RSS** et **1 006 Mio au pic** pour Java, fichiers mappés compris. `MemoryCurrent` n’est pas exposé par le gestionnaire utilisateur de ce Pi : les limites cgroup configurées ne sont donc pas annoncées comme vérifiées. Les services Nginx, Hermes, Mailaya et See My Dish restent actifs.
+- HTTPS public `/api/health` : HTTP 200, validation TLS réussie ; HTTP redirige vers HTTPS avec 301. Le moteur annonce `A* bidirectionnel · landmarks` et les 19 561 144 nœuds du graphe national.
+- Le premier vhost envoyait `Referrer-Policy: same-origin`, incompatible avec les requêtes de tuiles OSM. Correction dans le build : métadonnée de référent et attribut explicite `referrerPolicy` des tuiles à `strict-origin-when-cross-origin`. Les images chargent et la carte publique affiche de vraies tuiles, sans texte de blocage. Le script d’installation utilise désormais aussi la politique compatible.
+- Navigateur public : Louvre–Panthéon calculé par le Raspberry, résultat 2,47 km / 6 min, action GPS disponible. Capture `docs/eclaire-raspberry-live.png` ; seuls des lieux publics sont saisis.
+- Lab public : six liens dans la scène solaire, catalogue à six entrées, carte Éclaire et lien externe `https://eclaire.nriault.fr/` confirmés après publication de `bglacial/lab`.

@@ -13,6 +13,7 @@ export function createMap(data: Dataset, roads: RoadGraph) {
   map.createPane('national-base'); map.getPane('national-base')!.style.zIndex = '190';
   L.tileLayer(import.meta.env.VITE_TILE_URL || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
     pane: 'national-base', className: 'national-tiles', maxZoom: 19, updateWhenIdle: true, keepBuffer: 1,
+    referrerPolicy: 'strict-origin-when-cross-origin',
   }).addTo(map);
   map.createPane('geography');
   map.getPane('geography')!.style.zIndex = '210';

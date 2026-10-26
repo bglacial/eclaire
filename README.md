@@ -1,6 +1,6 @@
 # Éclaire
 
-Une interface web et Android pour voir deux fronts cyan et ambre explorer de vraies routes, puis converger vers le meilleur trajet. La version France utilise un **service routier local dédié**, avec Dijkstra bidirectionnel instrumenté, et conserve la démo Paris embarquée en secours.
+Une interface web et Android pour voir deux fronts cyan et ambre explorer de vraies routes, puis converger vers le meilleur trajet. La version France utilise un **service routier dédié**, avec recherche bidirectionnelle instrumentée, et conserve la démo Paris embarquée en secours.
 
 ## Lancer la version France
 
@@ -52,6 +52,10 @@ Ouvrir http://localhost:8787. Le volume conserve les données et le cache ; le p
 
 Sous Windows sans Docker, utiliser `server\mvnw.cmd -f server\pom.xml package` pour la construction Java.
 
+## Raspberry Pi
+
+Le profil à faible mémoire et les opérations de déploiement sont décrits dans [ops/README.md](ops/README.md). Adresse publique : https://eclaire.nriault.fr/.
+
 ## Android
 
 Le même code web est embarqué avec Capacitor. Android Studio, SDK Android 36 et JDK 21 sont nécessaires. Le projet déclare un minimum API 24 et nécessite une WebView à jour.
@@ -98,11 +102,11 @@ API utilisée : [Capacitor Geolocation v8](https://capacitorjs.com/docs/apis/geo
 
 ## Calcul et animation
 
-- **France : GraphHopper 11.0**, sans CH ni A*, avec `DijkstraBidirectionRef` en parcours par arêtes et prise en compte des restrictions importées. L’instrumentation enregistre les états effectivement retirés des files, en conservant la recherche inverse et la condition de preuve d’optimalité du moteur.
+- **France : GraphHopper 11.0**, sans raccourcis CH. Le mode par défaut utilise une heuristique nulle, équivalente à Dijkstra bidirectionnel. Le Raspberry utilise **A* bidirectionnel avec huit landmarks**, préparés séparément pour chaque critère. Les bornes ignorent les coûts de virage pour rester optimistes ; la recherche finale garde les restrictions et coûts complets. L’instrumentation de `TracedSearch` enregistre les arêtes réellement retirées des files et conserve la condition d’arrêt du moteur. Ce mode explore donc moins de routes ; il ne rejoue pas la trace d’un autre algorithme.
 - **Le plus rapide** minimise le temps de parcours estimé. Le modèle a une influence de distance nulle ; il ne privilégie donc pas artificiellement les itinéraires courts.
 - **Le plus court** utilise un poids exactement égal à la longueur, tout en conservant les accès et virages interdits. La durée du résultat est calculée selon les mêmes vitesses estimées.
 - Les points sont raccordés aux routes carrossables à **2 km maximum**. Les petits réseaux isolés sont écartés du raccordement, les voies privées et de desserte exclues du profil. Le raccordement hors réseau n’est pas inclus dans la distance.
-- **Trace indépendante du rendu** : le calcul enregistre des clés d’arêtes dans des tableaux compacts ; la géométrie est sérialisée après le calcul en NDJSON. Une lecture lente sur téléphone ne ralentit pas Dijkstra.
+- **Trace indépendante du rendu** : le calcul enregistre des clés d’arêtes dans des tableaux compacts ; la géométrie est sérialisée après le calcul en NDJSON. Une lecture lente sur téléphone ne ralentit pas la recherche.
 - Pour limiter la mémoire et le transfert, la trace France retient par défaut au plus environ **60 000 événements**, échantillonnés séparément sur les deux fronts. Le facteur est annoncé dans l’interface. Le calcul, son coût, la preuve et la géométrie finale ne sont pas échantillonnés.
 - **Paris sans serveur** : le worker TypeScript précédent et son graphe orienté restent disponibles. Les anciennes limites d’extraction s’appliquent à ce secours local.
 
@@ -131,7 +135,7 @@ npm run build
 npm run android:sync
 ```
 
-Résultats de cette évolution : **25 tests TypeScript et 6 tests Java réussis**. Les tests TypeScript comprennent l’oracle Bellman-Ford sur 400 graphes pour deux critères, les polylignes et phases d’animation, le suivi GPS, la validation des manœuvres et du protocole, ainsi que les frontières UTF-8 des lots. Les tests Java vérifient les deux critères, le sens de la trace inverse, les sens uniques, l’absence de chemin, les restrictions de virage, le même point, la première rencontre, l’interruption et les consignes françaises sur un vrai chemin du moteur.
+Résultats de cette évolution : **25 tests TypeScript et 7 tests Java réussis**. Les tests TypeScript comprennent l’oracle Bellman-Ford sur 400 graphes pour deux critères, les polylignes et phases d’animation, le suivi GPS, la validation des manœuvres et du protocole, ainsi que les frontières UTF-8 des lots. Les tests Java vérifient les deux critères, le sens de la trace inverse, les sens uniques, l’absence de chemin, les restrictions de virage, le même point, la première rencontre, l’interruption et les consignes françaises sur un vrai chemin du moteur.
 
 Mesures réelles du service local, sans trafic :
 
@@ -157,6 +161,7 @@ Ce sont des observations sur cette machine et ces points publics, pas un engagem
 | `ECLAIRE_MAX_STATES` | `40000000` | Budget maximal de recherche |
 | `ECLAIRE_TIMEOUT_MS` | `120000` | Délai maximal du calcul |
 | `ECLAIRE_MAX_TRACE_EVENTS` | `60000` | Budget de trace visuelle |
+| `ECLAIRE_LANDMARKS` | `off` | `off` : Dijkstra ; `prepare` : prépare puis charge les index ; `load` : charge les index sans les reconstruire |
 
 Un seul calcul national est accepté à la fois pour maîtriser la mémoire ; le suivant reçoit un message explicite si le service est occupé. Une limite de calcul atteinte produit une erreur, jamais un trajet annoncé optimal. Le service écoute localement par défaut ; un hébergement public doit ajouter HTTPS et une protection adaptée contre les abus.
 

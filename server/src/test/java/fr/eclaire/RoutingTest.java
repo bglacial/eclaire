@@ -42,8 +42,8 @@ class RoutingTest {
             edge(graph, 0, 1, 100, 10); edge(graph, 1, 3, 100, 10);
             edge(graph, 0, 2, 200, 50); edge(graph, 2, 3, 200, 50);
             var time = weighting(graph);
-            var fastest = new TracedDijkstra(graph, time);
-            var shortAlgo = new TracedDijkstra(graph, new DistanceWeighting(time));
+            var fastest = new TracedSearch(graph, time);
+            var shortAlgo = new TracedSearch(graph, new DistanceWeighting(time));
             var fastPath = fastest.calcPath(0, 3); var shortPath = shortAlgo.calcPath(0, 3);
             assertEquals(400, fastPath.getDistance()); assertEquals(200, shortPath.getDistance());
             assertTrue(fastPath.getTime() < shortPath.getTime());
@@ -61,9 +61,9 @@ class RoutingTest {
     @Test void oneWayImpossibleAndSamePoint() {
         try (var graph = graph()) {
             edge(graph, 0, 1, 100, 10); edge(graph, 1, 3, 100, 10);
-            assertFalse(new TracedDijkstra(graph, weighting(graph)).calcPath(3, 0).isFound());
-            assertFalse(new TracedDijkstra(graph, weighting(graph)).calcPath(0, 4).isFound());
-            var same = new TracedDijkstra(graph, weighting(graph)).calcPath(0, 0);
+            assertFalse(new TracedSearch(graph, weighting(graph)).calcPath(3, 0).isFound());
+            assertFalse(new TracedSearch(graph, weighting(graph)).calcPath(0, 4).isFound());
+            var same = new TracedSearch(graph, weighting(graph)).calcPath(0, 0);
             assertTrue(same.isFound()); assertEquals(0, same.getDistance()); assertEquals(0, same.getTime());
         }
     }
@@ -72,24 +72,24 @@ class RoutingTest {
             var a = edge(graph, 0, 1, 100, 10); var b = edge(graph, 1, 3, 100, 10);
             edge(graph, 0, 2, 200, 10); edge(graph, 2, 3, 200, 10);
             graph.getTurnCostStorage().set(restriction, a.getEdge(), 1, b.getEdge(), true);
-            assertEquals(400, new TracedDijkstra(graph, weighting(graph)).calcPath(0, 3).getDistance());
-            assertEquals(400, new TracedDijkstra(graph, new DistanceWeighting(weighting(graph))).calcPath(0, 3).getDistance());
+            assertEquals(400, new TracedSearch(graph, weighting(graph)).calcPath(0, 3).getDistance());
+            assertEquals(400, new TracedSearch(graph, new DistanceWeighting(weighting(graph))).calcPath(0, 3).getDistance());
         }
     }
     @Test void firstMeetingIsOnlyACandidate() {
         try (var graph = graph()) {
             edge(graph, 0, 1, 1, 1); edge(graph, 1, 3, 100, 1);
             edge(graph, 0, 2, 30, 1); edge(graph, 2, 3, 30, 1);
-            assertEquals(60, new TracedDijkstra(graph, new DistanceWeighting(weighting(graph))).calcPath(0, 3).getDistance());
+            assertEquals(60, new TracedSearch(graph, new DistanceWeighting(weighting(graph))).calcPath(0, 3).getDistance());
         }
     }
     @Test void interruptionAndUnprovenResultAreNotSuccesses() {
         try (var graph = graph()) {
             edge(graph, 0, 1, 100, 10); edge(graph, 1, 3, 100, 10);
-            var limited = new TracedDijkstra(graph, weighting(graph)); limited.setMaxVisitedNodes(0);
+            var limited = new TracedSearch(graph, weighting(graph)); limited.setMaxVisitedNodes(0);
             limited.calcPath(0, 3); assertTrue(limited.exhaustedBudget());
             Thread.currentThread().interrupt();
-            try { assertThrows(CancellationException.class, () -> new TracedDijkstra(graph, weighting(graph)).calcPath(0, 3)); }
+            try { assertThrows(CancellationException.class, () -> new TracedSearch(graph, weighting(graph)).calcPath(0, 3)); }
             finally { Thread.interrupted(); }
         }
     }

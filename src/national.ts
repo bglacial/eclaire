@@ -9,7 +9,7 @@ export async function checkNationalService() {
   if (!response.ok) throw new Error('Service France indisponible.');
   const health = await response.json();
   if (health.status !== 'ready' || !Array.isArray(health.bounds) || typeof health.edges !== 'number') throw new Error('Service France non prêt.');
-  return health as { status: string; edges: number; nodes: number; dataTimestamp: string; bounds: number[] };
+  return health as { status: string; engine?: string; edges: number; nodes: number; dataTimestamp: string; bounds: number[] };
 }
 
 export async function searchFrance(query: string, signal: AbortSignal): Promise<Place[]> {

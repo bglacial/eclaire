@@ -1,0 +1,25 @@
+[Unit]
+Description=Eclaire France routing and web
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/nriault/apps/eclaire
+Environment=PORT=8788
+Environment=ECLAIRE_HOST=127.0.0.1
+Environment=ECLAIRE_LANDMARKS=load
+Environment=ECLAIRE_MAX_STATES=2000000
+Environment=ECLAIRE_TIMEOUT_MS=120000
+Environment=ECLAIRE_ORIGINS=https://eclaire.nriault.fr,https://localhost,http://localhost,capacitor://localhost
+ExecStart=/home/nriault/.local/share/eclaire/java/bin/java -Xms64m -Xmx512m -XX:+ExitOnOutOfMemoryError -jar server/target/eclaire-routing.jar
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=20
+MemoryAccounting=true
+MemoryHigh=800M
+MemoryMax=1100M
+MemorySwapMax=512M
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=default.target

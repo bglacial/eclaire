@@ -7,6 +7,8 @@ import com.graphhopper.GraphHopperConfig;
 import com.graphhopper.config.Profile;
 import com.graphhopper.routing.Path;
 import com.graphhopper.routing.InstructionsFromEdges;
+import com.graphhopper.routing.lm.LMApproximator;
+import com.graphhopper.routing.lm.LandmarkStorage;
 import com.graphhopper.routing.ev.EncodedValueLookup;
 import com.graphhopper.storage.Graph;
 import com.graphhopper.routing.querygraph.QueryGraph;
@@ -28,6 +30,7 @@ public final class FranceServer {
     private static final ObjectMapper JSON = new ObjectMapper();
     private final NationalHopper hopper;
     private final Profile profile;
+    private final LandmarkStorage timeLandmarks, distanceLandmarks;
     private final Semaphore capacity = new Semaphore(1);
     private final ConcurrentHashMap<String, Thread> active = new ConcurrentHashMap<>();
     private final Set<String> origins = Set.of(System.getenv().getOrDefault("ECLAIRE_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173,http://localhost:8787,https://localhost,http://localhost,capacitor://localhost").split(","));
@@ -54,6 +57,10 @@ public final class FranceServer {
                 .putObject("prepare.min_network_size", 200).setProfiles(List.of(profile)));
         hopper.importOrLoad();
         hopper.ensureConnectivity();
+        String landmarks = System.getenv().getOrDefault("ECLAIRE_LANDMARKS", "off");
+        if (!Set.of("off", "load", "prepare").contains(landmarks)) throw new IllegalArgumentException("Mode landmarks invalide.");
+        timeLandmarks = landmarks.equals("off") ? null : LandmarkIndex.open(hopper.getBaseGraph(), hopper.getEncodingManager(), timeWeighting(), graphDirectory + "/landmarks-v1-time", landmarks.equals("prepare"));
+        distanceLandmarks = landmarks.equals("off") ? null : LandmarkIndex.open(hopper.getBaseGraph(), hopper.getEncodingManager(), new DistanceWeighting(timeWeighting()), graphDirectory + "/landmarks-v1-distance", landmarks.equals("prepare"));
     }
 
     private Weighting timeWeighting() { return hopper.createWeighting(profile, new PMap()); }
@@ -70,7 +77,7 @@ public final class FranceServer {
 
     Map<String, Object> health() {
         var bounds = hopper.getBaseGraph().getBounds();
-        return Map.of("status", "ready", "engine", "GraphHopper 11.0 · Dijkstra bidirectionnel", "nodes", hopper.getBaseGraph().getNodes(),
+        return Map.of("status", "ready", "engine", timeLandmarks == null ? "GraphHopper 11.0 · Dijkstra bidirectionnel" : "GraphHopper 11.0 · A* bidirectionnel · landmarks", "nodes", hopper.getBaseGraph().getNodes(),
                 "edges", hopper.getBaseGraph().getEdges(), "bounds", List.of(bounds.minLat, bounds.minLon, bounds.maxLat, bounds.maxLon),
                 "dataTimestamp", hopper.getProperties().get("datareader.data.date"));
     }
@@ -103,7 +110,8 @@ public final class FranceServer {
             var queryGraph = QueryGraph.create(hopper.getBaseGraph(), from, to);
             Weighting queryTime = queryGraph.wrapWeighting(time);
             Weighting weighting = queryGraph.wrapWeighting(criterion.equals("distance") ? new DistanceWeighting(time) : time);
-            var algo = new TracedDijkstra(queryGraph, weighting);
+            var landmarks = criterion.equals("distance") ? distanceLandmarks : timeLandmarks;
+            var algo = new TracedSearch(queryGraph, weighting, landmarks == null ? null : LMApproximator.forLandmarks(queryGraph, weighting, landmarks, 8));
             algo.setMaxVisitedNodes(Integer.parseInt(System.getenv().getOrDefault("ECLAIRE_MAX_STATES", "40000000")));
             algo.setTimeoutMillis(Long.parseLong(System.getenv().getOrDefault("ECLAIRE_TIMEOUT_MS", "120000")));
             long began = System.nanoTime();

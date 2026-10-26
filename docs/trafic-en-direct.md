@@ -40,6 +40,8 @@ La page de tarification HERE n’a pas pu être récupérée pendant l’étude 
 
 Cette proposition conserve un problème de plus court chemin à poids fixes. Faire évoluer les vitesses pendant la recherche, ou prévoir leur valeur à l’heure d’arrivée sur chaque tronçon, demande un algorithme dépendant du temps ; le Dijkstra bidirectionnel actuel ne doit pas être conservé tel quel dans ce cas.
 
+Le profil Raspberry utilise désormais A* bidirectionnel avec landmarks. Leurs poids de préparation doivent rester des **bornes inférieures** aux nouveaux poids. Une fermeture ou une augmentation du temps respecte cette condition ; une vitesse observée supérieure à celle de la préparation peut la casser. Avant une future intégration, désactiver ces index pour revenir à l’heuristique nulle, ou préparer des bornes adaptées. Conserver les index actuels sans cette vérification pourrait compromettre l’optimalité.
+
 ## Articulation avec le guidage GPS
 
 Le suivi GPS et le trafic sont deux fonctions indépendantes. Le guidage ajouté à Éclaire suit la position sur le trajet calculé, affiche les prochaines manœuvres et estime le temps restant avec les vitesses du moteur. **Un GPS actif ne rend pas ces durées sensibles aux bouchons.** Le recalcul depuis la position reste lui aussi sans trafic.

@@ -2,7 +2,8 @@ package fr.eclaire;
 
 import com.carrotsearch.hppc.IntArrayList;
 import com.carrotsearch.hppc.ByteArrayList;
-import com.graphhopper.routing.DijkstraBidirectionRef;
+import com.graphhopper.routing.AStarBidirection;
+import com.graphhopper.routing.weighting.WeightApproximator;
 import com.graphhopper.routing.SPTEntry;
 import com.graphhopper.routing.util.TraversalMode;
 import com.graphhopper.routing.weighting.Weighting;
@@ -11,12 +12,20 @@ import com.graphhopper.util.EdgeIterator;
 import java.util.concurrent.CancellationException;
 
 /** Instruments settled entries without replacing GraphHopper's edge-based reverse search or stopping proof. */
-public final class TracedDijkstra extends DijkstraBidirectionRef {
+public final class TracedSearch extends AStarBidirection {
     final IntArrayList keys = new IntArrayList();
     final ByteArrayList sides = new ByteArrayList();
 
-    public TracedDijkstra(Graph graph, Weighting weighting) {
+    public TracedSearch(Graph graph, Weighting weighting) { this(graph, weighting, null); }
+    public TracedSearch(Graph graph, Weighting weighting, WeightApproximator approximation) {
         super(graph, weighting, TraversalMode.EDGE_BASED);
+        // Une heuristique nulle conserve Dijkstra et sa condition d'arrêt.
+        setApproximation(approximation == null ? new WeightApproximator() {
+            public double approximate(int node) { return 0; }
+            public void setTo(int node) {}
+            public WeightApproximator reverse() { return this; }
+            public double getSlack() { return 0; }
+        } : approximation);
     }
 
     private void record(SPTEntry entry, boolean reverse) {
