@@ -114,7 +114,7 @@ export class ExplorationRenderer {
 
   private draw(now: number) {
     this.frame = 0;
-    if (this.moving) return;
+    if (this.moving || !this.canvas.width || !this.canvas.height) return;
     const ctx = this.ctx, animate = !this.reduced;
     const elapsed = this.result ? now - this.completedAt : 0;
     const phase = confirmationPhase(elapsed, this.reduced);

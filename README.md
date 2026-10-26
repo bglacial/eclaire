@@ -82,7 +82,7 @@ cd android
 
 Sortie : `android/app/build/outputs/apk/debug/app-debug.apk`. Les permissions de localisation sont déclarées et demandées à l’usage. Le consentement du navigateur ou du système reste nécessaire.
 
-La version nationale exige le service, une page HTTPS ou localhost, et un accès réseau pour les tuiles et le géocodage. Si le service est indisponible au démarrage, le calcul embarqué fonctionne uniquement pour des points raccordables dans l’extrait Paris. Il ne simule pas un trajet national. L’APK de test **1.0.1 / code 2** a été compilé, signé et contrôlé ; aucun téléphone physique n’a été validé ici. Pour ce déploiement, synchroniser avec `VITE_ROUTING_API_URL=https://eclaire.nriault.fr/api npm run android:sync`, puis reconstruire et réinstaller l’APK : la publication web ne modifie pas un APK déjà installé.
+La version nationale exige le service, une page HTTPS ou localhost, et un accès réseau pour les tuiles et le géocodage. Si le service est indisponible au démarrage, le calcul embarqué fonctionne uniquement pour des points raccordables dans l’extrait Paris. Il ne simule pas un trajet national. L’APK de test **1.0.2 / code 3** a été compilé, signé et contrôlé ; aucun téléphone physique n’a été validé ici. Pour ce déploiement, synchroniser avec `VITE_ROUTING_API_URL=https://eclaire.nriault.fr/api npm run android:sync`, puis reconstruire et réinstaller l’APK : la publication web ne modifie pas un APK déjà installé.
 
 ## Guidage GPS
 
@@ -125,6 +125,8 @@ Le graphe national actuellement chargé contient **19 561 144 nœuds et 24 760 3
 Le fichier Geofabrik peut conserver des objets et des relations au-delà de la frontière. La sélection est cadrée sur la métropole et la Corse, mais l’optimalité s’entend dans le graphe chargé, pas dans un réseau mondial complet. Les données d’outre-mer ne sont pas chargées.
 
 Le petit extrait Paris, sa requête et son horodatage restent dans `public/data/paris.json` et `public/data/provenance.json`. Les bases OSM et leurs adaptations restent soumises à l’ODbL ; les attributions sont affichées sur la carte.
+
+La revue de lisibilité et les choix de composition sont détaillés dans [docs/ui-review.md](docs/ui-review.md). Le résultat replie les champs dans **Modifier le trajet** et conserve les deux adresses lisibles. L’aide rassemble les explications, les limites, la confidentialité et le mode léger.
 
 ## Vérifications
 

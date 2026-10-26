@@ -86,3 +86,9 @@ Le navigateur de recette ne permet pas d’accorder la permission de géolocalis
 - Ce départ et une arrivée publique choisie sur la carte produisent un vrai trajet national **1,29 km / 3 min**, malgré l’absence des deux API AbortSignal récentes. Le guidage démarre avec un seul suivi simulé ; le quitter libère ce suivi. **320 × 640**, consigne, métriques et commandes restent visibles. Captures : `docs/eclaire-gps-selection.png`, `docs/eclaire-guidage-telephone-320.png`.
 - Un navigateur ordinateur réel calcule Louvre–Panthéon **2,47 km / 6 min** et affiche « Le guidage GPS est réservé aux téléphones », sans bouton de démarrage. La détection téléphone est aussi testée contre des UA Android, iPhone, iPad, tablette Android, Windows, Mac et Linux. Une garde identique protège directement `start()`.
 - APK **1.0.1, versionCode 2**, SDK 36/min 24 : build Gradle réussi, signature v2 et alignement vérifiés, API publique HTTPS embarquée, harnais absent. Le build n’est pas une preuve d’installation ou de comportement du GPS natif. Pas de test sur matériel physique, de trajet réel ou de permissions Android système dans cette recette.
+
+## Revue de lisibilité UI — 26 octobre 2026
+
+Direction, critiques et preuves détaillées : `docs/ui-review.md`. Interface simplifiée, textes utiles de 13 px minimum, contrôles de 44 px minimum, résultat repliable et adresses séparées. Les annotations locales n’ajoutent plus un second jeu de noms sur les tuiles OSM. Le réseau vectoriel Paris reste affiché tant qu’aucune tuile n’a chargé.
+
+L’inspecteur à 1440, 768 et 390 px ne signale plus de FAIL. Une recette complémentaire à 320 × 640 couvre les repères dégagés, les suggestions défilables, les états réseau/429/aucun trajet, l’aide native avec focus clavier, la reprise après taille nulle, l’interruption et le guidage téléphone simulé. Les simulations sont réservées au harnais exclu des builds. Les 31 tests TypeScript passent ; l’APK UI est la version 1.0.2, code 3.

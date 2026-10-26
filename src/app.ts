@@ -37,42 +37,39 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <header class="topbar">
     <a class="brand" href="./" aria-label="Éclaire, accueil"><span class="brand-symbol">${icon('bolt')}</span>éclaire<span class="brand-dot">.</span></a>
     <span class="tagline">Le chemin prend vie.</span>
-    <div class="header-right"><span class="edition"><span></span> FRANCE</span><button class="help-button" id="help" aria-label="Le concept" aria-expanded="false" aria-controls="about">${icon('info')}<span>Le concept</span></button></div>
+    <div class="header-right"><span class="edition">France</span><button class="help-button" id="help" aria-label="Aide et fonctionnement" aria-haspopup="dialog" aria-expanded="false" aria-controls="about">${icon('info')}<span>Aide</span></button></div>
   </header>
   <main>
     <div id="map" aria-label="Carte interactive de France. Utilisez les boutons Choisir sur la carte, puis touchez une route." role="region"></div>
-    <div class="map-vignette" aria-hidden="true"></div>
     <section class="planner" aria-labelledby="planner-title">
-      <div class="planner-intro"><p class="eyebrow">L’EXPLORATEUR D’ITINÉRAIRES</p><h1 id="planner-title">Deux points.<br> Une rencontre.</h1><p>Voyez les routes chercher votre chemin.</p></div>
+      <div class="planner-intro"><h1 id="planner-title">Votre itinéraire</h1><p>Deux fronts explorent les routes.</p></div>
+      <details id="route-editor" open><summary>Modifier le trajet ${icon('route')}</summary><div class="route-form">
       <div class="location-fields">
-        <div class="field-wrap start-field"><span class="field-point" aria-hidden="true">A</span><div class="field-body"><label for="start">DÉPART</label><input id="start" type="search" placeholder="Une adresse, un lieu…" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="start-results" /><div id="start-results" class="suggestions" role="listbox" aria-label="Suggestions de départ" hidden></div></div><button class="icon-button pick" data-pick="start" title="Choisir le départ sur la carte" aria-label="Choisir le départ sur la carte">${icon('pin')}</button></div>
-        <span class="field-connector" aria-hidden="true"></span>
-        <button id="swap" class="swap-button" aria-label="Permuter le départ et l’arrivée" title="Permuter">${icon('swap')}</button>
-        <div class="field-wrap end-field"><span class="field-point" aria-hidden="true">B</span><div class="field-body"><label for="end">ARRIVÉE</label><input id="end" type="search" placeholder="Une adresse, un lieu…" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="end-results" /><div id="end-results" class="suggestions" role="listbox" aria-label="Suggestions d’arrivée" hidden></div></div><button class="icon-button pick" data-pick="end" title="Choisir l’arrivée sur la carte" aria-label="Choisir l’arrivée sur la carte">${icon('pin')}</button></div>
+        <div class="field-wrap start-field"><span class="field-point" aria-hidden="true">A</span><div class="field-body"><label for="start">Départ</label><input id="start" type="search" placeholder="Une adresse, un lieu…" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="start-results" /></div><button class="icon-button pick" data-pick="start" title="Choisir le départ sur la carte" aria-label="Choisir le départ sur la carte">${icon('pin')}</button><div id="start-results" class="suggestions" role="listbox" aria-label="Suggestions de départ" hidden></div></div>
+        <div class="field-wrap end-field"><span class="field-point" aria-hidden="true">B</span><div class="field-body"><label for="end">Arrivée</label><input id="end" type="search" placeholder="Une adresse, un lieu…" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="end-results" /></div><button class="icon-button pick" data-pick="end" title="Choisir l’arrivée sur la carte" aria-label="Choisir l’arrivée sur la carte">${icon('pin')}</button><div id="end-results" class="suggestions" role="listbox" aria-label="Suggestions d’arrivée" hidden></div></div>
       </div>
-      <button id="geolocate" class="location-button">${icon('locate')} Utiliser ma position</button>
-      <fieldset class="criteria"><legend>À chaque envie, son chemin</legend><label><input type="radio" name="criterion" value="time" checked><span>${icon('time')} Le plus rapide</span></label><label><input type="radio" name="criterion" value="distance"><span>${icon('route')} Le plus court</span></label></fieldset>
+      <div class="location-actions"><button id="geolocate" class="location-button" aria-label="Utiliser ma position comme départ">${icon('locate')} Ma position</button><button id="swap" class="swap-button" aria-label="Permuter le départ et l’arrivée">${icon('swap')} Permuter</button></div>
+      <fieldset class="criteria"><legend>Critère du trajet</legend><label><input type="radio" name="criterion" value="time" checked><span>${icon('time')} Le plus rapide</span></label><label><input type="radio" name="criterion" value="distance"><span>${icon('route')} Le plus court</span></label></fieldset>
       <div class="launch-row"><button id="launch" class="primary" disabled>${icon('bolt')}<span>Chargement des routes…</span>${icon('arrow')}</button><button id="reset" class="icon-button reset-button" aria-label="Recommencer avec le parcours initial" title="Recommencer">${icon('reset')}</button></div>
+      </div></details>
       <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
-      <div id="route-result" class="route-result" role="status" aria-live="polite" hidden><div class="result-heading"><span>${icon('check')} LE CHEMIN EST TROUVÉ</span><span id="result-criterion"></span></div><div class="metrics"><div><strong id="duration"></strong><span>durée estimée</span></div><div><strong id="distance"></strong><span>distance</span></div></div><p>Estimation sans trafic en direct.</p><button id="navigation-start" class="primary" hidden>${icon('locate')} Démarrer le guidage GPS</button><p id="navigation-availability"></p></div>
+      <div id="route-result" class="route-result" role="status" aria-live="polite" hidden><div class="result-heading"><span>${icon('check')} Trajet trouvé</span><span id="result-criterion"></span></div><div id="route-endpoints" class="route-endpoints"></div><div class="metrics"><div><strong id="duration"></strong><span>durée estimée</span></div><div><strong id="distance"></strong><span>distance</span></div></div><p>Estimation sans trafic en direct.</p><button id="navigation-start" class="primary" hidden>${icon('locate')} Démarrer le guidage GPS</button><p id="navigation-availability"></p></div>
       <div class="planner-footer">${icon('car')} En voiture <span>·</span><span id="coverage">Connexion au service France…</span></div>
     </section>
-    <aside class="map-title" aria-hidden="true"><span class="eyebrow">UN NOUVEAU REGARD SUR LES ROUTES</span><span>La France, à la lueur des routes.</span></aside>
-    <div class="map-tools"><button id="france" class="icon-button france-button" aria-label="Voir toute la France" title="Voir toute la France">FR</button><button id="fit" class="icon-button" aria-label="Recentrer sur les deux points" title="Recentrer">${icon('expand')}</button><div class="zoom-controls"><button id="zoom-in" class="icon-button" aria-label="Zoom avant">${icon('plus')}</button><button id="zoom-out" class="icon-button" aria-label="Zoom arrière">${icon('minus')}</button></div><button id="lite" class="icon-button" aria-label="Mode léger" aria-pressed="false" title="Mode léger">${icon('layers')}</button></div>
+    <div class="map-tools"><button id="france" class="icon-button france-button" aria-label="Voir toute la France" title="Voir toute la France">FR</button><button id="fit" class="icon-button" aria-label="Recentrer sur les deux points" title="Recentrer">${icon('expand')}</button><div class="zoom-controls"><button id="zoom-in" class="icon-button" aria-label="Zoom avant">${icon('plus')}</button><button id="zoom-out" class="icon-button" aria-label="Zoom arrière">${icon('minus')}</button></div></div>
     <div id="pick-hint" class="pick-hint" role="status" hidden><span></span><button id="cancel-pick" class="icon-button" aria-label="Annuler la sélection">${icon('close')}</button></div>
     <section id="playback" class="playback" aria-label="État de l’exploration" hidden><span class="activity-dot"></span><div><strong id="playback-title">Les routes s’éveillent</strong><span id="playback-count">Préparation du calcul…</span></div><span id="playback-percent"></span><div class="playback-track"><span id="playback-progress"></span></div></section>
     <section id="navigation" class="navigation" aria-label="Guidage GPS" hidden>
-      <p class="eyebrow">EN ROUTE AVEC ÉCLAIRE</p><div id="navigation-next"><strong id="navigation-turn-distance">GPS</strong><h2 id="navigation-instruction" role="status" aria-live="polite" aria-atomic="true">Recherche de votre position…</h2></div>
+      <div id="navigation-next"><strong id="navigation-turn-distance">GPS</strong><h2 id="navigation-instruction" role="status" aria-live="polite" aria-atomic="true">Recherche de votre position…</h2></div>
       <div class="navigation-metrics"><div><strong id="navigation-remaining">—</strong><span>restants</span></div><div><strong id="navigation-time">—</strong><span>durée estimée</span></div></div>
       <p id="navigation-status"></p>
       <button id="navigation-recalculate" class="primary" hidden>Recalculer depuis ma position</button><button id="navigation-resume" class="primary" hidden>Reprendre le GPS</button>
       <div class="navigation-actions"><button id="navigation-follow" aria-pressed="true">Position suivie</button><button id="navigation-voice" aria-pressed="false">Activer la voix</button><button id="navigation-stop">Quitter le guidage</button></div>
       <small>Gardez l’application visible. Guidage expérimental : respectez la signalisation.</small>
     </section>
-    <div class="map-legend"><span><i class="cyan"></i>Depuis le départ</span><span><i class="amber"></i>Depuis l’arrivée</span><span><i class="final"></i>Le meilleur chemin</span></div>
-    <div class="map-proof"><span class="proof-dot"></span><span>De vraies routes. Un vrai calcul.</span><button id="algorithm-info" aria-label="Comprendre le calcul">${icon('info')}</button></div>
-    <aside id="about" class="about" aria-labelledby="about-title" hidden><button id="close-about" class="icon-button" aria-label="Fermer les explications">${icon('close')}</button><p class="eyebrow">SOUS LA LUMIÈRE, UN ALGORITHME</p><h2 id="about-title">Deux fronts.<br>Une preuve.</h2><p>Une recherche bidirectionnelle exacte explore les routes depuis A et depuis B, en sens inverse. Les éclairs suivent des segments réellement visités, sans mouvement inventé hors des routes.</p><p>La première rencontre ne suffit pas : le trajet est révélé quand les coûts restants prouvent qu’aucun meilleur chemin n’existe dans le réseau retenu.</p><dl><div><dt>Le plus court</dt><dd>Longueur des routes</dd></div><div><dt>Le plus rapide</dt><dd>Temps estimé selon les vitesses OSM</dd></div></dl><p>En France, le service GraphHopper calcule puis transmet sa trace pour une lecture animée. Les longues explorations sont échantillonnées sur les deux fronts pour préserver le téléphone ; le calcul et le trajet final restent complets. Sans service, la démo Paris utilise le worker embarqué.</p><p id="data-info"></p><p>Le service raccorde les points à une route accessible à 2 km maximum. Les accès privés et de desserte sont exclus. Aucun trafic en direct. Le guidage GPS expérimental utilise les manœuvres du moteur, avec l’application visible ; certaines restrictions OSM ne sont pas prises en charge. Vérifiez l’accès final et respectez la signalisation.</p><p>Le GPS reste sur l’appareil pendant le suivi. Un recalcul transmet la position au service routier configuré. La recherche nationale utilise le géocodage IGN et lui transmet le texte recherché. Le fournisseur des tuiles reçoit les zones de carte consultées ; les données détaillées de Paris restent embarquées.</p><a href="/data/provenance.json" target="_blank" rel="noopener">Provenance de la démo Paris ↗</a></aside>
-    <div id="loading" class="loading" role="status"><span class="loading-bolt">${icon('bolt')}</span><strong>Paris se dessine.</strong><p>Chargement des données OpenStreetMap…</p><button id="retry" class="primary" hidden>Réessayer</button></div>
+    <div class="map-legend"><span><i class="cyan"></i>Départ A</span><span><i class="amber"></i>Arrivée B</span><span><i class="final"></i>Trajet</span></div>
+    <dialog id="about" class="about" aria-labelledby="about-title" hidden><button id="close-about" class="icon-button" aria-label="Fermer l’aide">${icon('close')}</button><h2 id="about-title">Comment ça marche</h2><p>Un front cyan part de A, un front ambre part de B. Chaque branche suit une route réellement explorée.</p><p>La première rencontre ne suffit pas. Le trajet apparaît quand le calcul confirme qu’aucun meilleur chemin n’existe dans le réseau chargé.</p><dl><div><dt>Le plus court</dt><dd>Minimise la longueur des routes.</dd></div><div><dt>Le plus rapide</dt><dd>Minimise le temps estimé selon les vitesses OSM, sans trafic en direct.</dd></div></dl><button id="lite" class="setting-button" aria-pressed="false">${icon('layers')} Mode léger</button><p>Réduit les halos et le nombre de fronts pour les appareils modestes. La réduction des animations suit aussi votre préférence système.</p><details><summary>Données et limites</summary><p>Le service France utilise une recherche bidirectionnelle exacte. Les grandes traces sont échantillonnées pour préserver le téléphone ; le calcul et le trajet final restent complets. Sans service, seule la démo Paris utilise le calcul embarqué.</p><p id="data-info"></p><p>Les points sont raccordés à une route accessible à 2 km maximum. Les accès privés et de desserte sont exclus. Certaines restrictions OSM ne sont pas prises en charge. Vérifiez l’accès final et respectez la signalisation.</p><p>Le guidage GPS expérimental est réservé aux téléphones, avec l’application visible. Aucun trafic en direct n’est intégré.</p><a href="/data/provenance.json" target="_blank" rel="noopener">Provenance de la démo Paris</a></details><details><summary>Position et confidentialité</summary><p>Le GPS reste sur l’appareil pendant le suivi. Un recalcul transmet la position au service routier configuré. L’IGN reçoit le texte recherché. Le fournisseur des tuiles reçoit les zones consultées. Aucun historique GPS n’est enregistré par l’application.</p></details></dialog>
+    <div id="loading" class="loading" role="status"><span class="loading-bolt">${icon('bolt')}</span><strong>Chargement de la carte</strong><p>Chargement des données OpenStreetMap…</p><button id="retry" class="primary" hidden>Réessayer</button></div>
   </main>`;
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -121,12 +118,14 @@ function notice(message: string, kind: 'error' | 'info' = 'info') {
 }
 
 function updateLaunch() {
+  $('app').classList.toggle('is-exploring', playing);
   launch.disabled = !workerReady || !selections.start || !selections.end;
   launch.innerHTML = playing ? `${icon('stop')}<span>Interrompre l’exploration</span>` : `${icon('bolt')}<span>Explorer le trajet</span>${icon('arrow')}`;
 }
 
 function stop(clear = true) {
   cancelLocationRequest();
+  $<HTMLDetailsElement>('route-editor').open = true;
   guidance?.setRoute(null); resumeGuidance = false;
   routeAbort?.abort(); routeAbort = undefined;
   if (routeId) { void cancelNationalRoute(routeId); routeId = undefined; }
@@ -149,11 +148,11 @@ function selectPoint(side: Endpoint, place: Place, announce = true) {
   const node = nationalReady ? place : snap ? roads.nodes[snap.index] : place;
   selections[side] = { ...place, node: snap?.index ?? -1, snapDistance: snap?.distance ?? 0 };
   inputs[side].value = place.name;
-  if (side === 'start') { locationCircle?.remove(); locationCircle = undefined; }
+  if (side === 'start') { locationCircle?.remove(); locationCircle = undefined; $('app').classList.remove('has-gps-start'); }
   placeMarker(side, node.lat, node.lon, place.name);
   closeSuggestions(side);
   updateLaunch();
-  if (announce) notice(snap ? `Point ${side === 'start' ? 'de départ' : 'd’arrivée'} raccordé à ${roads.edges[(roads.outgoing[snap.index][0] ?? roads.incoming[snap.index][0])].name}, à ${Math.round(snap.distance)} m.` : 'Point choisi. Le service France le raccordera au réseau automobile.');
+  if (announce) notice(snap && !nationalReady ? `Point ${side === 'start' ? 'de départ' : 'd’arrivée'} raccordé à ${roads.edges[(roads.outgoing[snap.index][0] ?? roads.incoming[snap.index][0])].name}, à ${Math.round(snap.distance)} m.` : 'Point choisi. Le raccordement à une route sera vérifié au lancement.');
   return true;
 }
 
@@ -171,7 +170,8 @@ function focusPoint(point: { lat: number; lon: number }, zoom = map.getZoom()) {
   const panel = document.querySelector('.planner')!.getBoundingClientRect();
   const mobile = matchMedia('(max-width: 720px)').matches;
   const x = mobile ? bounds.width / 2 : (panel.right - bounds.left + bounds.width) / 2;
-  const y = mobile ? Math.max(90, (panel.top - bounds.top) / 2) : bounds.height / 2;
+  const chromeBottom = mobile ? Math.max(0, ...Array.from(document.querySelectorAll('.map-tools, .map-legend'), el => { const rect = el.getBoundingClientRect(); return rect.height ? rect.bottom - bounds.top : 0; })) : 0;
+  const y = mobile ? (chromeBottom + Math.max(chromeBottom + 40, panel.top - bounds.top)) / 2 : bounds.height / 2;
   const center = map.project([point.lat, point.lon], zoom).add([bounds.width / 2 - x, bounds.height / 2 - y]);
   map.setView(map.unproject(center, zoom), zoom, { animate: false });
 }
@@ -179,7 +179,8 @@ function focusPoint(point: { lat: number; lon: number }, zoom = map.getZoom()) {
 function cancelLocationRequest() {
   locationRequest++; locating = false;
   $('geolocate').setAttribute('aria-busy', 'false');
-  $('geolocate').innerHTML = `${icon('locate')} Utiliser ma position`;
+  $('geolocate').innerHTML = `${icon('locate')} Ma position`;
+  $('geolocate').setAttribute('aria-label', 'Utiliser ma position comme départ');
 }
 
 function fitPoints() {
@@ -188,9 +189,11 @@ function fitPoints() {
   if (!a || !b) return;
   map.invalidateSize({ pan: false, animate: false });
   const mobile = matchMedia('(max-width: 720px)').matches;
+  const compact = mobile && matchMedia('(max-height: 700px)').matches;
+  const showingResult = !$<HTMLDetailsElement>('route-editor').open && !$('route-result').hidden;
   const plannerHeight = document.querySelector('.planner')!.getBoundingClientRect().height;
   map.fitBounds(L.latLngBounds(markers.start!.getLatLng(), markers.end!.getLatLng()), {
-    paddingTopLeft: mobile ? [75, playing ? 160 : 90] : [430, 90], paddingBottomRight: mobile ? [75, plannerHeight + 55] : [110, 130], maxZoom: 16, animate: !renderer.reducedMotion,
+    paddingTopLeft: mobile ? [48, compact ? showingResult ? 70 : playing ? 110 : 126 : playing ? 220 : 170] : [470, 100], paddingBottomRight: mobile ? [85, plannerHeight + 52] : [110, 130], maxZoom: 16, animate: !renderer.reducedMotion,
   });
 }
 
@@ -226,8 +229,18 @@ function complete() {
   const minutes = Math.ceil(result.seconds / 60);
   $('duration').textContent = minutes < 1 ? '< 1 min' : minutes < 60 ? `${minutes} min` : `${Math.floor(minutes / 60)} h${minutes % 60 ? ` ${String(minutes % 60).padStart(2, '0')}` : ''}`;
   $('distance').textContent = result.length >= 1000 ? `${(result.length / 1000).toLocaleString('fr-FR', { maximumFractionDigits: result.length >= 1_000_000 ? 0 : result.length >= 100_000 ? 1 : 2 })} km` : `${Math.round(result.length)} m`;
-  $('result-criterion').textContent = criterion() === 'time' ? 'LE PLUS RAPIDE' : 'LE PLUS COURT';
+  $('result-criterion').textContent = criterion() === 'time' ? 'Le plus rapide' : 'Le plus court';
+  $('route-endpoints').replaceChildren(...(['start', 'end'] as const).map((side, i) => {
+    const line = document.createElement('p'), badge = document.createElement('span');
+    badge.className = `endpoint-badge ${side}`; badge.textContent = i ? 'B' : 'A';
+    line.append(badge, document.createTextNode(selections[side]!.name)); return line;
+  }));
+  const editor = $<HTMLDetailsElement>('route-editor');
+  const restoreFocus = editor.contains(document.activeElement);
+  editor.open = false;
+  document.querySelector('.planner')!.scrollTop = 0;
   $('route-result').hidden = false;
+  if (restoreFocus) editor.querySelector('summary')!.focus({ preventScroll: true });
   $('playback-title').textContent = 'La rencontre a eu lieu.';
   $('playback-count').textContent = `${result.visited.toLocaleString('fr-FR')} états explorés · optimalité confirmée`;
   $('playback-percent').innerHTML = icon('check');
@@ -489,9 +502,15 @@ $('france').addEventListener('click', () => {
 $('zoom-in').addEventListener('click', () => map?.zoomIn());
 $('zoom-out').addEventListener('click', () => map?.zoomOut());
 $('lite').addEventListener('click', () => { if (!renderer) return; renderer.setLite(!renderer.lite); $<HTMLButtonElement>('lite').setAttribute('aria-pressed', String(renderer.lite)); notice(renderer.lite ? 'Mode léger activé : halo réduit et moins de fronts lumineux.' : 'Mode complet activé.'); });
-function showAbout(show: boolean) { $('about').hidden = !show; $('help').setAttribute('aria-expanded', String(show)); }
+function showAbout(show: boolean) {
+  const dialog = $<HTMLDialogElement>('about');
+  if (show) { dialog.hidden = false; if (!dialog.open) dialog.showModal(); }
+  else { if (dialog.open) dialog.close(); dialog.hidden = true; }
+  $('help').setAttribute('aria-expanded', String(show));
+}
 $('help').addEventListener('click', () => showAbout($('about').hidden));
-$('algorithm-info').addEventListener('click', () => showAbout($('about').hidden));
+$('about').addEventListener('close', () => { $('about').hidden = true; $('help').setAttribute('aria-expanded', 'false'); });
+document.querySelector('#route-editor > summary')!.addEventListener('click', () => requestAnimationFrame(fitPoints));
 $('close-about').addEventListener('click', () => showAbout(false));
 $('geolocate').addEventListener('click', async () => {
   if (!roads) return;
@@ -499,7 +518,8 @@ $('geolocate').addEventListener('click', async () => {
   stop(); setPicking(null);
   const request = ++locationRequest; locating = true;
   $('geolocate').setAttribute('aria-busy', 'true');
-  $('geolocate').innerHTML = `${icon('close')} Annuler la localisation`;
+  $('geolocate').innerHTML = `${icon('close')} Annuler le GPS`;
+  $('geolocate').setAttribute('aria-label', 'Annuler la recherche de position');
   notice('Recherche d’un point GPS précis… Cela peut prendre jusqu’à 30 secondes.');
   try {
     if (Capacitor.isNativePlatform()) await preciseLocationPermission(Geolocation);
@@ -509,6 +529,7 @@ $('geolocate').addEventListener('click', async () => {
     const point = selectionPosition(position);
     if (selectPoint('start', { name: 'Ma position GPS', lat: point.lat, lon: point.lon }, false)) {
       locationCircle = L.circle([point.lat, point.lon], { radius: point.accuracy, color: '#66e6ec', weight: 1, fillOpacity: 0.08, interactive: false }).addTo(map);
+      $('app').classList.add('has-gps-start');
       notice(`Départ GPS placé à ± ${Math.round(point.accuracy)} m. Cherchez une arrivée ou choisissez-la sur la carte. Les repères A et B se déplacent au doigt.`);
       requestAnimationFrame(() => focusPoint(point, 16));
     }

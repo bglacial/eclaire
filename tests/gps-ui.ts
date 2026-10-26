@@ -7,6 +7,16 @@ const watches = new Map<number, { success: PositionCallback; error?: PositionErr
 let identifier = 0;
 let gps = { latitude: 48.8573375, longitude: 2.3467217, accuracy: 5 };
 let denied = false;
+let serviceMode = 'réel';
+const realFetch = window.fetch.bind(window);
+window.fetch = async (input, init) => {
+  if (String(input).endsWith('/api/route') && init?.method === 'POST') {
+    if (serviceMode === 'occupé') return new Response(JSON.stringify({ error: 'Le service est sollicité. Attendez 30 secondes puis réessayez.' }), { status: 429 });
+    if (serviceMode === 'hors ligne') throw new TypeError('Réseau indisponible simulé');
+    if (serviceMode === 'sans trajet') return new Response('{"type":"result","result":{"found":false}}\n');
+  }
+  return realFetch(input, init);
+};
 let delayPosition = false;
 const pendingPositions: (() => void)[] = [];
 const position = () => ({ timestamp: Date.now(), coords: { ...gps, altitude: null, altitudeAccuracy: null, speed: 0, heading: null } }) as GeolocationPosition;
@@ -25,13 +35,15 @@ Object.defineProperty(navigator, 'geolocation', { configurable: true, value: {
 } });
 const panel = document.createElement('aside'); panel.id = 'gps-fixture';
 panel.style.cssText = 'position:fixed;top:0;right:0;z-index:9999;max-width:100%;background:#fff2b8;color:#172320;padding:5px;display:flex;flex-wrap:wrap;gap:4px;font:11px sans-serif;';
-const label = document.createElement('strong'); label.textContent = 'RECETTE · TÉLÉPHONE ET GPS SIMULÉS · '; panel.append(label);
+const label = document.createElement('strong'); label.textContent = 'RECETTE · TÉLÉPHONE, GPS ET ERREURS SIMULÉS · '; panel.append(label);
 const count = document.createElement('span'); count.id = 'gps-watch-count'; panel.append(count);
-function updateCount() { count.textContent = `${watches.size} suivi(s) GPS`; }
+const controls = document.createElement('details');
+const controlsTitle = document.createElement('summary'); controlsTitle.textContent = 'Commandes de recette'; controls.append(controlsTitle); panel.append(controls);
+function updateCount() { count.textContent = `${watches.size} suivi(s) GPS · service ${serviceMode}`; }
 function button(label: string, action: () => void) {
   const control = document.createElement('button'); control.textContent = label;
   control.style.cssText = 'font:11px sans-serif;color:#172320;background:#fff;border:1px solid #899084;border-radius:3px;padding:5px;';
-  control.onclick = action; panel.append(control);
+  control.onclick = action; controls.append(control);
 }
 button('Avant virage', () => { gps = { latitude: 48.8573375, longitude: 2.3467217, accuracy: 5 }; denied = false; emit(); });
 button('Au virage', () => { gps = { latitude: 48.8567689, longitude: 2.3487701, accuracy: 5 }; emit(); });
@@ -46,6 +58,9 @@ button('Arrivée GPS', () => { gps = { latitude: 48.84607934422299, longitude: 2
 button('Refuser GPS', () => { denied = true; emit(); });
 button('Autoriser GPS', () => { denied = false; });
 button('Signal perdu', () => { for (const callback of watches.values()) callback.error?.({ ...permissionError, code: 2, message: 'Signal perdu simulé' }); });
+for (const mode of ['réel', 'occupé', 'hors ligne', 'sans trajet']) button(`Service ${mode}`, () => { serviceMode = mode; updateCount(); });
+button('Carte taille nulle', () => { document.getElementById('map')!.style.height = '0px'; window.dispatchEvent(new Event('resize')); });
+button('Rétablir la carte', () => { document.getElementById('map')!.style.height = '100%'; window.dispatchEvent(new Event('resize')); });
 button('Masquer l’application', () => {
   Object.defineProperty(document, 'hidden', { configurable: true, value: true }); document.dispatchEvent(new Event('visibilitychange'));
   Object.defineProperty(document, 'hidden', { configurable: true, value: false }); document.dispatchEvent(new Event('visibilitychange'));

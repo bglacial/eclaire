@@ -142,7 +142,7 @@ export class GpsGuidance {
     }
     element('navigation-recalculate').hidden = true;
     if (state.status === 'arrived') {
-      this.release(); text('navigation-instruction', 'Vous êtes arrivé au point routier'); text('navigation-turn-distance', '✓');
+      this.release(); text('navigation-instruction', 'Vous êtes arrivé au point routier'); text('navigation-turn-distance', '0 m');
       text('navigation-remaining', '0 m'); text('navigation-time', '0 min');
       this.status('Position GPS arrêtée. Vérifiez l’accès final à votre destination.');
       if (this.follow) this.center(); this.speak('Vous êtes arrivé au point routier.'); return;
