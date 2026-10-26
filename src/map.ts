@@ -2,7 +2,19 @@ import L from 'leaflet';
 import type { Dataset, RoadGraph } from './types';
 
 export function createMap(data: Dataset, roads: RoadGraph) {
-  const map = L.map('map', { zoomControl: false, attributionControl: false, minZoom: 3, maxZoom: 18, zoomSnap: 0.25, preferCanvas: true });
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)');
+  const map = L.map('map', { zoomControl: false, attributionControl: false, minZoom: 3, maxZoom: 18, zoomSnap: 0.25, preferCanvas: true, zoomAnimation: false, markerZoomAnimation: false, fadeAnimation: !reduced.matches, inertia: !reduced.matches });
+  const updateMotion = () => { map.options.fadeAnimation = !reduced.matches; map.options.inertia = !reduced.matches; };
+  reduced.addEventListener('change', updateMotion);
+  map.on('unload', () => reduced.removeEventListener('change', updateMotion));
+  const directions: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+  map.getContainer().addEventListener('keydown', event => {
+    const direction = directions[event.key];
+    if (!direction || event.altKey || event.ctrlKey || event.metaKey || event.target !== map.getContainer()) return;
+    const delta = (map.options.keyboardPanDelta ?? 80) * (event.shiftKey ? 3 : 1);
+    map.panBy([direction[0] * delta, direction[1] * delta], { animate: false });
+    event.preventDefault(); event.stopImmediatePropagation();
+  }, true);
   map.setView([48.8568, 2.3458], matchMedia('(max-width: 720px)').matches ? 14.75 : 15.5);
   map.createPane('national-base'); map.getPane('national-base')!.style.zIndex = '190';
   const basemap = L.tileLayer(import.meta.env.VITE_TILE_URL || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -15,9 +27,9 @@ export function createMap(data: Dataset, roads: RoadGraph) {
     pane: 'geography', interactive: false,
     style: feature => {
       const kind = feature?.properties.kind;
-      return kind === 'water' ? { fillColor: '#152c34', fillOpacity: 1, color: '#1e3a42', weight: 1 }
-        : kind === 'park' ? { fillColor: '#1c2b28', fillOpacity: 0.9, color: '#29372f', weight: 0.5 }
-        : { fillColor: '#222a2c', fillOpacity: 0.8, color: '#313a3d', weight: 0.45 };
+      return kind === 'water' ? { fillColor: '#c5dfe9', fillOpacity: 1, color: '#afcdd8', weight: 1 }
+        : kind === 'park' ? { fillColor: '#dde7d9', fillOpacity: 0.9, color: '#cbd7c6', weight: 0.5 }
+        : { fillColor: '#e7e7e4', fillOpacity: 0.8, color: '#d3d5d6', weight: 0.45 };
     },
   }).addTo(map);
 
@@ -29,7 +41,7 @@ export function createMap(data: Dataset, roads: RoadGraph) {
       if (primary !== major || ['steps', 'elevator', 'corridor', 'cycleway'].includes(way.tags.highway)) continue;
       const coords: L.LatLngTuple[] = [];
       const flush = () => {
-        if (coords.length > 1) L.polyline(coords.slice(), { interactive: false, color: primary ? '#4b5659' : '#343e41', weight: primary ? 2.4 : 1.1, opacity: primary ? 0.74 : 0.58 }).addTo(layer);
+        if (coords.length > 1) L.polyline(coords.slice(), { interactive: false, color: primary ? '#b5b9c4' : '#cdd0d7', weight: primary ? 2.4 : 1.1, opacity: primary ? 0.74 : 0.58 }).addTo(layer);
         coords.length = 0;
       };
       for (const id of way.nodes) {

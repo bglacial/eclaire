@@ -93,4 +93,27 @@ class RoutingTest {
             finally { Thread.interrupted(); }
         }
     }
+    @Test void boundedTracePreservesBothFrontsAndTheExactResult() {
+        try (var graph = graph()) {
+            for (int i = 0; i < 1000; i++) edge(graph, i, i + 1, 100, 30);
+            var full = new TracedSearch(graph, weighting(graph));
+            var sampled = new TracedSearch(graph, weighting(graph), null, 17);
+            var expected = full.calcPath(0, 1000);
+            var actual = sampled.calcPath(0, 1000);
+            assertEquals(expected.getWeight(), actual.getWeight());
+            assertEquals(expected.calcEdges().size(), actual.calcEdges().size());
+            assertEquals(full.getVisitedNodes(), sampled.getVisitedNodes());
+            assertTrue(sampled.keys.size() <= 17);
+            assertTrue(sampled.traceStride > 1);
+            int[] counts = {0, 0};
+            int selected = 0;
+            for (int i = 0; i < full.keys.size(); i++) if (counts[full.sides.get(i)]++ % sampled.traceStride == 0) {
+                assertEquals(full.keys.get(i), sampled.keys.get(selected));
+                assertEquals(full.sides.get(i), sampled.sides.get(selected++));
+            }
+            assertEquals(selected, sampled.keys.size());
+            assertTrue(counts[0] > 0 && counts[1] > 0);
+            assertThrows(IllegalArgumentException.class, () -> new TracedSearch(graph, weighting(graph), null, 1));
+        }
+    }
 }

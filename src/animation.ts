@@ -2,7 +2,7 @@ import L from 'leaflet';
 import type { ExplorationEvent, RoadGeometry, SearchResult } from './types';
 import { clamp01, confirmationPhase, easeOutQuint, measureLine, motion, pointAlong, trailOpacity, type MeasuredLine, type PixelPoint } from './animation-timing';
 
-const colors = ['#66e6ec', '#ffbc70'];
+const colors = ['oklch(0.57 0.11 210)', 'oklch(0.59 0.15 60)'];
 interface Trail extends ExplorationEvent { at: number }
 
 export class ExplorationRenderer {
@@ -125,7 +125,7 @@ export class ExplorationRenderer {
     ctx.globalAlpha = this.result ? phase.branches * 0.92 + 0.035 : 1; ctx.drawImage(this.visitedCanvas, 0, 0, width, height);
 
     if (animate && stopFade > 0) {
-      const active = this.trails.slice(this.lite ? -70 : -320); ctx.globalCompositeOperation = 'screen';
+      const active = this.trails.slice(this.lite ? -70 : -320);
       for (const trail of active) {
         const line = this.edgeLine(trail.edge), travel = Math.min(280, motion.travel + line.length * 0.8), age = now - trail.at;
         const opacity = trailOpacity(age, travel) * stopFade * (this.result ? phase.branches : 1);
@@ -154,8 +154,8 @@ export class ExplorationRenderer {
         }
       }
       const reveal = phase.reveal;
-      ctx.globalAlpha = 1; ctx.strokeStyle = '#112c30'; ctx.lineWidth = 8; ctx.beginPath(); this.trace(ctx, line, 0, reveal); ctx.stroke();
-      ctx.strokeStyle = '#a2fff0'; ctx.lineWidth = this.lite ? 3 : 3.5; ctx.shadowColor = '#61e8df'; ctx.shadowBlur = this.lite ? 0 : 10;
+      ctx.globalAlpha = 1; ctx.strokeStyle = 'oklch(0.99 0.005 270)'; ctx.lineWidth = 8; ctx.beginPath(); this.trace(ctx, line, 0, reveal); ctx.stroke();
+      ctx.strokeStyle = 'oklch(0.48 0.24 270)'; ctx.lineWidth = this.lite ? 3 : 3.5; ctx.shadowColor = 'oklch(0.65 0.2 270)'; ctx.shadowBlur = this.lite ? 0 : 10;
       ctx.beginPath(); this.trace(ctx, line, 0, reveal); ctx.stroke(); ctx.shadowBlur = 0;
       if (animate && reveal > 0 && reveal < 1) this.glow(pointAlong(line, reveal), '#effff8', 1, 3);
       if (animate && phase.shock > 0 && phase.shock < 1) {

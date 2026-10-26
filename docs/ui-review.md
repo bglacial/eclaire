@@ -73,3 +73,20 @@ Top three problems (most visible first), each with the screenshot it shows in an
 - Pas de mesure sur téléphone physique, de conduite réelle ni d’autonomie ; la recette en navigateur et le build APK ne remplacent pas ces vérifications.
 
 Livraison Android : APK **1.0.2 / code 3**, compilation Gradle réussie, signature v2 et alignement vérifiés ; URL API publique HTTPS embarquée et harnais de recette absent. Le web utilise `/api` et l’APK la même API derrière le domaine public. Le moteur serveur reste inchangé.
+
+
+## Refonte claire du 26 octobre 2026
+
+Direction confirmée par l’utilisateur : carte claire, interface épurée, inspiration du site personnel nriault.fr sans copier son portfolio. Les surfaces claires reprennent son assurance typographique ; cobalt pour l’action et le trajet final, citron pour le symbole. Les fronts réels restent cyan et ambre. Aucune nouvelle dépendance.
+
+Skills appliqués : impeccable pour le contexte et la composition produit ; improve-animations pour l’audit en lecture seule ; animate pour la réalisation ; [Web Interface Guidelines](https://raw.githubusercontent.com/vercel-labs/web-interface-guidelines/main/command.md) pour les contrôles d’interface. Le plan de mouvement est dans `plans/001-motion.md`.
+
+Recette navigateur actuelle :
+- Préparation et résultat Louvre–Panthéon, puis vrai Téloché–Le Barcarès via la recherche IGN : résultat national trouvé, 824,7 km et 7 h 34 sans trafic pour les centres IGN de cette recherche.
+- Clavier : sélection des deux suggestions avec Entrée, action de calcul, restitution du focus à « Modifier le trajet » ; l’aide native prend le focus et se ferme avec Échap.
+- Carte en mode réduit : déplacement aux flèches sans classe d’animation de pan ni de zoom ; zooms immédiats, inertie désactivée. Les boutons de zoom et les suggestions n’ont pas de pression animée.
+- À 320 × 640 : aucun débordement horizontal, repères A/B visibles, panneau défilable, suggestions accessibles dans le flux. Les options actives sont amenées dans la zone visible au clavier. À 390 × 844, le résultat garde les adresses, durée et distance lisibles.
+- Pendant l’exploration, les champs se replient et l’interruption reste disponible. Le cadrage réserve une marge supplémentaire au repère B au-dessus de la barre de lecture.
+- Contrôles sémantiques : labels des champs, name et spellcheck explicites, noms des boutons à icône, lien d’évitement, status des mises à jour, attribution OSM conservée, cibles d’au moins 44 px pour les commandes.
+
+Capture d’un vrai résultat local : `docs/eclaire-clear-long-route.png`. Ce document n’est pas une certification WCAG. Le harnais GPS simulé a aussi été rejoué : manœuvre « Dans 180 m, tournez à droite sur Pont Notre-Dame », panneau lisible, ligne de guidage cobalt, puis zéro suivi GPS après fermeture. Capture : `docs/eclaire-clear-gps-simulated.png`. Pas de conduite réelle, d’essai sur téléphone physique, de reconstruction APK ou de publication dans cette refonte.

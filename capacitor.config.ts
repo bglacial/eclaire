@@ -4,9 +4,9 @@ const config: CapacitorConfig = {
   appId: 'fr.eclaire.app',
   appName: 'Éclaire',
   webDir: 'dist',
-  backgroundColor: '#111719',
-  appendUserAgent: ' Eclaire/0.2',
-  android: { backgroundColor: '#111719' },
+  backgroundColor: '#f7f8fc',
+  appendUserAgent: ' Eclaire/1.1.0-alpha.1',
+  android: { backgroundColor: '#f7f8fc' },
 };
 
 export default config;

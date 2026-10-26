@@ -62,7 +62,7 @@ export class GpsGuidance {
     this.session = true; this.starting = true; this.follow = true; this.firstCenter = true;
     this.progress ??= new GuidanceProgress(this.route);
     this.onEnter();
-    if (!this.line) this.line = L.polyline(this.route.points.map(p => [p.lat, p.lon]), { color: '#a2efdb', weight: 6, opacity: 0.95, interactive: false }).addTo(this.map);
+    if (!this.line) this.line = L.polyline(this.route.points.map(p => [p.lat, p.lon]), { color: getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(), weight: 6, opacity: 0.95, interactive: false }).addTo(this.map);
     element('app').classList.add('is-guiding'); element('navigation').hidden = false;
     element('navigation-resume').hidden = true; element('navigation-recalculate').hidden = true;
     text('navigation-instruction', 'Recherche de votre position…'); text('navigation-turn-distance', 'GPS');
@@ -127,9 +127,9 @@ export class GpsGuidance {
     if (!usableFix(fix)) { this.uncertain(`Position imprécise ou ancienne. Précision requise : 50 m maximum.`); return; }
     this.fix = fix; this.lastGoodAt = Date.now();
     const point = L.latLng(fix.lat, fix.lon);
-    if (!this.marker) this.marker = L.circleMarker(point, { radius: 8, color: '#ffffff', weight: 3, fillColor: '#55d4ed', fillOpacity: 1, pane: 'markerPane', interactive: false }).addTo(this.map);
+    if (!this.marker) this.marker = L.circleMarker(point, { radius: 8, color: 'oklch(0.99 0.005 270)', weight: 3, fillColor: 'oklch(0.57 0.11 210)', fillOpacity: 1, pane: 'markerPane', interactive: false }).addTo(this.map);
     else this.marker.setLatLng(point);
-    if (!this.accuracy) this.accuracy = L.circle(point, { radius: fix.accuracy, color: '#55d4ed', weight: 1, fillOpacity: 0.08, interactive: false }).addTo(this.map);
+    if (!this.accuracy) this.accuracy = L.circle(point, { radius: fix.accuracy, color: 'oklch(0.57 0.11 210)', weight: 1, fillOpacity: 0.08, interactive: false }).addTo(this.map);
     else this.accuracy.setLatLng(point).setRadius(fix.accuracy);
     const state = this.progress!.update(fix);
     if (state.status === 'uncertain') { this.uncertain('Mise à jour GPS en attente.'); return; }

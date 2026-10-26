@@ -82,7 +82,7 @@ cd android
 
 Sortie : `android/app/build/outputs/apk/debug/app-debug.apk`. Les permissions de localisation sont déclarées et demandées à l’usage. Le consentement du navigateur ou du système reste nécessaire.
 
-La version nationale exige le service, une page HTTPS ou localhost, et un accès réseau pour les tuiles et le géocodage. Si le service est indisponible au démarrage, le calcul embarqué fonctionne uniquement pour des points raccordables dans l’extrait Paris. Il ne simule pas un trajet national. L’APK de test **1.0.2 / code 3** a été compilé, signé et contrôlé ; aucun téléphone physique n’a été validé ici. Pour ce déploiement, synchroniser avec `VITE_ROUTING_API_URL=https://eclaire.nriault.fr/api npm run android:sync`, puis reconstruire et réinstaller l’APK : la publication web ne modifie pas un APK déjà installé.
+La version nationale exige le service, une page HTTPS ou localhost, et un accès réseau pour les tuiles et le géocodage. Si le service est indisponible au démarrage, le calcul embarqué fonctionne uniquement pour des points raccordables dans l’extrait Paris. Il ne simule pas un trajet national. L’APK alpha **1.1.0-alpha.1 / code 4** a été compilé, signé avec la clé debug existante et contrôlé ; aucun téléphone physique n’a été validé ici. Pour ce déploiement, synchroniser avec `VITE_ROUTING_API_URL=https://eclaire.nriault.fr/api npm run android:sync`, puis reconstruire et réinstaller l’APK : la publication web ne modifie pas un APK déjà installé.
 
 ## Guidage GPS
 
@@ -102,12 +102,12 @@ API utilisée : [Capacitor Geolocation v8](https://capacitorjs.com/docs/apis/geo
 
 ## Calcul et animation
 
-- **France : GraphHopper 11.0**, sans raccourcis CH. Le mode par défaut utilise une heuristique nulle, équivalente à Dijkstra bidirectionnel. Le Raspberry utilise **A* bidirectionnel avec huit landmarks**, préparés séparément pour chaque critère. Les bornes ignorent les coûts de virage pour rester optimistes ; la recherche finale garde les restrictions et coûts complets. L’instrumentation de `TracedSearch` enregistre les arêtes réellement retirées des files et conserve la condition d’arrêt du moteur. Ce mode explore donc moins de routes ; il ne rejoue pas la trace d’un autre algorithme.
+- **France : GraphHopper 11.0**, sans raccourcis CH. Le mode par défaut charge automatiquement les index disponibles. Les index v2 utilisent **32 landmarks actifs par requête**, préparés séparément pour chaque critère. Les anciens index v1 à huit landmarks restent lisibles ; sans index, le secours est Dijkstra bidirectionnel. Les bornes ignorent les coûts de virage pour rester optimistes ; la recherche finale garde les restrictions et coûts complets. L’instrumentation de `TracedSearch` enregistre les arêtes réellement retirées des files et conserve la condition d’arrêt du moteur. Ce mode explore donc moins de routes ; il ne rejoue pas la trace d’un autre algorithme.
 - **Le plus rapide** minimise le temps de parcours estimé. Le modèle a une influence de distance nulle ; il ne privilégie donc pas artificiellement les itinéraires courts.
 - **Le plus court** utilise un poids exactement égal à la longueur, tout en conservant les accès et virages interdits. La durée du résultat est calculée selon les mêmes vitesses estimées.
 - Les points sont raccordés aux routes carrossables à **2 km maximum**. Les petits réseaux isolés sont écartés du raccordement, les voies privées et de desserte exclues du profil. Le raccordement hors réseau n’est pas inclus dans la distance.
-- **Trace indépendante du rendu** : le calcul enregistre des clés d’arêtes dans des tableaux compacts ; la géométrie est sérialisée après le calcul en NDJSON. Une lecture lente sur téléphone ne ralentit pas la recherche.
-- Pour limiter la mémoire et le transfert, la trace France retient par défaut au plus environ **60 000 événements**, échantillonnés séparément sur les deux fronts. Le facteur est annoncé dans l’interface. Le calcul, son coût, la preuve et la géométrie finale ne sont pas échantillonnés.
+- **Trace indépendante du rendu** : le calcul enregistre une trace bornée de clés d’arêtes dans des tableaux compacts ; la géométrie est sérialisée après le calcul en NDJSON. Une lecture lente sur téléphone ne ralentit pas la recherche.
+- Pour limiter la mémoire et le transfert, la trace France retient par défaut au plus **60 000 événements** dès le calcul, échantillonnés séparément sur les deux fronts. Quand le budget est atteint, chaque front conserve un événement sur deux ; la mémoire de trace ne croît plus avec les millions d’états explorés. Le facteur est annoncé dans l’interface. Le calcul, son coût, la preuve et la géométrie finale ne sont pas échantillonnés.
 - **Paris sans serveur** : le worker TypeScript précédent et son graphe orienté restent disponibles. Les anciennes limites d’extraction s’appliquent à ce secours local.
 
 L’animation utilise Canvas 2D, sans bibliothèque de mouvement supplémentaire. Les routes visitées sont mises en cache dans un second Canvas, au lieu d’être retracées à chaque image. Les fronts suivent les polylignes, avec des têtes adaptées au zoom et des traînées décroissantes. Après confirmation : convergence des deux côtés pendant 500 ms, onde discrète, révélation par une impulsion de 900 ms. Il n’y a pas de scintillement aléatoire hors des routes ni de boucle décorative perpétuelle.
@@ -137,9 +137,9 @@ npm run build
 npm run android:sync
 ```
 
-Résultats : **31 tests TypeScript réussis**, dont la détection téléphone, les permissions précises, les coordonnées GPS, les annulations et la compatibilité sans `AbortSignal.any/timeout`. Ils comprennent aussi l’oracle Bellman-Ford sur 400 graphes pour deux critères, les polylignes, le suivi GPS, les manœuvres et le protocole. Les **7 tests Java** ont été validés lors de l’évolution du moteur, inchangé dans le correctif Android : critères, recherche inverse, sens uniques, absence de chemin, restrictions, première rencontre, interruption et consignes françaises.
+Résultats du 26 octobre 2026 : **31 tests TypeScript et 8 tests Java réussis**. Les tests couvrent notamment l’oracle Bellman-Ford sur 400 graphes pour les deux critères, 200 comparaisons landmarks/Dijkstra avec restrictions de virage, le protocole national, la trace bornée (ordre des fronts et résultat exact conservés), l’interruption, les manœuvres françaises et le suivi GPS simulé. Le build TypeScript/Vite est vérifié séparément de la préparation du graphe national et du déploiement.
 
-Mesures réelles du service local, sans trafic :
+Mesures historiques du service local sans accélération, sans trafic :
 
 | Trajet | Critère | Distance | Durée estimée | États explorés | Calcul local |
 |---|---|---:|---:|---:|---:|
@@ -163,7 +163,7 @@ Ce sont des observations sur cette machine et ces points publics, pas un engagem
 | `ECLAIRE_MAX_STATES` | `40000000` | Budget maximal de recherche |
 | `ECLAIRE_TIMEOUT_MS` | `120000` | Délai maximal du calcul |
 | `ECLAIRE_MAX_TRACE_EVENTS` | `60000` | Budget de trace visuelle |
-| `ECLAIRE_LANDMARKS` | `off` | `off` : Dijkstra ; `prepare` : prépare puis charge les index ; `load` : charge les index sans les reconstruire |
+| `ECLAIRE_LANDMARKS` | `auto` | `auto` : charge v2 prêt, sinon v1, sinon Dijkstra ; `off` : Dijkstra ; `prepare` : prépare les 32 landmarks v2 ; `load` : charge un index existant sans reconstruction |
 
 Un seul calcul national est accepté à la fois pour maîtriser la mémoire ; le suivant reçoit un message explicite si le service est occupé. Une limite de calcul atteinte produit une erreur, jamais un trajet annoncé optimal. Le service écoute localement par défaut ; un hébergement public doit ajouter HTTPS et une protection adaptée contre les abus.
 
@@ -177,3 +177,38 @@ Un seul calcul national est accepté à la fois pour maîtriser la mémoire ; le
 - Le fond national et le géocodage demandent Internet. La recherche d’adresses n’est pas garantie exhaustive. La géolocalisation demande HTTPS ou localhost, une permission et un signal disponible.
 - L’APK de développement est construit et sa signature vérifiée ; installation, permissions système et fluidité restent à confirmer sur un téléphone physique. L’image Docker n’a pas été construite ici.
 - Le guidage GPS est validé avec des positions simulées clairement signalées, pas lors d’un trajet sur route réelle. La voix, l’autonomie, la reprise système et les permissions Android restent à vérifier sur téléphone.
+
+## Évolution du 26 octobre : longs trajets et interface claire
+
+Téloché–Le Barcarès dépassait le budget Raspberry de deux millions d’états avec les huit landmarks v1 : **2 181 218** états en mode rapide, **3 211 464** en mode court, sur les coordonnées publiques du script `ops/smoke-routing.py`. Les index v2 en préparent 32 pour renforcer les bornes pendant toute la recherche. Ils se préparent séparément, sans écraser v1. Voir [le déploiement](ops/README.md) ; copier seulement le JAR ne suffit pas.
+
+L’interface claire s’inspire des accents cobalt et citron de nriault.fr. Carte dominante, panneau de préparation, commandes repliées pendant l’exploration et résultat compact. Les fronts cyan et ambre conservent leur effet éclair ; le trajet final est cobalt pour rester lisible. Le clavier est immédiat, le mode réduit supprime zoom, inertie et translations. L’aide native entre et sort en 200 ms, sans bibliothèque ajoutée. Le contexte est dans PRODUCT.md et DESIGN.md ; l’audit de mouvement dans [plans/001-motion.md](plans/001-motion.md).
+
+
+Recette finale locale, avec 512 Mo de tas Java et le budget Raspberry inchangé de 2 millions d’états :
+
+| Téloché–Le Barcarès, points du script | États avant (v1) | États après (v2) | Calcul local v2 |
+|---|---:|---:|---:|
+| Plus rapide | 2 181 218 | 56 942 | 45 ms |
+| Plus court | 3 211 464 | 293 092 | 291 ms |
+
+Les coûts optimaux restent identiques à la tolérance numérique du script. Les sept cas de `ops/smoke-routing.py` passent, dont Paris–Lyon et Brest–Marseille dans les deux critères. Pour les centres renvoyés par la recherche IGN, le trajet rapide explore 61 164 états et le trajet court 299 988, avec les mêmes coûts de référence vérifiés séparément. `/api/health` annonce 32 landmarks pour chaque critère après redémarrage en mode `load`.
+
+Ces temps sont mesurés sur le Mac local et ne prédisent pas les temps du Raspberry. Les nouveaux index occupent 2,4 Go chacun ; leur préparation unique a pris environ 24 minutes sur cette machine. Les anciens dossiers v1 sont conservés. Le site public n’a pas été mis à jour par cette recette. L’APK alpha est publié séparément, comme décrit ci-dessous.
+
+
+## Préversion alpha 1.1.0-alpha.1
+
+La préversion GitHub contient l’APK de test Android (`versionCode 4`), le JAR du serveur et leurs empreintes SHA-256. L’APK utilise `https://eclaire.nriault.fr/api`, garde l’identifiant `fr.eclaire.app` et la même signature debug que l’APK 1.0.2 pour permettre sa mise à jour. Il embarque l’interface claire et ne contient pas le harnais GPS simulé. Les builds et la signature ont été vérifiés, sans installation sur téléphone physique.
+
+La publication d’une release ne déploie pas le serveur public. L’accélération des longs trajets demande le nouveau JAR **et les deux index v2 complets** du même graphe. Les données OSM et les index de plusieurs Go ne sont pas joints à la release. Suivre [les consignes Raspberry](ops/README.md), puis contrôler les deux compteurs `landmarks` de `/api/health`.
+
+Pour reconstruire l’APK de cette préversion :
+
+```sh
+VITE_ROUTING_API_URL=https://eclaire.nriault.fr/api npm run android:sync
+cd android
+./gradlew assembleDebug
+```
+
+Le build web conserve `/api` comme URL relative. Après une synchronisation Android, refaire `VITE_ROUTING_API_URL= npm run build` pour restaurer ce build web sans écraser les assets déjà copiés dans Android.

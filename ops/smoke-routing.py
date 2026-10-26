@@ -14,6 +14,8 @@ cases = [
     ('Paris–Lyon', 'distance', [48.8566, 2.3522], [45.7578, 4.832], 441131.6946344737),
     ('Brest–Marseille', 'time', [48.3904, -4.4861], [43.2965, 5.3698], 43053.181702512025),
     ('Brest–Marseille', 'distance', [48.3904, -4.4861], [43.2965, 5.3698], 1096550.6994009037),
+    ('Téloché–Le Barcarès', 'time', [47.885649, 0.277005], [42.787086, 3.034846], 27313.397255289758),
+    ('Téloché–Le Barcarès', 'distance', [47.885649, 0.277005], [42.787086, 3.034846], 707877.3176598481),
     ('Ajaccio–Bastia', 'time', [41.9192, 8.7386], [42.6973, 9.4509], None),
 ]
 for name, criterion, start, end, expected in cases:
@@ -31,7 +33,7 @@ for name, criterion, start, end, expected in cases:
     assert result and result['found'] and result['path'], (name, result)
     assert math.isfinite(result['cost']), name
     if expected is not None:
-        assert abs(result['cost'] - expected) < 0.01, (name, 'optimum différent de Dijkstra', result['cost'], expected)
+        assert abs(result['cost'] - expected) < 0.01, (name, 'coût optimal de référence différent', result['cost'], expected)
     assert result['instructions'][0]['at'] == 0
     assert result['instructions'][-1]['sign'] == 4
     assert abs(result['instructions'][-1]['at'] - result['length']) < 0.01

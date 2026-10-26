@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class LandmarkTest {
     @TempDir Path temporary;
-    @Test void landmarksKeepTheDijkstraOptimumForBothObjectivesAndTurnRestrictions() {
+    @Test void landmarksKeepTheDijkstraOptimumForBothObjectivesAndTurnRestrictions() throws Exception {
         var access = new SimpleBooleanEncodedValue("car_access", true);
         var speed = new DecimalEncodedValueImpl("car_average_speed", 8, 1, true);
         var restriction = new SimpleBooleanEncodedValue(TurnRestriction.key("car"), false);
@@ -35,14 +35,16 @@ class LandmarkTest {
                 var directory = temporary.resolve(distance ? "distance" : "time").toString();
                 var landmarks = LandmarkIndex.open(graph, encoding, weighting, directory, true);
                 assertFalse(landmarks.isEmpty());
+                assertEquals(32, landmarks.getLandmarkCount());
+                assertEquals("32", java.nio.file.Files.readString(Path.of(directory, "eclaire.ready")));
                 for (int i = 0; i < 100; i++) {
                     int a = random.nextInt(32), b = random.nextInt(32);
                     var expected = new DijkstraBidirectionRef(graph, weighting, TraversalMode.EDGE_BASED).calcPath(a, b);
-                    var search = new TracedSearch(graph, weighting, LMApproximator.forLandmarks(graph, weighting, landmarks, 8));
+                    var search = new TracedSearch(graph, weighting, LMApproximator.forLandmarks(graph, weighting, landmarks, landmarks.getLandmarkCount()));
                     var actual = search.calcPath(a, b);
                     assertEquals(expected.isFound(), actual.isFound()); assertEquals(expected.getWeight(), actual.getWeight(), 1e-7);
                 }
-                assertFalse(new TracedSearch(graph, weighting, LMApproximator.forLandmarks(graph, weighting, landmarks, 8)).calcPath(0, 32).isFound());
+                assertFalse(new TracedSearch(graph, weighting, LMApproximator.forLandmarks(graph, weighting, landmarks, landmarks.getLandmarkCount())).calcPath(0, 32).isFound());
                 landmarks.close();
                 var loaded = LandmarkIndex.open(graph, encoding, weighting, directory, false); assertFalse(loaded.isEmpty()); loaded.close();
             }

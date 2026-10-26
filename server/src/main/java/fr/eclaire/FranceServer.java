@@ -57,10 +57,22 @@ public final class FranceServer {
                 .putObject("prepare.min_network_size", 200).setProfiles(List.of(profile)));
         hopper.importOrLoad();
         hopper.ensureConnectivity();
-        String landmarks = System.getenv().getOrDefault("ECLAIRE_LANDMARKS", "off");
-        if (!Set.of("off", "load", "prepare").contains(landmarks)) throw new IllegalArgumentException("Mode landmarks invalide.");
-        timeLandmarks = landmarks.equals("off") ? null : LandmarkIndex.open(hopper.getBaseGraph(), hopper.getEncodingManager(), timeWeighting(), graphDirectory + "/landmarks-v1-time", landmarks.equals("prepare"));
-        distanceLandmarks = landmarks.equals("off") ? null : LandmarkIndex.open(hopper.getBaseGraph(), hopper.getEncodingManager(), new DistanceWeighting(timeWeighting()), graphDirectory + "/landmarks-v1-distance", landmarks.equals("prepare"));
+        String landmarks = System.getenv().getOrDefault("ECLAIRE_LANDMARKS", "auto");
+        if (!Set.of("off", "auto", "load", "prepare").contains(landmarks)) throw new IllegalArgumentException("Mode landmarks invalide.");
+        timeLandmarks = openLandmarks(graphDirectory, "time", timeWeighting(), landmarks);
+        distanceLandmarks = openLandmarks(graphDirectory, "distance", new DistanceWeighting(timeWeighting()), landmarks);
+    }
+
+    private LandmarkStorage openLandmarks(String graphDirectory, String criterion, Weighting weighting, String mode) {
+        if (mode.equals("off")) return null;
+        String directory = graphDirectory + "/landmarks-v2-" + criterion;
+        if (mode.equals("prepare") || Files.isRegularFile(java.nio.file.Path.of(directory, "eclaire.ready")))
+            return LandmarkIndex.open(hopper.getBaseGraph(), hopper.getEncodingManager(), weighting, directory, mode.equals("prepare"));
+        String legacy = graphDirectory + "/landmarks-v1-" + criterion;
+        if (Files.isRegularFile(java.nio.file.Path.of(legacy, "landmarks_car")))
+            return LandmarkIndex.open(hopper.getBaseGraph(), hopper.getEncodingManager(), weighting, legacy, false, 8);
+        if (mode.equals("auto")) return null;
+        throw new IllegalStateException("Index landmarks absent. Lancez ECLAIRE_LANDMARKS=prepare avant le déploiement.");
     }
 
     private Weighting timeWeighting() { return hopper.createWeighting(profile, new PMap()); }
@@ -77,8 +89,9 @@ public final class FranceServer {
 
     Map<String, Object> health() {
         var bounds = hopper.getBaseGraph().getBounds();
-        return Map.of("status", "ready", "engine", timeLandmarks == null ? "GraphHopper 11.0 · Dijkstra bidirectionnel" : "GraphHopper 11.0 · A* bidirectionnel · landmarks", "nodes", hopper.getBaseGraph().getNodes(),
+        return Map.of("status", "ready", "engine", timeLandmarks == null ? "GraphHopper 11.0 · Dijkstra bidirectionnel" : "GraphHopper 11.0 · A* bidirectionnel · " + timeLandmarks.getLandmarkCount() + " landmarks", "nodes", hopper.getBaseGraph().getNodes(),
                 "edges", hopper.getBaseGraph().getEdges(), "bounds", List.of(bounds.minLat, bounds.minLon, bounds.maxLat, bounds.maxLon),
+                "landmarks", Map.of("time", timeLandmarks == null ? 0 : timeLandmarks.getLandmarkCount(), "distance", distanceLandmarks == null ? 0 : distanceLandmarks.getLandmarkCount()),
                 "dataTimestamp", hopper.getProperties().get("datareader.data.date"));
     }
 
@@ -111,7 +124,8 @@ public final class FranceServer {
             Weighting queryTime = queryGraph.wrapWeighting(time);
             Weighting weighting = queryGraph.wrapWeighting(criterion.equals("distance") ? new DistanceWeighting(time) : time);
             var landmarks = criterion.equals("distance") ? distanceLandmarks : timeLandmarks;
-            var algo = new TracedSearch(queryGraph, weighting, landmarks == null ? null : LMApproximator.forLandmarks(queryGraph, weighting, landmarks, 8));
+            var algo = new TracedSearch(queryGraph, weighting, landmarks == null ? null : LMApproximator.forLandmarks(queryGraph, weighting, landmarks, landmarks.getLandmarkCount()),
+                    Integer.parseInt(System.getenv().getOrDefault("ECLAIRE_MAX_TRACE_EVENTS", "60000")));
             algo.setMaxVisitedNodes(Integer.parseInt(System.getenv().getOrDefault("ECLAIRE_MAX_STATES", "40000000")));
             algo.setTimeoutMillis(Long.parseLong(System.getenv().getOrDefault("ECLAIRE_TIMEOUT_MS", "120000")));
             long began = System.nanoTime();
@@ -123,19 +137,14 @@ public final class FranceServer {
             exchange.getResponseHeaders().set("Cache-Control", "no-store");
             exchange.sendResponseHeaders(200, 0);
             try (var writer = new BufferedWriter(new OutputStreamWriter(exchange.getResponseBody(), StandardCharsets.UTF_8))) {
-                int stride = Math.max(1, (int) Math.ceil((double) algo.keys.size() / Integer.parseInt(System.getenv().getOrDefault("ECLAIRE_MAX_TRACE_EVENTS", "60000"))));
-                var selected = new com.carrotsearch.hppc.IntArrayList();
-                int[] sideCounts = { 0, 0 };
-                for (int i = 0; i < algo.keys.size(); i++) if (sideCounts[algo.sides.get(i)]++ % stride == 0) selected.add(i);
-                writeLine(writer, Map.of("type", "metadata", "visited", algo.getVisitedNodes(), "computeMs", computeMs, "traceStride", stride, "traceEvents", selected.size(),
+                writeLine(writer, Map.of("type", "metadata", "visited", algo.getVisitedNodes(), "computeMs", computeMs, "traceStride", algo.traceStride, "traceEvents", algo.keys.size(),
                         "snapped", List.of(Map.of("lat", from.getSnappedPoint().lat, "lon", from.getSnappedPoint().lon, "distance", from.getQueryDistance()), Map.of("lat", to.getSnappedPoint().lat, "lon", to.getSnappedPoint().lon, "distance", to.getQueryDistance()))));
                 Set<Integer> sent = new HashSet<>();
-                for (int offset = 0; offset < selected.size(); offset += 256) {
+                for (int offset = 0; offset < algo.keys.size(); offset += 256) {
                     if (Thread.currentThread().isInterrupted()) throw new CancellationException();
                     var events = new ArrayList<Map<String, Object>>();
                     var edges = new ArrayList<Map<String, Object>>();
-                    for (int j = offset; j < Math.min(offset + 256, selected.size()); j++) {
-                        int i = selected.get(j);
+                    for (int i = offset; i < Math.min(offset + 256, algo.keys.size()); i++) {
                         int key = algo.keys.get(i);
                         events.add(Map.of("key", key, "side", algo.sides.get(i)));
                         if (sent.add(key)) edges.add(edge(queryGraph, key, queryTime));

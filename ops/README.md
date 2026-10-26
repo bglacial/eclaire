@@ -8,14 +8,14 @@ Le port **127.0.0.1:8788** évite celui de Hermes (8787).
 
 ## Index et mémoire
 
-Le Dijkstra France complet dépasse la mémoire disponible sur ce Pi. Le profil
-déployé utilise A* bidirectionnel avec huit landmarks par critère, sans CH. Les
+Le Dijkstra France complet dépasse la mémoire disponible sur ce Pi. Le nouveau profil
+utilise A* bidirectionnel avec 32 landmarks actifs par critère, sans CH. Les
 index sont calculés sur une machine plus puissante puis transférés avec le graphe.
 L’animation montre la véritable exploration A*, qui est différente de Dijkstra.
 Un test Java compare 200 requêtes indexées à Dijkstra avec restrictions de virage.
 
 Les index sont propres au graphe **et aux poids**. Garder ensemble le graphe et
-ses sous-dossiers `landmarks-v1-time` / `landmarks-v1-distance`. Pour une mise à jour
+ses sous-dossiers `landmarks-v2-time` / `landmarks-v2-distance`, y compris leur marqueur `eclaire.ready`. Les anciens dossiers `landmarks-v1-*` restent lisibles en secours ; leur présence seule ne fournit pas le gain du nouvel index. Pour une mise à jour
 OSM ou du modèle de poids, créer un nouveau dossier de graphe et reconstruire les
 index. Ne pas mélanger un index ancien avec de nouvelles routes ou vitesses.
 
@@ -26,9 +26,8 @@ npm run server:build
 ECLAIRE_LANDMARKS=prepare java -Xmx8g -jar server/target/eclaire-routing.jar
 ```
 
-Attendre `Éclaire France ready`, puis arrêter ce processus. La préparation des
-deux index a pris environ six minutes sur le Mac utilisé ; leur taille totale est
-d’environ 1,2 Go. Le Pi charge le graphe préparé (environ 3,2 Go avec les index),
+Attendre `Éclaire France ready`, puis arrêter ce processus. Ne pas transférer un index en cours de préparation. Les dossiers v2 sont distincts des dossiers v1 ; le marqueur `eclaire.ready` est écrit après une préparation réussie. Le chargement automatique utilise v2 seulement lorsque ce marqueur est présent. La préparation des
+anciens index à huit landmarks prenait environ six minutes sur le Mac utilisé. Les nouveaux index occupent environ 4,8 Go à eux deux et demandent une préparation plus longue. Le Pi charge le graphe préparé (environ 6,8 Go avec v2, plus 1,2 Go si v1 est conservé),
 sans fichier OSM brut et sans recalculer ces index.
 
 `ops/eclaire.service` limite le tas Java à **512 Mo**, la recherche à deux millions
@@ -110,8 +109,9 @@ python3 ops/smoke-routing.py
 curl -f https://eclaire.nriault.fr/api/health
 ```
 
-La recette compare des coûts de référence Dijkstra pour Paris–Lyon et
-Brest–Marseille, vérifie les deux critères et couvre Ajaccio–Bastia. Lancer ce
+La recette compare les coûts optimaux de référence pour Paris–Lyon, Brest–Marseille et Téloché–Le Barcarès, vérifie les deux critères et couvre Ajaccio–Bastia. Les coûts de référence sont liés au snapshot OSM du 24 octobre 2026, aux coordonnées du script et au modèle de poids actuel. Lancer ce
 script côté loopback du serveur ; il dépasse volontairement la fréquence
 publique autorisée par Nginx. Le GPS nécessite HTTPS et une permission du
 navigateur. Le guidage expérimental reste limité à l’application visible.
+
+Après mise à jour, vérifier que `/api/health` annonce **32 landmarks pour chacun des deux critères** dans son champ `landmarks`. Le JAR seul, sans les dossiers v2 complets, conserve les anciennes performances. La trace visuelle est désormais bornée pendant le calcul à 60 000 événements ; ses deux fronts restent chronologiques et son facteur d’échantillonnage est transmis au client. Le trajet, les restrictions et la preuve ne sont pas échantillonnés.

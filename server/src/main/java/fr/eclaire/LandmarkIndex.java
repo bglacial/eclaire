@@ -8,6 +8,7 @@ import com.graphhopper.storage.*;
 
 /** Les bornes préparent un graphe moins contraint ; la recherche garde tous les virages interdits. */
 final class LandmarkIndex {
+    static final int COUNT = 32;
     static Weighting withoutTurns(Weighting weighting) {
         return new AbstractAdjustedWeighting(weighting) {
             public double calcTurnWeight(int in, int via, int out) { return 0; }
@@ -17,14 +18,19 @@ final class LandmarkIndex {
         };
     }
     static LandmarkStorage open(BaseGraph graph, EncodedValueLookup encoding, Weighting weighting, String directory, boolean prepare) {
+        return open(graph, encoding, weighting, directory, prepare, COUNT);
+    }
+    static LandmarkStorage open(BaseGraph graph, EncodedValueLookup encoding, Weighting weighting, String directory, boolean prepare, int count) {
         if (prepare) try { java.nio.file.Files.createDirectories(java.nio.file.Path.of(directory)); }
         catch (java.io.IOException error) { throw new java.io.UncheckedIOException(error); }
-        var preparation = new PrepareLandmarks(new MMapDirectory(directory), graph, encoding, new LMConfig("car", withoutTurns(weighting)), 8);
+        var preparation = new PrepareLandmarks(new MMapDirectory(directory), graph, encoding, new LMConfig("car", withoutTurns(weighting)), count);
         preparation.setMinimumNodes(Math.min(5000, Math.max(2, graph.getNodes() / 2)));
         if (!preparation.loadExisting()) {
             if (!prepare) throw new IllegalStateException("Index landmarks absent. Préparez-le sur une machine suffisamment puissante avant le déploiement.");
             preparation.doWork();
         }
+        if (prepare) try { java.nio.file.Files.writeString(java.nio.file.Path.of(directory, "eclaire.ready"), Integer.toString(count)); }
+        catch (java.io.IOException error) { throw new java.io.UncheckedIOException(error); }
         return preparation.getLandmarkStorage();
     }
 }
