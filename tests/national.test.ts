@@ -63,3 +63,17 @@ test('une erreur du service ou une réponse tronquée ne produit jamais de faux 
   fetchMock.mock.mockImplementation(async () => new Response('{"type":"result"'));
   await assert.rejects(nationalRoute(start, end, 'time', 'test', new AbortController().signal).next(), /tronqué/);
 });
+
+test('le calcul reste accessible sans AbortSignal.any ni AbortSignal.timeout dans la WebView', async context => {
+  context.mock.method(AbortSignal, 'any', () => { throw new TypeError('AbortSignal.any indisponible'); });
+  context.mock.method(AbortSignal, 'timeout', () => { throw new TypeError('AbortSignal.timeout indisponible'); });
+  context.mock.method(globalThis, 'fetch', async () => new Response('{"type":"result","result":{"found":false}}\n'));
+  const messages = [];
+  for await (const message of nationalRoute({ name: 'Paris', lat: 48.85, lon: 2.35 }, { name: 'Lyon', lat: 45.76, lon: 4.83 }, 'time', 'test', new AbortController().signal)) messages.push(message);
+  assert.equal(messages[0].type, 'result');
+});
+
+test('une limitation HTML 429 ne se présente pas comme un service France arrêté', async context => {
+  context.mock.method(globalThis, 'fetch', async () => new Response('<html>Too many requests</html>', { status: 429, headers: { 'Retry-After': '30' } }));
+  await assert.rejects(nationalRoute({ name: 'Paris', lat: 48.85, lon: 2.35 }, { name: 'Lyon', lat: 45.76, lon: 4.83 }, 'time', 'test', new AbortController().signal).next(), /30|sollicité/);
+});

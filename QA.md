@@ -35,7 +35,7 @@ Le premier essai avec les points de centre-ville a révélé un raccordement à 
 - Le nouveau rendu garde les repères au-dessus du halo, adapte les têtes au zoom et met en cache les routes visitées. La reprojection complète est différée à la fin des déplacements de carte.
 - Les essais sont effectués dans un onglet de recette séparé, avec des lieux publics. Les captures livrées ne contiennent pas les adresses saisies dans l’onglet de l’utilisateur.
 
-## Limites
+## Limites de la recette initiale
 
 - Aucun APK compilé, aucun test sur appareil Android physique, aucune mesure de batterie ou de GPU modeste.
 - Le paramétrage d’un service HTTPS pour Android n’a pas été déployé publiquement.
@@ -77,3 +77,12 @@ Le navigateur de recette ne permet pas d’accorder la permission de géolocalis
 - Le premier vhost envoyait `Referrer-Policy: same-origin`, incompatible avec les requêtes de tuiles OSM. Correction dans le build : métadonnée de référent et attribut explicite `referrerPolicy` des tuiles à `strict-origin-when-cross-origin`. Les images chargent et la carte publique affiche de vraies tuiles, sans texte de blocage. Le script d’installation utilise désormais aussi la politique compatible.
 - Navigateur public : Louvre–Panthéon calculé par le Raspberry, résultat 2,47 km / 6 min, action GPS disponible. Capture `docs/eclaire-raspberry-live.png` ; seuls des lieux publics sont saisis.
 - Lab public : six liens dans la scène solaire, catalogue à six entrées, carte Éclaire et lien externe `https://eclaire.nriault.fr/` confirmés après publication de `bglacial/lab`.
+
+## Correctif APK et guidage téléphone — 26 octobre 2026
+
+- Défaut proxy reproduit publiquement : des `OPTIONS` successifs finissaient en 429 HTML sans CORS, donnant une erreur réseau opaque dans l’APK. La configuration corrigée a été exécutée avec le vrai Nginx du Pi dans une instance loopback temporaire, sans remplacer la production : cinq prérequêtes ne consomment pas le quota, une origine inconnue ne reçoit pas d’autorisation CORS, deux vrais calculs réussissent, le suivant reçoit 429 JSON + CORS + `Retry-After: 30`. L’activation dans le vhost root exige de relancer le script avec sudo.
+- Régression WebView reproduite en retirant `AbortSignal.any` et `timeout` du harnais. Le calcul utilise désormais un contrôleur d’annulation et un délai compatible, avec nettoyage à la fin du flux. **31 tests TypeScript réussissent**.
+- **390 × 844**, téléphone et GPS simulés explicitement : départ public Place Bellecour à Lyon, précision ± 8 m, zoom sur les rues autour du départ plutôt que cadrage avec Paris. Le recentrage reste conservé après changement de taille. Un point à ± 2 000 m est refusé ; annuler l’attente ignore la réponse tardive. Le choix d’arrivée libère la carte mobile, puis restaure le panneau.
+- Ce départ et une arrivée publique choisie sur la carte produisent un vrai trajet national **1,29 km / 3 min**, malgré l’absence des deux API AbortSignal récentes. Le guidage démarre avec un seul suivi simulé ; le quitter libère ce suivi. **320 × 640**, consigne, métriques et commandes restent visibles. Captures : `docs/eclaire-gps-selection.png`, `docs/eclaire-guidage-telephone-320.png`.
+- Un navigateur ordinateur réel calcule Louvre–Panthéon **2,47 km / 6 min** et affiche « Le guidage GPS est réservé aux téléphones », sans bouton de démarrage. La détection téléphone est aussi testée contre des UA Android, iPhone, iPad, tablette Android, Windows, Mac et Linux. Une garde identique protège directement `start()`.
+- APK **1.0.1, versionCode 2**, SDK 36/min 24 : build Gradle réussi, signature v2 et alignement vérifiés, API publique HTTPS embarquée, harnais absent. Le build n’est pas une preuve d’installation ou de comportement du GPS natif. Pas de test sur matériel physique, de trajet réel ou de permissions Android système dans cette recette.

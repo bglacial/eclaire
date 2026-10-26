@@ -94,7 +94,11 @@ et restaure le vhost précédent en cas d’échec. Les autres vhosts, dont la
 restriction domicile de Hermes, sont conservés.
 
 Le proxy limite les créations de trajet à **deux par minute et par IP**, avec une
-petite marge de rafale, et renvoie 429 en cas de dépassement. Les requêtes API
+petite marge de rafale. Les prérequêtes CORS `OPTIONS` de l’APK ne consomment
+pas ce quota. Le dépassement renvoie 429 en JSON avec `Retry-After: 30` et les
+en-têtes CORS pour les seules origines autorisées, afin que l’APK affiche le délai.
+Après modification du script, le relancer avec sudo pour mettre à jour le proxy.
+Les requêtes API
 ne sont pas consignées dans l’access log de ce vhost. Les tuiles restent servies
 par OSM selon sa politique ; ce n’est pas une infrastructure de trafic massif.
 

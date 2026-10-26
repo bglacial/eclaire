@@ -2,6 +2,7 @@ import L from 'leaflet';
 import { Capacitor } from '@capacitor/core';
 import { Geolocation } from '@capacitor/geolocation';
 import { GuidanceProgress, guidanceDistance, usableFix, type GpsFix, type NavigationRoute } from './navigation';
+import { isPhoneDevice, locationError, preciseLocationPermission } from './location';
 
 const element = (id: string) => document.getElementById(id)!;
 const text = (id: string, value: string) => { if (element(id).textContent !== value) element(id).textContent = value; };
@@ -21,6 +22,7 @@ export class GpsGuidance {
   private spoken = new Set<string>();
   private session = false;
   private watching = false;
+  private starting = false;
   private lastGoodAt = 0;
   private firstCenter = true;
 
@@ -49,14 +51,15 @@ export class GpsGuidance {
 
   setRoute(route: NavigationRoute | null) {
     this.stop(false); this.line?.remove(); this.line = undefined; this.route = route ?? undefined;
-    element('navigation-start').hidden = !route;
-    text('navigation-availability', route ? 'GPS utilisé pendant le guidage, avec votre autorisation.' : 'Le guidage demande les manœuvres du service France à jour.');
+    element('navigation-start').hidden = !route || !isPhoneDevice();
+    text('navigation-availability', !isPhoneDevice() ? 'Le guidage GPS est réservé aux téléphones.' : route ? 'GPS utilisé pendant le guidage, avec votre autorisation.' : 'Le guidage demande les manœuvres du service France à jour.');
   }
 
   async start() {
-    if (!this.route || this.watching || document.hidden) return;
+    if (!isPhoneDevice()) { text('navigation-availability', 'Le guidage GPS est réservé aux téléphones.'); return; }
+    if (!this.route || this.watching || this.starting || document.hidden) return;
     const generation = ++this.generation;
-    this.session = true; this.watching = true; this.follow = true; this.firstCenter = true;
+    this.session = true; this.starting = true; this.follow = true; this.firstCenter = true;
     this.progress ??= new GuidanceProgress(this.route);
     this.onEnter();
     if (!this.line) this.line = L.polyline(this.route.points.map(p => [p.lat, p.lon]), { color: '#a2efdb', weight: 6, opacity: 0.95, interactive: false }).addTo(this.map);
@@ -65,32 +68,31 @@ export class GpsGuidance {
     text('navigation-instruction', 'Recherche de votre position…'); text('navigation-turn-distance', 'GPS');
     text('navigation-remaining', '—'); text('navigation-time', '—');
     this.status('Autorisez la localisation pour démarrer.'); this.followLabel();
-    this.lastGoodAt = Date.now();
-    this.timer = window.setInterval(() => {
-      if (Date.now() - this.lastGoodAt > 15_000) this.uncertain('Signal GPS perdu. Les indications sont suspendues.');
-      (element('navigation-recalculate') as HTMLButtonElement).disabled = !this.fix || !usableFix(this.fix);
-    }, 1000);
     try {
       if (Capacitor.isNativePlatform()) {
-        let permissions = await Geolocation.checkPermissions();
-        if (permissions.location !== 'granted') permissions = await Geolocation.requestPermissions({ permissions: ['location'] });
-        if (permissions.location !== 'granted') throw { code: 1 };
+        await preciseLocationPermission(Geolocation);
       }
       if (generation !== this.generation) return;
+      if (document.hidden) { this.pause('Guidage en pause. Reprenez le GPS avec l’application visible.'); return; }
+      this.starting = false; this.watching = true; this.lastGoodAt = Date.now();
+      this.timer = window.setInterval(() => {
+        if (Date.now() - this.lastGoodAt > 15_000) this.uncertain('Signal GPS perdu. Les indications sont suspendues.');
+        (element('navigation-recalculate') as HTMLButtonElement).disabled = !this.fix || !usableFix(this.fix);
+      }, 1000);
       const id = await Geolocation.watchPosition({ enableHighAccuracy: true, maximumAge: 0, timeout: 15_000, interval: 2000, minimumUpdateInterval: 1000 }, (position, error) => {
         if (generation !== this.generation) return;
         if (error) {
           const code = (error as { code?: number | string }).code;
-          if (code === 1 || code === 'OS-PLUG-GLOC-0003') this.pause('Localisation refusée. Autorisez-la dans les réglages puis reprenez le GPS.');
-          else this.uncertain('Position indisponible. Attendez le retour du signal GPS.');
+          if (code === 1 || code === 'OS-PLUG-GLOC-0003' || code === 'OS-PLUG-GLOC-0007') this.pause(locationError(error));
+          else this.uncertain(locationError(error));
           return;
         }
         if (!position) return;
         this.receive({ lat: position.coords.latitude, lon: position.coords.longitude, accuracy: position.coords.accuracy, timestamp: position.timestamp, speed: position.coords.speed });
       });
       if (generation !== this.generation) await Geolocation.clearWatch({ id }); else this.watch = id;
-    } catch {
-      if (generation === this.generation) this.pause('GPS indisponible. Vérifiez l’autorisation et utilisez HTTPS ou localhost.');
+    } catch (error) {
+      if (generation === this.generation) this.pause(locationError(error));
     }
   }
 
@@ -102,7 +104,7 @@ export class GpsGuidance {
   }
 
   private release() {
-    ++this.generation; this.watching = false; clearInterval(this.timer);
+    ++this.generation; this.watching = false; this.starting = false; clearInterval(this.timer);
     if (this.watch !== undefined) { void Geolocation.clearWatch({ id: this.watch }).catch(() => undefined); this.watch = undefined; }
     window.speechSynthesis?.cancel();
   }

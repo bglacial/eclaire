@@ -158,7 +158,7 @@ input[type=search]::-webkit-search-cancel-button { display: none; }
 .park-label { color: #789688; font-size: 9px; }
 .street-label { color: #718082; font-size: 8px; }
 .point-icon { background: none; border: none; }
-.point-marker { position: relative; }
+.point-marker { position: relative; width: 44px; height: 44px; display: grid; place-items: center; }
 .pin-core { display: grid; place-items: center; width: 30px; height: 30px; background: #183e44; border: 2px solid var(--cyan); border-radius: 50%; color: #c6fbff; font-size: 11px; font-weight: 700; box-shadow: 0 0 0 6px #66e6ec12, 0 0 20px #66e6ec42; }
 .point-marker.end .pin-core { background: #4b3624; border-color: var(--amber); color: #ffe3bf; box-shadow: 0 0 0 6px #ffbc7012, 0 0 20px #ffbc7042; }
 .pin-label { position: absolute; white-space: nowrap; background: #142126; border: 1px solid #466067; padding: 7px 11px; top: -38px; left: 50%; transform: translateX(-50%); color: #e2f2ef; border-radius: 6px; font-size: 11px; box-shadow: 0 3px 12px #10181d44; }
@@ -252,7 +252,8 @@ input[type=search]::-webkit-search-cancel-button { display: none; }
   .field-point { width: 20px; height: 20px; }
   .field-connector { top: 44px; height: 26px; left: 20px; }
   .swap-button { top: 43px; right: 46px; width: 31px; height: 31px; }
-  .location-button { height: 32px; font-size: 10px; }
+  .location-button { height: 44px; font-size: 12px; }
+  .is-picking .planner { display: none; }
   .criteria { margin: 5px 0 13px; gap: 4px; }
   .criteria legend { display: none; }
   .criteria label>span { height: 39px; font-size: 11px; }

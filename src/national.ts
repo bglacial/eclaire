@@ -1,15 +1,19 @@
 import type { Criterion, ExplorationEvent, NavigationInstruction, Place, RoadGeometry, SearchResult } from './types';
+import { requestDeadline } from './request-deadline';
 
 export const routingApi = import.meta.env?.VITE_ROUTING_API_URL?.replace(/\/$/, '') || '/api';
 export const franceBounds = [41.3, -5.3, 51.2, 9.7] as const;
 export const isInFrance = (p: Pick<Place, 'lat' | 'lon'>) => Number.isFinite(p.lat) && Number.isFinite(p.lon) && p.lat >= franceBounds[0] && p.lat <= franceBounds[2] && p.lon >= franceBounds[1] && p.lon <= franceBounds[3];
 
 export async function checkNationalService() {
-  const response = await fetch(`${routingApi}/health`, { signal: AbortSignal.timeout(3000) });
-  if (!response.ok) throw new Error('Service France indisponible.');
-  const health = await response.json();
-  if (health.status !== 'ready' || !Array.isArray(health.bounds) || typeof health.edges !== 'number') throw new Error('Service France non prêt.');
-  return health as { status: string; engine?: string; edges: number; nodes: number; dataTimestamp: string; bounds: number[] };
+  const deadline = requestDeadline(3000);
+  try {
+    const response = await fetch(`${routingApi}/health`, { signal: deadline.signal });
+    if (!response.ok) throw new Error('Service France indisponible.');
+    const health = await response.json();
+    if (health.status !== 'ready' || !Array.isArray(health.bounds) || typeof health.edges !== 'number') throw new Error('Service France non prêt.');
+    return health as { status: string; engine?: string; edges: number; nodes: number; dataTimestamp: string; bounds: number[] };
+  } finally { deadline.dispose(); }
 }
 
 export async function searchFrance(query: string, signal: AbortSignal): Promise<Place[]> {
@@ -79,16 +83,18 @@ export function decodeNationalMessage(message: WireMessage, roads: RoadGeometry,
 }
 
 export async function* nationalRoute(start: Place, end: Place, criterion: Criterion, requestId: string, signal: AbortSignal) {
-  const response = await fetch(`${routingApi}/route`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ start: { lat: start.lat, lon: start.lon }, end: { lat: end.lat, lon: end.lon }, criterion, requestId }), signal: AbortSignal.any([signal, AbortSignal.timeout(180_000)]) });
-  if (!response.ok) {
-    let message = 'Le service France ne répond pas. Vérifiez qu’il est démarré.';
-    try { const body = await response.json(); if (typeof body.error === 'string') message = body.error; } catch { /* A proxy can return HTML when the service is down. */ }
-    throw new Error(message);
-  }
-  const reader = response.body?.getReader();
-  if (!reader) throw new Error('Flux routier indisponible.');
-  const decoder = new TextDecoder(); let pending = '';
+  const deadline = requestDeadline(180_000, signal);
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
   try {
+    const response = await fetch(`${routingApi}/route`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ start: { lat: start.lat, lon: start.lon }, end: { lat: end.lat, lon: end.lon }, criterion, requestId }), signal: deadline.signal });
+    if (!response.ok) {
+      let message = response.status === 429 ? 'Le service est sollicité. Attendez 30 secondes puis réessayez.' : 'Le serveur routier est temporairement indisponible. Réessayez dans un instant.';
+      try { const body = await response.json(); if (typeof body.error === 'string') message = body.error; } catch { /* A proxy can return HTML when the service is down. */ }
+      throw new Error(message);
+    }
+    reader = response.body?.getReader();
+    if (!reader) throw new Error('Flux routier indisponible.');
+    const decoder = new TextDecoder(); let pending = '';
     while (true) {
       const { value, done } = await reader.read();
       pending += decoder.decode(value, { stream: !done });
@@ -100,9 +106,15 @@ export async function* nationalRoute(start: Place, end: Place, criterion: Criter
       }
       if (done) { if (pending.trim()) throw new Error('Flux routier tronqué.'); break; }
     }
-  } finally { reader.releaseLock(); }
+  } catch (error) {
+    if (deadline.timedOut) throw new Error('Le calcul a mis trop de temps à répondre. Réessayez ou rapprochez les points.');
+    throw error;
+  } finally { reader?.releaseLock(); deadline.dispose(); }
 }
 
-export function cancelNationalRoute(requestId: string) {
-  return fetch(`${routingApi}/route/${encodeURIComponent(requestId)}`, { method: 'DELETE', signal: AbortSignal.timeout(3000) }).catch(() => undefined);
+export async function cancelNationalRoute(requestId: string) {
+  const deadline = requestDeadline(3000);
+  try { return await fetch(`${routingApi}/route/${encodeURIComponent(requestId)}`, { method: 'DELETE', signal: deadline.signal }); }
+  catch { return undefined; }
+  finally { deadline.dispose(); }
 }

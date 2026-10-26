@@ -25,7 +25,7 @@ npm run dev
 
 Vite utilise habituellement **http://localhost:5173** et transmet `/api` au service sur le port 8787. Si Vite était déjà lancé avant l’ajout de `vite.config.ts`, le redémarrer pour activer le proxy. Ne pas ouvrir `index.html` directement en `file://`.
 
-Le bouton **FR** montre toute la France métropolitaine et la Corse. Le départ et l’arrivée se choisissent par recherche ou en touchant la carte. Le parcours initial reste Louvre–Panthéon pour essayer immédiatement l’animation. Saisir par exemple **Paris** et **Lyon** pour un trajet national.
+Le bouton **FR** montre toute la France métropolitaine et la Corse. Le départ et l’arrivée se choisissent par recherche ou en touchant la carte. Les repères A et B se déplacent au doigt. **Utiliser ma position** demande un point récent et précis, montre son incertitude et recentre sur les rues du départ ; une seconde pression annule l’attente. Sur mobile, choisir un point masque temporairement le panneau pour libérer la carte. Le parcours initial reste Louvre–Panthéon pour essayer immédiatement l’animation.
 
 ### Télécharger les données dans un nouveau checkout
 
@@ -82,11 +82,11 @@ cd android
 
 Sortie : `android/app/build/outputs/apk/debug/app-debug.apk`. Les permissions de localisation sont déclarées et demandées à l’usage. Le consentement du navigateur ou du système reste nécessaire.
 
-La version nationale exige le service, une page HTTPS ou localhost, et un accès réseau pour les tuiles et le géocodage. Si le service est indisponible au démarrage, le calcul embarqué fonctionne uniquement pour des points raccordables dans l’extrait Paris. Il ne simule pas un trajet national. Les sources Android sont synchronisées, mais aucun APK ni téléphone Android physique n’ont été validés ici.
+La version nationale exige le service, une page HTTPS ou localhost, et un accès réseau pour les tuiles et le géocodage. Si le service est indisponible au démarrage, le calcul embarqué fonctionne uniquement pour des points raccordables dans l’extrait Paris. Il ne simule pas un trajet national. L’APK de test **1.0.1 / code 2** a été compilé, signé et contrôlé ; aucun téléphone physique n’a été validé ici. Pour ce déploiement, synchroniser avec `VITE_ROUTING_API_URL=https://eclaire.nriault.fr/api npm run android:sync`, puis reconstruire et réinstaller l’APK : la publication web ne modifie pas un APK déjà installé.
 
 ## Guidage GPS
 
-Calculer un trajet national, puis toucher **Démarrer le guidage GPS** et autoriser la localisation. Le service fournit les manœuvres GraphHopper en français sur le parcours effectivement calculé : virages, bifurcations et ronds-points selon les données importées. Le guidage affiche la prochaine manœuvre, sa distance, la distance restante et une durée estimée **sans trafic**. Il ne donne pas d’assistance de choix de voie de circulation.
+Le guidage est réservé aux **téléphones** : bouton masqué et démarrage bloqué sur ordinateur et tablette, même dans une fenêtre étroite. La détection utilise le type d’appareil annoncé par le navigateur, pas la largeur de l’écran. Sur téléphone, calculer un trajet national, puis toucher **Démarrer le guidage GPS** et autoriser la localisation précise. Le service fournit les manœuvres GraphHopper en français sur le parcours effectivement calculé : virages, bifurcations et ronds-points selon les données importées. Le guidage affiche la prochaine manœuvre, sa distance, la distance restante et une durée estimée **sans trafic**. Il ne donne pas d’assistance de choix de voie de circulation.
 
 La position et son cercle de précision apparaissent sur la carte. Le déplacement manuel de la carte suspend le recentrage ; **Suivre ma position** le réactive. **Activer la voix** utilise la synthèse vocale du navigateur, si disponible ; sa disponibilité et le rendu audio restent à vérifier sur chaque WebView Android. **Quitter le guidage** libère le suivi GPS. L’arrivée au **point routier raccordé** est confirmée par au moins deux positions précises espacées de trois secondes, puis le GPS s’arrête.
 
@@ -135,7 +135,7 @@ npm run build
 npm run android:sync
 ```
 
-Résultats de cette évolution : **25 tests TypeScript et 7 tests Java réussis**. Les tests TypeScript comprennent l’oracle Bellman-Ford sur 400 graphes pour deux critères, les polylignes et phases d’animation, le suivi GPS, la validation des manœuvres et du protocole, ainsi que les frontières UTF-8 des lots. Les tests Java vérifient les deux critères, le sens de la trace inverse, les sens uniques, l’absence de chemin, les restrictions de virage, le même point, la première rencontre, l’interruption et les consignes françaises sur un vrai chemin du moteur.
+Résultats : **31 tests TypeScript réussis**, dont la détection téléphone, les permissions précises, les coordonnées GPS, les annulations et la compatibilité sans `AbortSignal.any/timeout`. Ils comprennent aussi l’oracle Bellman-Ford sur 400 graphes pour deux critères, les polylignes, le suivi GPS, les manœuvres et le protocole. Les **7 tests Java** ont été validés lors de l’évolution du moteur, inchangé dans le correctif Android : critères, recherche inverse, sens uniques, absence de chemin, restrictions, première rencontre, interruption et consignes françaises.
 
 Mesures réelles du service local, sans trafic :
 
@@ -173,5 +173,5 @@ Un seul calcul national est accepté à la fois pour maîtriser la mémoire ; le
 - Les réseaux d’accès privés, de desserte et les petits réseaux isolés peuvent empêcher un trajet pourtant possible pour un riverain autorisé. Les liaisons maritimes dépendent des données OSM et du profil automobile.
 - Une limite de ressources reste possible pour les grandes recherches non accélérées. La trace affichée est allégée, explicitement ; elle ne représente pas tous les millions d’états.
 - Le fond national et le géocodage demandent Internet. La recherche d’adresses n’est pas garantie exhaustive. La géolocalisation demande HTTPS ou localhost, une permission et un signal disponible.
-- La synchronisation Android est vérifiée, pas l’APK ni la fluidité sur un téléphone modeste. L’image Docker n’a pas été construite ici.
+- L’APK de développement est construit et sa signature vérifiée ; installation, permissions système et fluidité restent à confirmer sur un téléphone physique. L’image Docker n’a pas été construite ici.
 - Le guidage GPS est validé avec des positions simulées clairement signalées, pas lors d’un trajet sur route réelle. La voix, l’autonomie, la reprise système et les permissions Android restent à vérifier sur téléphone.

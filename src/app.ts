@@ -2,11 +2,14 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import './style.css';
 import { Geolocation } from '@capacitor/geolocation';
+import { Capacitor } from '@capacitor/core';
 import { buildRoadGraph, nearestNode } from './graph';
 import { createMap, pointMarker } from './map';
 import { ExplorationRenderer } from './animation';
 import { GpsGuidance } from './guidance';
 import { navigationRoute } from './navigation';
+import { locationError, preciseLocationPermission, selectionPosition } from './location';
+import { requestDeadline } from './request-deadline';
 import { cancelNationalRoute, checkNationalService, decodeNationalMessage, franceBounds, isInFrance, nationalRoute, searchFrance } from './national';
 import type { Criterion, Dataset, ExplorationEvent, Place, RoadGeometry, RoadGraph, SearchResult, WorkerResponse } from './types';
 
@@ -103,6 +106,9 @@ let routeAbort: AbortController | undefined;
 let routeId: string | undefined;
 let traceStride = 1;
 let nationalPlayback = false;
+let locationRequest = 0;
+let locating = false;
+let locationCircle: L.Circle | undefined;
 const defaults: Record<Endpoint, Place> = {
   start: { name: 'Musée du Louvre', lat: 48.8608, lon: 2.3376 },
   end: { name: 'Panthéon', lat: 48.8462, lon: 2.3464 },
@@ -120,6 +126,7 @@ function updateLaunch() {
 }
 
 function stop(clear = true) {
+  cancelLocationRequest();
   guidance?.setRoute(null); resumeGuidance = false;
   routeAbort?.abort(); routeAbort = undefined;
   if (routeId) { void cancelNationalRoute(routeId); routeId = undefined; }
@@ -139,15 +146,40 @@ function selectPoint(side: Endpoint, place: Place, announce = true) {
   }
   const snap = nearestNode(roads, place);
   stop();
-  const node = snap ? roads.nodes[snap.index] : place;
+  const node = nationalReady ? place : snap ? roads.nodes[snap.index] : place;
   selections[side] = { ...place, node: snap?.index ?? -1, snapDistance: snap?.distance ?? 0 };
   inputs[side].value = place.name;
-  markers[side]?.remove();
-  markers[side] = pointMarker(map, node.lat, node.lon, side, place.name);
+  if (side === 'start') { locationCircle?.remove(); locationCircle = undefined; }
+  placeMarker(side, node.lat, node.lon, place.name);
   closeSuggestions(side);
   updateLaunch();
   if (announce) notice(snap ? `Point ${side === 'start' ? 'de départ' : 'd’arrivée'} raccordé à ${roads.edges[(roads.outgoing[snap.index][0] ?? roads.incoming[snap.index][0])].name}, à ${Math.round(snap.distance)} m.` : 'Point choisi. Le service France le raccordera au réseau automobile.');
   return true;
+}
+
+function placeMarker(side: Endpoint, lat: number, lon: number, name: string) {
+  markers[side]?.remove();
+  markers[side] = pointMarker(map, lat, lon, side, name, point => {
+    selectPoint(side, { name: side === 'start' ? 'Départ ajusté sur la carte' : 'Arrivée ajustée sur la carte', lat: point.lat, lon: point.lng }, false);
+    notice('Point ajusté. Lancez une nouvelle exploration pour calculer le trajet.');
+  });
+}
+
+function focusPoint(point: { lat: number; lon: number }, zoom = map.getZoom()) {
+  map.invalidateSize({ pan: false, animate: false });
+  const bounds = $('map').getBoundingClientRect();
+  const panel = document.querySelector('.planner')!.getBoundingClientRect();
+  const mobile = matchMedia('(max-width: 720px)').matches;
+  const x = mobile ? bounds.width / 2 : (panel.right - bounds.left + bounds.width) / 2;
+  const y = mobile ? Math.max(90, (panel.top - bounds.top) / 2) : bounds.height / 2;
+  const center = map.project([point.lat, point.lon], zoom).add([bounds.width / 2 - x, bounds.height / 2 - y]);
+  map.setView(map.unproject(center, zoom), zoom, { animate: false });
+}
+
+function cancelLocationRequest() {
+  locationRequest++; locating = false;
+  $('geolocate').setAttribute('aria-busy', 'false');
+  $('geolocate').innerHTML = `${icon('locate')} Utiliser ma position`;
 }
 
 function fitPoints() {
@@ -266,7 +298,7 @@ async function exploreNational(activeRun: number, start: Place, end: Place, pref
         nationalReady = true;
         $('coverage').textContent = 'France métropolitaine · Corse';
         $('playback-title').textContent = renderer.reducedMotion ? 'Exploration nationale en mode réduit' : 'Deux fronts à travers la France…';
-        (['start', 'end'] as const).forEach((side, i) => { const point = message.snapped[i]; markers[side]?.remove(); markers[side] = pointMarker(map, point.lat, point.lon, side, selections[side]!.name); });
+        (['start', 'end'] as const).forEach((side, i) => { const point = message.snapped[i]; placeMarker(side, point.lat, point.lon, selections[side]!.name); });
         fitPoints(); continue;
       }
       const decoded = decodeNationalMessage(message, geometry, index);
@@ -276,14 +308,16 @@ async function exploreNational(activeRun: number, start: Place, end: Place, pref
     if (!receivedResult && activeRun === run) throw new Error('Flux routier interrompu avant le résultat.');
   } catch (error) {
     if (activeRun !== run || controller.signal.aborted) return;
-    stop(); notice(error instanceof TypeError ? 'Le service France ne répond pas. Vérifiez son lancement.' : error instanceof DOMException && error.name === 'TimeoutError' ? 'Le service France a mis trop de temps à répondre. Réessayez.' : error instanceof Error ? error.message : 'Le service France ne répond pas.', 'error');
+    stop(); notice(error instanceof TypeError ? 'Connexion au service France impossible. Vérifiez Internet puis réessayez.' : error instanceof DOMException && error.name === 'TimeoutError' ? 'Le service France a mis trop de temps à répondre. Réessayez.' : error instanceof Error ? error.message : 'Connexion au service France impossible.', 'error');
   } finally { if (routeId === requestId) { routeId = undefined; routeAbort = undefined; } }
 }
 
 function setPicking(side: Endpoint | null) {
+  if (side) cancelLocationRequest();
   picking = side;
   $('pick-hint').hidden = !side;
   $('map').classList.toggle('picking', !!side);
+  $('app').classList.toggle('is-picking', !!side);
   document.querySelectorAll<HTMLButtonElement>('.pick').forEach(b => b.classList.toggle('selected', b.dataset.pick === side));
   if (side) $('pick-hint').querySelector('span')!.textContent = `Touchez une route pour placer ${side === 'start' ? 'le départ A' : 'l’arrivée B'}`;
 }
@@ -384,9 +418,12 @@ function buildSearchIndex() {
 async function initialize() {
   try {
     $('retry').hidden = true;
-    const response = await fetch('./data/paris.json', { signal: AbortSignal.timeout(25_000) });
-    if (!response.ok) throw new Error('Network');
-    data = await response.json();
+    const deadline = requestDeadline(25_000);
+    try {
+      const response = await fetch('./data/paris.json', { signal: deadline.signal });
+      if (!response.ok) throw new Error('Network');
+      data = await response.json();
+    } finally { deadline.dispose(); }
     if (!Array.isArray(data.nodes) || !Array.isArray(data.ways) || !data.metadata?.bounds || !data.basemap?.features) throw new Error('Invalid data');
     roads = buildRoadGraph(data);
     ({ map } = createMap(data, roads));
@@ -413,9 +450,13 @@ async function initialize() {
       const side = picking;
       const snap = nearestNode(roads, { lat: e.latlng.lat, lon: e.latlng.lng });
       const name = snap ? roads.edges[(roads.outgoing[snap.index][0] ?? roads.incoming[snap.index][0])].name : `Point ${e.latlng.lat.toFixed(4)}, ${e.latlng.lng.toFixed(4)}`;
-      if (selectPoint(side, { name, lat: e.latlng.lat, lon: e.latlng.lng })) setPicking(null);
+      if (selectPoint(side, { name, lat: e.latlng.lat, lon: e.latlng.lng })) { setPicking(null); requestAnimationFrame(() => focusPoint({ lat: e.latlng.lat, lon: e.latlng.lng })); }
     });
-    map.on('resize', fitPoints);
+    map.on('resize', () => {
+      if (guidance?.active || picking) return;
+      if (locationCircle && !playing) { const point = locationCircle.getLatLng(); focusPoint({ lat: point.lat, lon: point.lng }); }
+      else fitPoints();
+    });
     $('loading').hidden = true;
     requestAnimationFrame(() => { map.invalidateSize(); fitPoints(); });
   } catch {
@@ -454,15 +495,26 @@ $('algorithm-info').addEventListener('click', () => showAbout($('about').hidden)
 $('close-about').addEventListener('click', () => showAbout(false));
 $('geolocate').addEventListener('click', async () => {
   if (!roads) return;
-  const button = $<HTMLButtonElement>('geolocate');
-  button.disabled = true; notice('Recherche de votre position…');
+  if (locating) { cancelLocationRequest(); notice('Recherche de position annulée.'); return; }
+  stop(); setPicking(null);
+  const request = ++locationRequest; locating = true;
+  $('geolocate').setAttribute('aria-busy', 'true');
+  $('geolocate').innerHTML = `${icon('close')} Annuler la localisation`;
+  notice('Recherche d’un point GPS précis… Cela peut prendre jusqu’à 30 secondes.');
   try {
-    const position = await Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 12_000, maximumAge: 60_000 });
-    if (selectPoint('start', { name: 'Ma position', lat: position.coords.latitude, lon: position.coords.longitude })) fitPoints();
+    if (Capacitor.isNativePlatform()) await preciseLocationPermission(Geolocation);
+    if (request !== locationRequest) return;
+    const position = await Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 30_000, maximumAge: 0 });
+    if (request !== locationRequest) return;
+    const point = selectionPosition(position);
+    if (selectPoint('start', { name: 'Ma position GPS', lat: point.lat, lon: point.lon }, false)) {
+      locationCircle = L.circle([point.lat, point.lon], { radius: point.accuracy, color: '#66e6ec', weight: 1, fillOpacity: 0.08, interactive: false }).addTo(map);
+      notice(`Départ GPS placé à ± ${Math.round(point.accuracy)} m. Cherchez une arrivée ou choisissez-la sur la carte. Les repères A et B se déplacent au doigt.`);
+      requestAnimationFrame(() => focusPoint(point, 16));
+    }
   } catch (error) {
-    const code = (error as { code?: string | number }).code;
-    notice(code === 1 || code === 'OS-PLUG-GLOC-0003' ? 'Localisation refusée. Autorisez-la dans les réglages ou choisissez le départ sur la carte.' : 'Position indisponible. Choisissez le départ sur la carte ou recherchez une adresse.', 'error');
-  } finally { button.disabled = false; }
+    if (request === locationRequest) notice(locationError(error), 'error');
+  } finally { if (request === locationRequest) cancelLocationRequest(); }
 });
 
 void initialize();
