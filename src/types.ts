@@ -24,6 +24,7 @@ export interface RoadEdge {
   name: string;
   length: number;
   seconds: number;
+  speedLimit?: number;
   geometry?: [number, number][];
 }
 export interface RoadGraph {

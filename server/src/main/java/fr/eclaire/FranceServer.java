@@ -147,7 +147,7 @@ public final class FranceServer {
                     for (int i = offset; i < Math.min(offset + 256, algo.keys.size()); i++) {
                         int key = algo.keys.get(i);
                         events.add(Map.of("key", key, "side", algo.sides.get(i)));
-                        if (sent.add(key)) edges.add(edge(queryGraph, key, queryTime));
+                        if (sent.add(key)) edges.add(edge(queryGraph, key, queryTime, hopper.getEncodingManager()));
                     }
                     writeLine(writer, Map.of("type", "batch", "events", events, "edges", edges));
                 }
@@ -157,7 +157,7 @@ public final class FranceServer {
                 int meetingKey = -1;
                 for (var edge : path.calcEdges()) {
                     int key = edge.getEdgeKey(); pathKeys.add(key);
-                    if (sent.add(key)) finalEdges.add(edge(queryGraph, key, queryTime));
+                    if (sent.add(key)) finalEdges.add(edge(queryGraph, key, queryTime, hopper.getEncodingManager()));
                     if (edge.getAdjNode() == algo.meetingNode()) meetingKey = key;
                 }
                 writeLine(writer, Map.of("type", "result", "edges", finalEdges, "result", Map.of("found", true, "path", pathKeys, "meeting", meetingKey,
@@ -174,12 +174,20 @@ public final class FranceServer {
         } finally { if (requestId != null) active.remove(requestId, Thread.currentThread()); Thread.interrupted(); capacity.release(); exchange.close(); }
     }
 
-    private static Map<String, Object> edge(QueryGraph graph, int key, Weighting time) {
+    static Double speedLimit(EdgeIteratorState edge, EncodedValueLookup encoding) {
+        if (!encoding.hasEncodedValue("max_speed")) return null;
+        double limit = edge.get(encoding.getDecimalEncodedValue("max_speed"));
+        return Double.isFinite(limit) && limit > 0 ? limit : null;
+    }
+    private static Map<String, Object> edge(QueryGraph graph, int key, Weighting time, EncodedValueLookup encoding) {
         var edge = graph.getEdgeIteratorStateForKey(key);
         var points = edge.fetchWayGeometry(FetchMode.ALL);
         var coordinates = new ArrayList<List<Double>>(points.size());
         for (int i = 0; i < points.size(); i++) coordinates.add(List.of(points.getLat(i), points.getLon(i)));
-        return Map.of("key", key, "geometry", coordinates, "length", edge.getDistance(), "seconds", time.calcEdgeMillis(edge, false) / 1000.0, "name", edge.getName());
+        var result = new HashMap<String, Object>(Map.of("key", key, "geometry", coordinates, "length", edge.getDistance(), "seconds", time.calcEdgeMillis(edge, false) / 1000.0, "name", edge.getName()));
+        var limit = speedLimit(edge, encoding);
+        if (limit != null) result.put("speedLimit", limit);
+        return result;
     }
     private static void writeLine(Writer writer, Object value) throws IOException { writer.write(JSON.writeValueAsString(value)); writer.write('\n'); writer.flush(); }
     private static void json(HttpExchange exchange, int status, Object value) throws IOException {

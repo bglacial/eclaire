@@ -32,7 +32,7 @@ export async function searchFrance(query: string, signal: AbortSignal): Promise<
 }
 
 export interface NationalMetadata { type: 'metadata'; visited: number; computeMs: number; traceStride: number; traceEvents: number; snapped: { lat: number; lon: number; distance: number }[] }
-interface WireEdge { key: number; geometry: [number, number][]; length: number; seconds: number; name: string }
+interface WireEdge { key: number; geometry: [number, number][]; length: number; seconds: number; name: string; speedLimit?: number }
 interface WireMessage { type: string; edges?: WireEdge[]; events?: { key: number; side: number }[]; result?: { found: boolean; path: number[]; meeting: number; length: number; seconds: number; cost: number; visited: number; computeMs: number; instructions?: NavigationInstruction[] } }
 
 const positive = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n) && n >= 0;
@@ -41,13 +41,13 @@ const indexValue = (n: unknown): n is number => positive(n) && Number.isSafeInte
 export function appendNationalEdges(roads: RoadGeometry, index: Map<number, number>, edges: WireEdge[]) {
   if (!Array.isArray(edges)) throw new Error('Trace routière invalide.');
   for (const edge of edges) {
-    if (!indexValue(edge.key) || !positive(edge.length) || !positive(edge.seconds) || !Array.isArray(edge.geometry) || edge.geometry.length < 2 || edge.geometry.length > 50_000 || typeof edge.name !== 'string') throw new Error('Segment routier invalide.');
+    if (!indexValue(edge.key) || !positive(edge.length) || !positive(edge.seconds) || (edge.speedLimit !== undefined && (!positive(edge.speedLimit) || edge.speedLimit === 0 || edge.speedLimit > 250)) || !Array.isArray(edge.geometry) || edge.geometry.length < 2 || edge.geometry.length > 50_000 || typeof edge.name !== 'string') throw new Error('Segment routier invalide.');
     if (index.has(edge.key)) continue;
     if (!edge.geometry.every(p => Array.isArray(p) && p.length === 2 && Number.isFinite(p[0]) && Number.isFinite(p[1]) && Math.abs(p[0]) <= 90 && Math.abs(p[1]) <= 180)) throw new Error('Géométrie routière invalide.');
     const from = roads.nodes.length, a = edge.geometry[0], b = edge.geometry.at(-1)!;
     roads.nodes.push({ id: from, lat: a[0], lon: a[1] }, { id: from + 1, lat: b[0], lon: b[1] });
     const id = roads.edges.length;
-    roads.edges.push({ id, from, to: from + 1, way: Math.floor(edge.key / 2), geometry: edge.geometry, length: edge.length, seconds: edge.seconds, name: edge.name });
+    roads.edges.push({ id, from, to: from + 1, way: Math.floor(edge.key / 2), geometry: edge.geometry, length: edge.length, seconds: edge.seconds, name: edge.name, speedLimit: edge.speedLimit });
     index.set(edge.key, id);
   }
 }

@@ -20,9 +20,16 @@ test('les données invalides et les chemins incomplets sont refusés', () => {
   const roads: RoadGeometry = { nodes: [], edges: [] }, index = new Map<number, number>();
   assert.throws(() => appendNationalEdges(roads, index, [{ ...road, geometry: [[NaN, 2], [49, 3]] }]));
   assert.throws(() => appendNationalEdges(roads, index, [{ ...road, seconds: -1 }]));
+  assert.throws(() => appendNationalEdges(roads, index, [{ ...road, speedLimit: -1 }]));
   assert.throws(() => decodeNationalMessage({ type: 'batch', events: [{ key: 99, side: 0 }] }, roads, index));
   assert.throws(() => decodeNationalMessage({ type: 'result', result: { found: true, path: [99], meeting: 99, length: 1, seconds: 1, cost: 1, visited: 1, computeMs: 1 } }, roads, index));
   assert.equal(decodeNationalMessage({ type: 'result', result: { found: false } } as Parameters<typeof decodeNationalMessage>[0], roads, index).result, null);
+});
+
+test('la limitation routière optionnelle traverse le protocole sans être inventée', () => {
+  const roads: RoadGeometry = { nodes: [], edges: [] }, index = new Map<number, number>();
+  appendNationalEdges(roads, index, [{ ...road, speedLimit: 50 }, { ...road, key: 11 }]);
+  assert.equal(roads.edges[0].speedLimit, 50); assert.equal(roads.edges[1].speedLimit, undefined);
 });
 
 test('la couverture accepte Brest, Lyon et la Corse, sans accepter de coordonnées invalides', () => {

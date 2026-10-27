@@ -6,6 +6,7 @@ Object.defineProperty(AbortSignal, 'timeout', { configurable: true, value: undef
 const watches = new Map<number, { success: PositionCallback; error?: PositionErrorCallback | null }>();
 let identifier = 0;
 let gps = { latitude: 48.8573375, longitude: 2.3467217, accuracy: 5 };
+let speed = 0, heading: number | null = null;
 let denied = false;
 let serviceMode = 'réel';
 const realFetch = window.fetch.bind(window);
@@ -19,7 +20,7 @@ window.fetch = async (input, init) => {
 };
 let delayPosition = false;
 const pendingPositions: (() => void)[] = [];
-const position = () => ({ timestamp: Date.now(), coords: { ...gps, altitude: null, altitudeAccuracy: null, speed: 0, heading: null } }) as GeolocationPosition;
+const position = () => ({ timestamp: Date.now(), coords: { ...gps, altitude: null, altitudeAccuracy: null, speed, heading } }) as GeolocationPosition;
 const permissionError = { code: 1, message: 'Refus simulé', PERMISSION_DENIED: 1, POSITION_UNAVAILABLE: 2, TIMEOUT: 3 } as GeolocationPositionError;
 function emit() { for (const callback of watches.values()) denied ? callback.error?.(permissionError) : callback.success(position()); }
 Object.defineProperty(navigator, 'geolocation', { configurable: true, value: {
@@ -46,6 +47,8 @@ function button(label: string, action: () => void) {
   control.onclick = action; controls.append(control);
 }
 button('Avant virage', () => { gps = { latitude: 48.8573375, longitude: 2.3467217, accuracy: 5 }; denied = false; emit(); });
+button('GPS 50 km/h vers est', () => { speed = 50 / 3.6; heading = 90; emit(); });
+button('GPS arrêté', () => { speed = 0; heading = null; emit(); });
 button('Au virage', () => { gps = { latitude: 48.8567689, longitude: 2.3487701, accuracy: 5 }; emit(); });
 button('Après virage', () => { gps = { latitude: 48.8557133, longitude: 2.3483752, accuracy: 5 }; emit(); });
 button('GPS imprécis', () => { gps.accuracy = 150; emit(); });

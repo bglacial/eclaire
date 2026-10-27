@@ -63,7 +63,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <section id="playback" class="playback" aria-label="État de l’exploration" hidden><span class="activity-dot" aria-hidden="true"></span><div><strong id="playback-title" role="status">Calcul du trajet…</strong><span id="playback-count">Préparation du calcul…</span></div><span id="playback-percent"></span><div class="playback-track" aria-hidden="true"><span id="playback-progress"></span></div></section>
     <section id="navigation" class="navigation" aria-label="Guidage GPS" hidden>
       <div id="navigation-next"><strong id="navigation-turn-distance">GPS</strong><h2 id="navigation-instruction" role="status" aria-live="polite" aria-atomic="true">Recherche de votre position…</h2></div>
-      <div class="navigation-metrics"><div><strong id="navigation-remaining">—</strong><span>restants</span></div><div><strong id="navigation-time">—</strong><span>durée estimée</span></div></div>
+      <div class="navigation-metrics"><div><strong id="navigation-remaining">—</strong><span>restants</span></div><div><strong id="navigation-time">—</strong><span>durée estimée</span></div><div><strong id="navigation-speed">—</strong><span>km/h · vitesse GPS</span><span id="navigation-limit">Limite : —</span></div></div>
       <p id="navigation-status"></p>
       <button id="navigation-recalculate" class="primary" hidden>Recalculer depuis ma position</button><button id="navigation-resume" class="primary" hidden>Reprendre le GPS</button>
       <div class="navigation-actions"><button id="navigation-follow" aria-pressed="true">Position suivie</button><button id="navigation-voice" aria-pressed="false">Activer la voix</button><button id="navigation-stop">Quitter le guidage</button></div>

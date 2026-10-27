@@ -1,10 +1,36 @@
 import { metres } from './graph';
 import type { NavigationInstruction, RoadGeometry, SearchResult } from './types';
 
-export interface GpsFix { lat: number; lon: number; accuracy: number; timestamp: number; speed?: number | null }
-interface RoutePoint { lat: number; lon: number; at: number; seconds: number }
+export interface GpsFix { lat: number; lon: number; accuracy: number; timestamp: number; speed?: number | null; heading?: number | null }
+interface RoutePoint { lat: number; lon: number; at: number; seconds: number; speedLimit?: number }
 export interface NavigationRoute { points: RoutePoint[]; instructions: NavigationInstruction[]; length: number; seconds: number }
 export interface RouteMatch { at: number; seconds: number; distance: number }
+
+export function routePosition(route: NavigationRoute, at: number) {
+  let low = 1, high = route.points.length - 1;
+  while (low < high) { const mid = (low + high) >>> 1; if (route.points[mid].at < at) low = mid + 1; else high = mid; }
+  const index = low;
+  const b = route.points[index] ?? route.points.at(-1)!, a = route.points[index - 1];
+  const fraction = b.at > a.at ? Math.max(0, Math.min(1, (at - a.at) / (b.at - a.at))) : 0;
+  const lat = a.lat + (b.lat - a.lat) * fraction, lon = a.lon + (b.lon - a.lon) * fraction;
+  const heading = (Math.atan2((b.lon - a.lon) * Math.cos(lat * Math.PI / 180), b.lat - a.lat) * 180 / Math.PI + 360) % 360;
+  return { lat, lon, heading, speedLimit: b.speedLimit };
+}
+
+export class RecentSpeed {
+  private samples: { timestamp: number; speed: number }[] = [];
+  add(fix: GpsFix) {
+    this.samples = this.samples.filter(sample => sample.timestamp >= fix.timestamp - 20_000);
+    if (fix.speed != null && Number.isFinite(fix.speed) && fix.speed >= 0 && fix.speed <= 100) this.samples.push({ timestamp: fix.timestamp, speed: fix.speed });
+  }
+  mean() { return this.samples.length ? this.samples.reduce((sum, sample) => sum + sample.speed, 0) / this.samples.length : 0; }
+}
+
+export function predictedRouteAt(length: number, at: number, fix: GpsFix, averageSpeed: number, now = Date.now(), reduced = false) {
+  const speed = reduced || fix.speed == null || !Number.isFinite(fix.speed) || fix.speed < 0.5 || fix.speed > 100 ? 0 : Math.max(0, averageSpeed);
+  // shortcut: prédiction limitée à 3 s et 30 m ; utiliser les capteurs inertiels si disponibles.
+  return Math.min(length, at + Math.min(30, speed * Math.min(3, Math.max(0, (now - fix.timestamp) / 1000))));
+}
 
 export function navigationRoute(roads: RoadGeometry, result: SearchResult): NavigationRoute | null {
   if (!result.instructions?.length || !result.path.length || result.length < 1) return null;
@@ -22,7 +48,7 @@ export function navigationRoute(roads: RoadGeometry, result: SearchResult): Navi
     for (let i = 1; i < geometry.length; i++) {
       covered += lengths[i - 1];
       const ratio = total ? covered / total : i / (geometry.length - 1);
-      points.push({ lat: geometry[i][0], lon: geometry[i][1], at: at + edge.length * ratio, seconds: seconds + edge.seconds * ratio });
+      points.push({ lat: geometry[i][0], lon: geometry[i][1], at: at + edge.length * ratio, seconds: seconds + edge.seconds * ratio, speedLimit: edge.speedLimit });
     }
     at += edge.length; seconds += edge.seconds;
   }
@@ -41,7 +67,8 @@ export function usableFix(fix: GpsFix, now = Date.now()) {
 export function matchRoute(route: NavigationRoute, fix: GpsFix, previous?: RouteMatch, elapsed = 0): RouteMatch {
   let best: RouteMatch = { at: previous?.at ?? 0, seconds: previous?.seconds ?? 0, distance: Infinity };
   const scaleX = 111_195 * Math.cos(fix.lat * Math.PI / 180), scaleY = 111_195;
-  const forward = Math.max(180, (Math.max(0, fix.speed ?? 0) + 15) * elapsed / 1000 + fix.accuracy * 2);
+  const speed = fix.speed != null && Number.isFinite(fix.speed) && fix.speed >= 0 && fix.speed <= 100 ? fix.speed : 0;
+  const forward = Math.max(180, (speed + 15) * elapsed / 1000 + fix.accuracy * 2);
   for (let i = 1; i < route.points.length; i++) {
     const a = route.points[i - 1], b = route.points[i];
     const x = (b.lon - a.lon) * scaleX, y = (b.lat - a.lat) * scaleY;
@@ -59,14 +86,20 @@ export function matchRoute(route: NavigationRoute, fix: GpsFix, previous?: Route
 export class GuidanceProgress {
   match?: RouteMatch;
   private timestamp = 0;
+  private lastSeen = 0;
   private arrivalSince?: number;
   constructor(readonly route: NavigationRoute) {}
 
   update(fix: GpsFix, now = Date.now()) {
-    if (!usableFix(fix, now) || fix.timestamp <= this.timestamp) return { status: 'uncertain' as const };
+    if (!usableFix(fix, now) || fix.timestamp <= this.lastSeen) return { status: 'uncertain' as const };
+    this.lastSeen = fix.timestamp;
     const match = matchRoute(this.route, fix, this.match, this.timestamp ? fix.timestamp - this.timestamp : 0);
-    const offRoute = match.distance > Math.max(35, fix.accuracy * 1.5);
-    if (offRoute) { this.arrivalSince = undefined; return { status: 'off-route' as const }; }
+    const offRoute = match.distance > Math.max(75, fix.accuracy * 1.5);
+    if (offRoute) {
+      this.arrivalSince = undefined;
+      if (!this.match && match.distance <= 2000) return { status: 'approach' as const, match };
+      return { status: 'off-route' as const };
+    }
     this.match = match; this.timestamp = fix.timestamp;
     const remaining = Math.max(0, this.route.length - match.at);
     const end = this.route.points.at(-1)!;

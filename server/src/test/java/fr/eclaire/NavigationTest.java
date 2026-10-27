@@ -25,6 +25,12 @@ class NavigationTest {
             graph.edge(0, 1).setDistance(110).set(access, true, false).set(speed, 30d, 0d);
             graph.edge(1, 2).setDistance(75).set(access, true, false).set(speed, 30d, 0d);
             graph.edge(1, 3).setDistance(110).set(access, true, false).set(speed, 30d, 0d);
+            var maxSpeed = manager.getDecimalEncodedValue("max_speed");
+            var limited = graph.edge(2, 3).setDistance(100).set(maxSpeed, 50d, 80d);
+            assertEquals(50d, FranceServer.speedLimit(limited, manager));
+            assertEquals(80d, FranceServer.speedLimit(limited.detach(true), manager));
+            limited.set(maxSpeed, Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY);
+            assertNull(FranceServer.speedLimit(limited, manager));
             var time = new SpeedWeighting(speed);
             var path = new DijkstraBidirectionRef(graph, time, TraversalMode.NODE_BASED).calcPath(0, 2);
             var french = new TranslationMap().doImport().getWithFallBack(Locale.FRENCH);

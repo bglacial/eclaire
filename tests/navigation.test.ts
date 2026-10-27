@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { GuidanceProgress, matchRoute, navigationRoute, usableFix, type GpsFix } from '../src/navigation';
+import { GuidanceProgress, RecentSpeed, matchRoute, navigationRoute, predictedRouteAt, routePosition, usableFix, type GpsFix } from '../src/navigation';
 import type { RoadGeometry, SearchResult } from '../src/types';
 
 const lat = 48.85, lon = 2.35, north = 100 / 111195, east = 100 / (111195 * Math.cos(lat * Math.PI / 180));
@@ -69,4 +69,54 @@ test('un trajet sans manœuvres ne prétend pas fournir un guidage et un trajet 
   assert.equal(navigationRoute(roads, { ...result, instructions: undefined }), null);
   assert.equal(navigationRoute(roads, { ...result, path: [], length: 0 }), null);
   assert.throws(() => navigationRoute({ ...roads, edges: [roads.edges[0], { ...roads.edges[1], geometry: [[49, 3], [49.01, 3.01]] }] }, result), /discontinu/);
+});
+
+test('la position se projette sur le tracé même à côté de la route et suit les virages', () => {
+  const route = navigationRoute({ ...roads, edges: [{ ...roads.edges[0], speedLimit: 30 }, { ...roads.edges[1], speedLimit: 50 }] }, result)!;
+  const progress = new GuidanceProgress(route);
+  const state = progress.update({ ...fix(40), lon: lon + east * 0.3 }, 100_000);
+  assert.equal(state.status, 'on-route');
+  const projected = routePosition(route, progress.match!.at);
+  assert.ok(Math.abs(projected.lon - lon) < 1e-8); assert.equal(projected.speedLimit, 30);
+  assert.ok(Math.abs(routePosition(route, 150).heading - 90) < 0.01);
+  assert.equal(routePosition(route, 150).speedLimit, 50);
+  assert.equal(routePosition(route, 250).speedLimit, 50);
+  assert.equal(progress.update({ ...fix(40, 102_000), lon: lon - east }, 102_000).status, 'off-route');
+});
+
+test('la moyenne GPS ignore les vitesses invalides et les mesures de plus de vingt secondes', () => {
+  const recent = new RecentSpeed();
+  recent.add({ ...fix(0, 100_000), speed: 10 }); recent.add({ ...fix(0, 110_000), speed: 20 });
+  assert.equal(recent.mean(), 15);
+  recent.add({ ...fix(0, 121_000), speed: null }); assert.equal(recent.mean(), 20);
+  recent.add({ ...fix(0, 131_000), speed: NaN }); assert.equal(recent.mean(), 0);
+});
+
+test('la prédiction reste bornée, s’arrête et respecte la réduction des mouvements', () => {
+  const moving = { ...fix(0), speed: 20 };
+  assert.equal(predictedRouteAt(200, 50, moving, 20, 101_000), 70);
+  assert.equal(predictedRouteAt(200, 50, moving, 20, 110_000), 80);
+  assert.equal(predictedRouteAt(60, 50, moving, 20, 110_000), 60);
+  assert.equal(predictedRouteAt(200, 50, { ...moving, speed: 0 }, 20, 110_000), 50);
+  assert.equal(predictedRouteAt(200, 50, moving, 20, 110_000, true), 50);
+});
+
+test('un départ à distance propose le point routier puis reprend le guidage à son approche', () => {
+  const progress = new GuidanceProgress(navigationRoute(roads, result)!);
+  const state = progress.update({ ...fix(20), lon: lon - east * 5 }, 100_000);
+  assert.equal(state.status, 'approach');
+  if (state.status !== 'approach') return;
+  assert.ok(Math.abs(state.match.distance - 500) < 1);
+  assert.ok(Math.abs(state.match.at - 20) < 1);
+  assert.equal(progress.update({ ...fix(20, 99_000), lon: lon - east * 4 }, 100_000).status, 'uncertain');
+  assert.equal(progress.update(fix(30, 102_000), 102_000).status, 'on-route');
+  assert.equal(progress.update({ ...fix(30, 104_000), lon: lon - east * 5 }, 104_000).status, 'off-route');
+});
+
+test('une vitesse GPS invalide ne supprime pas la limite de continuité du rapprochement', () => {
+  const route = navigationRoute(roads, result)!;
+  route.points.push({ ...route.points[0], at: 2000, seconds: 200 }, { ...route.points[1], at: 2100, seconds: 210 });
+  const gps = { ...fix(30, 102_000), speed: NaN };
+  const match = matchRoute(route, gps, { at: 20, seconds: 2, distance: 0 }, 2000);
+  assert.ok(Math.abs(match.at - 30) < 0.1);
 });
