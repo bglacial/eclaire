@@ -1,0 +1,11 @@
+import { Capacitor, registerPlugin } from '@capacitor/core';
+import { isPhoneDevice } from './location';
+
+export const canGuide = (platform: string, phone: boolean) => (platform === 'android' || platform === 'ios') && phone;
+export const isMobileApp = () => canGuide(Capacitor.getPlatform(), isPhoneDevice());
+export const device = registerPlugin<{ setKeepScreenOn(options: { enabled: boolean }): Promise<void>; getVersion(): Promise<{ version: string }> }>('EclaireDevice');
+
+export function screenUpdates(set: (enabled: boolean) => Promise<void>) {
+  let pending: Promise<void> = Promise.resolve();
+  return (enabled: boolean) => pending = pending.catch(() => undefined).then(() => set(enabled));
+}

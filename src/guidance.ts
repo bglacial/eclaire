@@ -2,10 +2,16 @@ import L from 'leaflet';
 import { Capacitor } from '@capacitor/core';
 import { Geolocation } from '@capacitor/geolocation';
 import { GuidanceProgress, RecentSpeed, routePosition, predictedRouteAt, guidanceDistance, usableFix, type GpsFix, type NavigationRoute } from './navigation';
-import { isPhoneDevice, locationError, preciseLocationPermission } from './location';
+import { locationError, preciseLocationPermission } from './location';
+import { device, isMobileApp, screenUpdates } from './device';
 
 const element = (id: string) => document.getElementById(id)!;
-const text = (id: string, value: string) => { if (element(id).textContent !== value) element(id).textContent = value; };
+const text = (id: string, value: string) => {
+  const target = element(id);
+  if (target.textContent === value) return;
+  target.textContent = value;
+  if (id === 'navigation-instruction') element('navigation-next').scrollTop = 0;
+};
 
 export class GpsGuidance {
   private route?: NavigationRoute;
@@ -35,6 +41,7 @@ export class GpsGuidance {
   private lastPaint = 0;
   private lastCenter?: { x: number; y: number };
   private vehicleHeading = 0;
+  private keepScreenOn = screenUpdates(enabled => device.setKeepScreenOn({ enabled }));
 
   get active() { return this.session; }
 
@@ -62,12 +69,12 @@ export class GpsGuidance {
 
   setRoute(route: NavigationRoute | null) {
     this.stop(false); this.line?.remove(); this.line = undefined; this.route = route ?? undefined;
-    element('navigation-start').hidden = !route || !isPhoneDevice();
-    text('navigation-availability', !isPhoneDevice() ? 'Le guidage GPS est réservé aux téléphones.' : route ? 'GPS utilisé pendant le guidage, avec votre autorisation.' : 'Le guidage demande les manœuvres du service France à jour.');
+    element('navigation-start').hidden = !route || !isMobileApp();
+    text('navigation-availability', !isMobileApp() ? 'Le guidage GPS est disponible dans l’application mobile.' : route ? 'GPS utilisé pendant le guidage, avec votre autorisation.' : 'Le guidage demande les manœuvres du service France à jour.');
   }
 
   async start() {
-    if (!isPhoneDevice()) { text('navigation-availability', 'Le guidage GPS est réservé aux téléphones.'); return; }
+    if (!isMobileApp()) { text('navigation-availability', 'Le guidage GPS est disponible dans l’application mobile.'); return; }
     if (!this.route || this.watching || this.starting || document.hidden) return;
     const generation = ++this.generation;
     this.session = true; this.starting = true; this.follow = true; this.firstCenter = true; this.lastCenter = undefined; this.speeds = new RecentSpeed(); this.displayAt = undefined;
@@ -75,6 +82,7 @@ export class GpsGuidance {
     this.onEnter();
     if (!this.line) this.line = L.polyline(this.route.points.map(p => [p.lat, p.lon]), { renderer: this.renderer, color: getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(), weight: 6, opacity: 0.95, interactive: false }).addTo(this.map);
     element('app').classList.add('is-guiding'); element('navigation').hidden = false;
+    this.map.invalidateSize({ pan: false, animate: false });
     element('navigation-resume').hidden = true; element('navigation-recalculate').hidden = true;
     text('navigation-instruction', 'Recherche de votre position…'); text('navigation-turn-distance', 'GPS');
     text('navigation-remaining', '—'); text('navigation-time', '—'); text('navigation-speed', '—');
@@ -101,7 +109,13 @@ export class GpsGuidance {
         if (!position) return;
         this.receive({ lat: position.coords.latitude, lon: position.coords.longitude, accuracy: position.coords.accuracy, timestamp: position.timestamp, speed: position.coords.speed, heading: position.coords.heading });
       });
-      if (generation !== this.generation) await Geolocation.clearWatch({ id }); else this.watch = id;
+      if (generation !== this.generation) await Geolocation.clearWatch({ id });
+      else {
+        this.watch = id;
+        if (Capacitor.getPlatform() === 'android') {
+          await this.keepScreenOn(true);
+        }
+      }
     } catch (error) {
       if (generation === this.generation) this.pause(locationError(error));
     }
@@ -112,11 +126,13 @@ export class GpsGuidance {
     this.map.stopHeadingUp(); this.map.setBearing(0);
     this.marker?.remove(); this.accuracy?.remove(); this.approachPoint?.remove(); this.marker = undefined; this.accuracy = undefined; this.approachPoint = undefined;
     element('app').classList.remove('is-guiding'); element('navigation').hidden = true;
+    this.map.invalidateSize({ pan: false, animate: false });
     if (restore) { this.onExit(); element('navigation-start').focus(); }
   }
 
   private release() {
     ++this.generation; this.watching = false; this.starting = false; clearInterval(this.timer); cancelAnimationFrame(this.frame); this.frame = 0; this.map.stopHeadingUp();
+    if (Capacitor.getPlatform() === 'android') void this.keepScreenOn(false).catch(() => undefined);
     if (this.watch !== undefined) { void Geolocation.clearWatch({ id: this.watch }).catch(() => undefined); this.watch = undefined; }
     window.speechSynthesis?.cancel();
   }
@@ -158,8 +174,14 @@ export class GpsGuidance {
       this.followGpsHeading(fix);
       if (this.follow) {
         this.map.invalidateSize({ pan: false, animate: false });
-        const bottom = matchMedia('(max-width: 720px)').matches ? this.map.getContainer().getBoundingClientRect().bottom - element('navigation').getBoundingClientRect().top : 40;
-        this.map.fitBounds(L.latLngBounds([point, target]), { paddingTopLeft: [40, 40], paddingBottomRight: [40, Math.max(40, bottom + 20)], maxZoom: 17, animate: false });
+        const landscape = matchMedia('(orientation: landscape) and (max-height: 500px)').matches;
+        const mobile = matchMedia('(max-width: 720px)').matches && !landscape;
+        const bounds = this.map.getContainer().getBoundingClientRect();
+        const left = landscape ? element('navigation-next').getBoundingClientRect().right - bounds.left : 40;
+        const right = landscape ? bounds.right - document.querySelector('.navigation-bottom')!.getBoundingClientRect().left : 40;
+        const top = mobile ? element('navigation-next').getBoundingClientRect().bottom - bounds.top : 40;
+        const bottom = mobile ? bounds.bottom - document.querySelector('.navigation-bottom')!.getBoundingClientRect().top : 40;
+        this.map.fitBounds(L.latLngBounds([point, target]), { paddingTopLeft: [Math.max(40, left + 20), Math.max(40, top + 20)], paddingBottomRight: [Math.max(40, right + 20), Math.max(40, bottom + 20)], maxZoom: 17, animate: false });
         this.firstCenter = true; this.lastCenter = undefined;
       }
       window.speechSynthesis?.cancel(); return;
@@ -194,7 +216,7 @@ export class GpsGuidance {
     text('navigation-remaining', guidanceDistance(state.remaining));
     const minutes = Math.ceil(state.seconds / 60);
     text('navigation-time', minutes < 60 ? `${Math.max(1, minutes)} min` : `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, '0')}`);
-    this.status(match.distance > 35 ? `Position rapprochée du trajet à ${Math.round(match.distance)} m. Vérifiez comment rejoindre la route.` : `GPS actif · précision ± ${Math.round(fix.accuracy)} m · estimation sans trafic.`);
+    this.status(match.distance > 35 ? `Position rapprochée du trajet à ${Math.round(match.distance)} m. Vérifiez comment rejoindre la route.` : `GPS actif · précision ± ${Math.round(fix.accuracy)} m · estimation sans trafic.`, match.distance > 35);
     if (this.follow) this.center();
     if (this.voice) {
       const stage = state.toTurn < 35 ? 'now' : state.toTurn < 200 ? 'near' : 'far';
@@ -228,10 +250,13 @@ export class GpsGuidance {
     if (this.firstCenter) this.map.invalidateSize({ pan: false, animate: false });
     const zoom = this.firstCenter ? 17 : this.map.getZoom(); this.firstCenter = false;
     const projected = this.map.project(position, zoom);
-    // Placer le GPS au centre de la portion visible de carte, au-dessus du panneau mobile.
-    if (matchMedia('(max-width: 720px)').matches) {
-      const freeHeight = element('navigation').getBoundingClientRect().top - this.map.getContainer().getBoundingClientRect().top;
-      const offset = this.map.getSize().y / 2 - Math.max(65, freeHeight / 2), radians = this.map.getBearing() * Math.PI / 180;
+    // Garder davantage de route visible devant le véhicule entre les deux panneaux.
+    if (matchMedia('(max-width: 720px)').matches && !matchMedia('(orientation: landscape) and (max-height: 500px)').matches) {
+      const bounds = this.map.getContainer().getBoundingClientRect();
+      const top = element('navigation-next').getBoundingClientRect().bottom - bounds.top;
+      const bottom = document.querySelector('.navigation-bottom')!.getBoundingClientRect().top - bounds.top;
+      const targetY = top + Math.max(0, bottom - top) * 0.68;
+      const offset = this.map.getSize().y / 2 - targetY, radians = this.map.getBearing() * Math.PI / 180;
       projected.x += Math.sin(radians) * offset; projected.y += Math.cos(radians) * offset;
     }
     if (this.lastCenter && Math.hypot(projected.x - this.lastCenter.x, projected.y - this.lastCenter.y) < 0.5) return;
@@ -249,7 +274,7 @@ export class GpsGuidance {
     if (this.follow) this.map.setHeading(fix.heading, { ease: matchMedia('(prefers-reduced-motion: reduce)').matches ? 1 : 0.2 });
   }
   private clearSpeed() { text('navigation-speed', '—'); text('navigation-limit', 'Limite : —'); element('navigation-speed').classList.remove('over-limit'); }
-  private status(message: string) { text('navigation-status', message); }
+  private status(message: string, visible = true) { text('navigation-status', message); element('navigation-status').hidden = !visible; }
   private speak(message: string) {
     if (!this.voice || !('speechSynthesis' in window) || document.hidden) return;
     window.speechSynthesis.cancel(); const utterance = new SpeechSynthesisUtterance(message); utterance.lang = 'fr-FR'; window.speechSynthesis.speak(utterance);

@@ -2,7 +2,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import './style.css';
 import { Geolocation } from '@capacitor/geolocation';
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, SystemBars, SystemBarsStyle } from '@capacitor/core';
 import { buildRoadGraph, nearestNode } from './graph';
 import { createMap, pointMarker } from './map';
 import { ExplorationRenderer } from './animation';
@@ -10,6 +10,8 @@ import { GpsGuidance } from './guidance';
 import { navigationRoute } from './navigation';
 import { locationError, preciseLocationPermission, selectionPosition } from './location';
 import { requestDeadline } from './request-deadline';
+import { device, isMobileApp } from './device';
+import { readSettings, type Theme } from './settings';
 import { cancelNationalRoute, checkNationalService, decodeNationalMessage, franceBounds, isInFrance, nationalRoute, searchFrance } from './national';
 import type { Criterion, Dataset, ExplorationEvent, Place, RoadGeometry, RoadGraph, SearchResult, WorkerResponse } from './types';
 
@@ -30,6 +32,7 @@ const paths: Record<string, string> = {
   check: '<path d="m5 12 4 4L19 6"/>',
   stop: '<rect x="6" y="6" width="12" height="12" rx="1"/>',
   layers: '<path d="m12 3 10 6-10 6L2 9l10-6Zm-9 11 9 5 9-5M3 18l9 5 9-5"/>',
+  settings: '<circle cx="12" cy="12" r="3"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M19 5l-1.5 1.5m-11 11L5 19"/>',
 };
 const icon = (name: string) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name]}</svg>`;
 
@@ -38,7 +41,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <header class="topbar">
     <a class="brand" href="./" aria-label="Éclaire, accueil" translate="no"><span class="brand-symbol">${icon('bolt')}</span>éclaire<span class="brand-dot">.</span></a>
     <span class="tagline">Deux points. Un chemin qui s’éclaire.</span>
-    <div class="header-right"><span class="edition">France <span>métropolitaine & Corse</span></span><button class="help-button" id="help" aria-label="Aide et fonctionnement" aria-haspopup="dialog" aria-expanded="false" aria-controls="about">${icon('info')}<span>Aide</span></button></div>
+    <div class="header-right"><span class="edition">France <span>métropolitaine & Corse</span></span><button class="help-button" id="settings-open" aria-label="Paramètres" hidden>${icon('settings')}<span>Paramètres</span></button><button class="help-button" id="help" aria-label="Aide et fonctionnement" aria-haspopup="dialog" aria-expanded="false" aria-controls="about">${icon('info')}<span>Aide</span></button></div>
   </header>
   <main>
     <div id="map" aria-label="Carte interactive de France. Utilisez les boutons Choisir sur la carte, puis touchez une route." role="region"></div>
@@ -62,17 +65,28 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <div id="pick-hint" class="pick-hint" role="status" hidden><span></span><button id="cancel-pick" class="icon-button" aria-label="Annuler la sélection">${icon('close')}</button></div>
     <section id="playback" class="playback" aria-label="État de l’exploration" hidden><span class="activity-dot" aria-hidden="true"></span><div><strong id="playback-title" role="status">Calcul du trajet…</strong><span id="playback-count">Préparation du calcul…</span></div><span id="playback-percent"></span><div class="playback-track" aria-hidden="true"><span id="playback-progress"></span></div></section>
     <section id="navigation" class="navigation" aria-label="Guidage GPS" hidden>
-      <div id="navigation-next"><strong id="navigation-turn-distance">GPS</strong><h2 id="navigation-instruction" role="status" aria-live="polite" aria-atomic="true">Recherche de votre position…</h2></div>
-      <div class="navigation-metrics"><div><strong id="navigation-remaining">—</strong><span>restants</span></div><div><strong id="navigation-time">—</strong><span>durée estimée</span></div><div><strong id="navigation-speed">—</strong><span>km/h · vitesse GPS</span><span id="navigation-limit">Limite : —</span></div></div>
-      <p id="navigation-status"></p>
-      <button id="navigation-recalculate" class="primary" hidden>Recalculer depuis ma position</button><button id="navigation-resume" class="primary" hidden>Reprendre le GPS</button>
-      <div class="navigation-actions"><button id="navigation-follow" aria-pressed="true">Position suivie</button><button id="navigation-voice" aria-pressed="false">Activer la voix</button><button id="navigation-stop">Quitter le guidage</button></div>
-      <small>Gardez l’application visible. Guidage expérimental : respectez la signalisation.</small>
+      <div id="navigation-next" tabindex="0" aria-label="Prochaine instruction"><strong id="navigation-turn-distance">GPS</strong><h2 id="navigation-instruction" role="status" aria-live="polite" aria-atomic="true">Recherche de votre position…</h2></div>
+      <div class="navigation-bottom">
+        <p id="navigation-status" role="status"></p>
+        <button id="navigation-recalculate" class="primary" hidden>Recalculer depuis ma position</button><button id="navigation-resume" class="primary" hidden>Reprendre le GPS</button>
+        <div class="navigation-metrics"><div><strong id="navigation-time">—</strong><span>durée estimée</span></div><div><strong id="navigation-remaining">—</strong><span>restants</span></div><div><strong id="navigation-speed">—</strong><span>km/h · GPS</span><span id="navigation-limit">Limite : —</span></div></div>
+        <div class="navigation-actions"><button id="navigation-follow" aria-pressed="true">Position suivie</button><button id="navigation-voice" aria-pressed="false">Activer la voix</button><button id="navigation-stop" aria-label="Quitter le guidage">Quitter</button></div>
+        <small>Guidage expérimental, sans trafic en direct. Gardez l’application visible et respectez la signalisation.</small>
+        <div class="navigation-attribution">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> · <a href="https://opendatacommons.org/licenses/odbl/1-0/" target="_blank" rel="noopener">ODbL</a></div>
+      </div>
     </section>
     <div class="map-legend"><span><i class="cyan"></i>Départ A</span><span><i class="amber"></i>Arrivée B</span><span><i class="final"></i>Trajet</span></div>
-    <dialog id="about" class="about" aria-labelledby="about-title"><button id="close-about" class="icon-button" aria-label="Fermer l’aide">${icon('close')}</button><h2 id="about-title">Comment ça marche</h2><p>Un front cyan part de A, un front ambre part de B. Chaque branche suit une route réellement explorée.</p><p>La première rencontre ne suffit pas. Le trajet apparaît quand le calcul confirme qu’aucun meilleur chemin n’existe dans le réseau chargé.</p><dl><div><dt>Le plus court</dt><dd>Minimise la longueur des routes.</dd></div><div><dt>Le plus rapide</dt><dd>Minimise le temps estimé selon les vitesses OSM, sans trafic en direct.</dd></div></dl><button id="lite" class="setting-button" aria-pressed="false">${icon('layers')} Mode léger</button><p>Réduit les halos et le nombre de fronts pour les appareils modestes. La réduction des animations suit aussi votre préférence système.</p><details><summary>Données et limites</summary><p>Le service France utilise une recherche bidirectionnelle exacte. Les grandes traces sont échantillonnées pour préserver le téléphone ; le calcul et le trajet final restent complets. Sans service, seule la démo Paris utilise le calcul embarqué.</p><p id="data-info"></p><p>Les points sont raccordés à une route accessible à 2 km maximum. Les accès privés et de desserte sont exclus. Certaines restrictions OSM ne sont pas prises en charge. Vérifiez l’accès final et respectez la signalisation.</p><p>Le guidage GPS expérimental est réservé aux téléphones, avec l’application visible. Aucun trafic en direct n’est intégré.</p><a href="/data/provenance.json" target="_blank" rel="noopener">Provenance de la démo Paris</a></details><details><summary>Position et confidentialité</summary><p>Le GPS reste sur l’appareil pendant le suivi. Un recalcul transmet la position au service routier configuré. L’IGN reçoit le texte recherché. Le fournisseur des tuiles reçoit les zones consultées. Aucun historique GPS n’est enregistré par l’application.</p></details></dialog>
+    <dialog id="about" class="about" aria-labelledby="about-title"><button id="close-about" class="icon-button" aria-label="Fermer l’aide">${icon('close')}</button><h2 id="about-title">Comment ça marche</h2><p>Un front cyan part de A, un front ambre part de B. Chaque branche suit une route réellement explorée.</p><p>La première rencontre ne suffit pas. Le trajet apparaît quand le calcul confirme qu’aucun meilleur chemin n’existe dans le réseau chargé.</p><dl><div><dt>Le plus court</dt><dd>Minimise la longueur des routes.</dd></div><div><dt>Le plus rapide</dt><dd>Minimise le temps estimé selon les vitesses OSM, sans trafic en direct.</dd></div></dl><button id="lite" class="setting-button" aria-pressed="false">${icon('layers')} Mode léger</button><p>Réduit les halos et le nombre de fronts pour les appareils modestes. La réduction des animations suit aussi votre préférence système.</p><details><summary>Données et limites</summary><p>Le service France utilise une recherche bidirectionnelle exacte. Les grandes traces sont échantillonnées pour préserver le téléphone ; le calcul et le trajet final restent complets. Sans service, seule la démo Paris utilise le calcul embarqué.</p><p id="data-info"></p><p>Les points sont raccordés à une route accessible à 2 km maximum. Les accès privés et de desserte sont exclus. Certaines restrictions OSM ne sont pas prises en charge. Vérifiez l’accès final et respectez la signalisation.</p><p>Le guidage GPS expérimental est réservé à l’application mobile sur téléphone, avec l’application visible. Aucun trafic en direct n’est intégré.</p><a href="/data/provenance.json" target="_blank" rel="noopener">Provenance de la démo Paris</a></details><details><summary>Position et confidentialité</summary><p>Le GPS reste sur l’appareil pendant le suivi. Un recalcul transmet la position au service routier configuré. L’IGN reçoit le texte recherché. Le fournisseur des tuiles reçoit les zones consultées. Aucun historique GPS n’est enregistré par l’application.</p></details></dialog>
     <div id="loading" class="loading" role="status"><span class="loading-bolt">${icon('bolt')}</span><strong>Chargement de la carte</strong><p>Chargement des données OpenStreetMap…</p><button id="retry" class="primary" hidden>Réessayer</button></div>
-  </main>`;
+  </main>
+  <section id="settings-page" class="settings-page" aria-labelledby="settings-title" hidden>
+    <header class="settings-header"><button id="settings-close" class="icon-button" aria-label="Retour à la carte">${icon('close')}</button><h2 id="settings-title">Paramètres</h2></header>
+    <div class="settings-content">
+      <label for="settings-theme">Apparence</label><p>Choisissez le thème ou suivez celui du téléphone.</p><select id="settings-theme"><option value="auto">Automatique</option><option value="light">Clair</option><option value="dark">Sombre</option></select>
+      <label for="settings-criterion">Trajet préféré</label><p>Ce choix s’applique aux prochains trajets.</p><select id="settings-criterion"><option value="time">Le plus rapide</option><option value="distance">Le plus court</option></select>
+      <p class="settings-version">Version de l’application <strong id="settings-version">—</strong></p><p id="settings-error" role="status" hidden></p>
+    </div>
+  </section>`;
 
 // Keyboard interactions remain immediate, including actions that reveal a result.
 document.addEventListener('keydown', () => document.documentElement.classList.add('keyboard-input'));
@@ -81,6 +95,37 @@ document.addEventListener('pointerdown', () => document.documentElement.classLis
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const inputs = { start: $<HTMLInputElement>('start'), end: $<HTMLInputElement>('end') };
 const launch = $<HTMLButtonElement>('launch');
+const mobileApp = isMobileApp();
+if (mobileApp) {
+  $('settings-open').hidden = false;
+  let saved = { theme: 'auto' as Theme, criterion: 'time' as Criterion };
+  try { saved = readSettings(localStorage); } catch { /* Storage can be unavailable. */ }
+  const theme = $<HTMLSelectElement>('settings-theme'), preferred = $<HTMLSelectElement>('settings-criterion');
+  theme.value = saved.theme; preferred.value = saved.criterion;
+  document.querySelector<HTMLInputElement>(`input[name="criterion"][value="${saved.criterion}"]`)!.checked = true;
+  const systemTheme = matchMedia('(prefers-color-scheme: dark)');
+  const applyTheme = () => {
+    const dark = theme.value === 'dark' || (theme.value === 'auto' && systemTheme.matches);
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    void SystemBars.setStyle({ style: dark ? SystemBarsStyle.Dark : SystemBarsStyle.Light }).catch(() => undefined);
+  };
+  const save = (key: string, value: string) => {
+    try { localStorage.setItem(key, value); $('settings-error').hidden = true; }
+    catch { $('settings-error').textContent = 'Impossible d’enregistrer les paramètres sur cet appareil.'; $('settings-error').hidden = false; }
+  };
+  applyTheme(); systemTheme.addEventListener('change', applyTheme);
+  theme.addEventListener('change', () => { save('eclaire.theme', theme.value); applyTheme(); });
+  preferred.addEventListener('change', () => {
+    save('eclaire.criterion', preferred.value);
+    const radio = document.querySelector<HTMLInputElement>(`input[name="criterion"][value="${preferred.value}"]`)!;
+    if (!radio.checked) { radio.checked = true; radio.dispatchEvent(new Event('change', { bubbles: true })); }
+  });
+  $('settings-open').addEventListener('click', () => { $('settings-page').hidden = false; $('settings-close').focus(); });
+  const closeSettings = () => { $('settings-page').hidden = true; $('settings-open').focus(); };
+  $('settings-close').addEventListener('click', closeSettings);
+  document.addEventListener('keydown', event => { if (event.key === 'Escape' && !$('settings-page').hidden) closeSettings(); });
+  if (Capacitor.getPlatform() === 'android') void device.getVersion().then(info => { $('settings-version').textContent = info.version; }).catch(() => { $('settings-version').textContent = 'Indisponible'; });
+}
 type Endpoint = 'start' | 'end';
 type Selection = Place & { node: number; snapDistance: number };
 let data: Dataset;

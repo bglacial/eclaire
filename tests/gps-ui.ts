@@ -1,6 +1,14 @@
 // Harnais Vite de recette uniquement : exclu du build livré. Le calcul routier reste réel.
+Object.assign(window, {
+  CapacitorCustomPlatform: { name: 'android' },
+  Capacitor: {
+    PluginHeaders: [{ name: 'EclaireDevice', methods: [{ name: 'setKeepScreenOn', rtype: 'promise' }, { name: 'getVersion', rtype: 'promise' }] }],
+    nativePromise: async (_plugin: string, method: string) => method === 'getVersion' ? { version: 'simulation' } : {},
+  },
+});
 Object.defineProperty(navigator, 'userAgent', { configurable: true, value: 'Mozilla/5.0 (Linux; Android 14; Test Phone) AppleWebKit/537.36 Chrome/120.0 Mobile Safari/537.36' });
 Object.defineProperty(navigator, 'userAgentData', { configurable: true, value: { mobile: true } });
+Object.defineProperty(navigator, 'permissions', { configurable: true, value: { query: async () => ({ state: 'granted' }) } });
 Object.defineProperty(AbortSignal, 'any', { configurable: true, value: undefined });
 Object.defineProperty(AbortSignal, 'timeout', { configurable: true, value: undefined });
 const watches = new Map<number, { success: PositionCallback; error?: PositionErrorCallback | null }>();
@@ -52,6 +60,7 @@ button('GPS arrêté', () => { speed = 0; heading = null; emit(); });
 button('Au virage', () => { gps = { latitude: 48.8567689, longitude: 2.3487701, accuracy: 5 }; emit(); });
 button('Après virage', () => { gps = { latitude: 48.8557133, longitude: 2.3483752, accuracy: 5 }; emit(); });
 button('GPS imprécis', () => { gps.accuracy = 150; emit(); });
+button('GPS proche du trajet', () => { gps = { latitude: 48.8592, longitude: 2.3467217, accuracy: 5 }; denied = false; emit(); });
 button('GPS Lyon', () => { gps = { latitude: 45.7578, longitude: 4.832, accuracy: 8 }; denied = false; });
 button('GPS approximatif', () => { gps.accuracy = 2000; });
 button('Différer la position', () => { delayPosition = true; });
