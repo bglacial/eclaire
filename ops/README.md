@@ -39,10 +39,52 @@ une erreur, jamais un trajet annoncé optimal sans preuve.
 
 ## Mise à jour du code et des builds
 
-Le compte SSH du Pi n’a pas accès directement au nouveau dépôt GitHub Éclaire.
-Le premier checkout a donc été transféré par **Git bundle**, sans ajouter de clé
-ni élargir les permissions des clés existantes. Les mises à jour se font depuis
-une machine disposant de l’accès GitHub :
+### Déploiement automatique
+
+Le Pi accède désormais à `origin/main` avec son compte GitHub SSH. Éclaire est
+intégré au mécanisme existant : `site-perso-update.timer` →
+`/srv/apps/ops/update-static.sh` → `/srv/apps/ops/update-eclaire.sh`, toutes les
+cinq minutes. Le script installé est une copie de `ops/update-eclaire.sh` ; après
+modification de ce fichier, réinstaller la copie avec `install -m 755`.
+
+Le build utilise Node 22 dans `~/.local/share/eclaire/node` et un JDK 21 dans
+`~/.local/share/eclaire/jdk`. Le JRE du service reste dans le dossier `java`.
+Les runtimes ARM64 ont été téléchargés depuis Node.js et Eclipse Temurin, avec
+vérification SHA-256. Le service général conserve son timeout de 900 secondes.
+
+À chaque nouveau commit, le script récupère `main`, refuse un checkout modifié
+ou divergent et construit dans un dossier temporaire. Il exécute `npm ci`, les
+tests TypeScript, le build web et le package Maven avec ses tests Java. Les
+processus de build sont limités à 256 Mo de tas chacun.
+
+Le site reste actif pendant le build. Le service utilisateur n'est arrêté que
+pour remplacer `dist/` et le JAR. Le script contrôle `/api/health` après le
+redémarrage, puis avance le checkout et inscrit le commit effectivement déployé
+dans `/srv/apps/ops/deploy-state/eclaire.revision`. Si ce commit est inchangé,
+le cycle suivant ne reconstruit et ne redémarre rien. En cas d'échec pendant le
+remplacement ou le contrôle de santé, les fichiers précédents sont restaurés
+depuis `~/.local/share/eclaire/previous` et le service est relancé. Le code de
+sortie remonte au statut du service général. Le bus systemd utilisateur est
+explicitement sélectionné pour fonctionner depuis ce service système.
+
+Le graphe OSM, les index, le runtime et la configuration Nginx ne sont pas mis à
+jour par ce mécanisme. Un changement OSM ou de poids routiers nécessite toujours
+une préparation et un transfert manuel de données compatibles, décrits ci-dessous.
+
+```sh
+cat /srv/apps/ops/deploy-state/eclaire.revision
+journalctl -u site-perso-update.service -n 80 --no-pager
+/srv/apps/ops/update-eclaire.sh
+```
+
+Les tests isolés s'exécutent sous Linux avec
+`python3 ops/test_auto_update.py` et simulent les builds, les services et la santé
+HTTP en utilisant de vrais dépôts Git temporaires.
+
+### Mise à jour manuelle de secours
+
+Le premier checkout avait été transféré par **Git bundle**. Cette méthode reste
+disponible depuis une machine disposant de l'accès GitHub :
 
 ```sh
 npm ci
