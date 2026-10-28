@@ -84,3 +84,22 @@ test('une limitation HTML 429 ne se présente pas comme un service France arrêt
   context.mock.method(globalThis, 'fetch', async () => new Response('<html>Too many requests</html>', { status: 429, headers: { 'Retry-After': '30' } }));
   await assert.rejects(nationalRoute({ name: 'Paris', lat: 48.85, lon: 2.35 }, { name: 'Lyon', lat: 45.76, lon: 4.83 }, 'time', 'test', new AbortController().signal).next(), /30|sollicité/);
 });
+
+test('un ancien serveur ne peut pas ignorer silencieusement les évitements', async context => {
+  const fetchMock = context.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({ status: 'ready', bounds: [41, -5, 52, 10], edges: 100 })));
+  await assert.rejects(nationalRoute({ name: 'A', lat: 48, lon: 2 }, { name: 'B', lat: 49, lon: 2 }, 'time', 'test', new AbortController().signal, { avoidMotorways: true, avoidTolls: false }).next(), /mise à jour/);
+  assert.equal(fetchMock.mock.callCount(), 1);
+});
+
+test('les évitements sont transmis au calcul et au recalcul, pour les deux critères', async context => {
+  const bodies: unknown[] = [];
+  context.mock.method(globalThis, 'fetch', async (url, init) => {
+    if (String(url).endsWith('/health')) return new Response(JSON.stringify({ status: 'ready', bounds: [41, -5, 52, 10], edges: 100, roadPreferences: true }));
+    bodies.push(JSON.parse(String(init?.body)));
+    return new Response('{"type":"result","result":{"found":false}}\n');
+  });
+  for (const criterion of ['time', 'distance'] as const) {
+    for await (const message of nationalRoute({ name: 'A', lat: 48, lon: 2 }, { name: 'B', lat: 49, lon: 2 }, criterion, 'test', new AbortController().signal, { avoidMotorways: true, avoidTolls: true })) assert.equal(message.type, 'result');
+    assert.deepEqual(bodies.at(-1), { start: { lat: 48, lon: 2 }, end: { lat: 49, lon: 2 }, criterion, requestId: 'test', avoidMotorways: true, avoidTolls: true });
+  }
+});

@@ -52,7 +52,7 @@ public final class FranceServer {
         hopper.init(new GraphHopperConfig()
                 .putObject("datareader.file", osmFile).putObject("graph.location", graphDirectory)
                 .putObject("graph.dataaccess.default_type", "MMAP")
-                .putObject("graph.encoded_values", "car_access,car_average_speed,road_access")
+                .putObject("graph.encoded_values", "car_access,car_average_speed,road_access,road_class,toll")
                 .putObject("import.osm.ignored_highways", "steps,bridleway,platform,construction,proposed,abandoned,corridor,elevator")
                 .putObject("prepare.min_network_size", 200).setProfiles(List.of(profile)));
         hopper.importOrLoad();
@@ -92,6 +92,7 @@ public final class FranceServer {
         return Map.of("status", "ready", "engine", timeLandmarks == null ? "GraphHopper 11.0 · Dijkstra bidirectionnel" : "GraphHopper 11.0 · A* bidirectionnel · " + timeLandmarks.getLandmarkCount() + " landmarks", "nodes", hopper.getBaseGraph().getNodes(),
                 "edges", hopper.getBaseGraph().getEdges(), "bounds", List.of(bounds.minLat, bounds.minLon, bounds.maxLat, bounds.maxLon),
                 "landmarks", Map.of("time", timeLandmarks == null ? 0 : timeLandmarks.getLandmarkCount(), "distance", distanceLandmarks == null ? 0 : distanceLandmarks.getLandmarkCount()),
+                "roadPreferences", RoadPreferences.supported(hopper.getEncodingManager()),
                 "dataTimestamp", hopper.getProperties().get("datareader.data.date"));
     }
 
@@ -113,6 +114,7 @@ public final class FranceServer {
             if (active.putIfAbsent(requestId, Thread.currentThread()) != null) throw new IllegalArgumentException("Identifiant de requête déjà utilisé.");
             String criterion = request.path("criterion").asText();
             if (!Set.of("time", "distance").contains(criterion)) throw new IllegalArgumentException("Critère invalide.");
+            var preferences = RoadPreferences.parse(request);
             double fromLat = coordinate(request.get("start"), "lat", 41.3, 51.2), fromLon = coordinate(request.get("start"), "lon", -5.3, 9.7);
             double toLat = coordinate(request.get("end"), "lat", 41.3, 51.2), toLon = coordinate(request.get("end"), "lon", -5.3, 9.7);
             acquired = capacity.acquire(30_000);
@@ -121,7 +123,7 @@ public final class FranceServer {
                 json(exchange, 429, Map.of("error", "La file de calcul est pleine ou l’attente dépasse 30 secondes. Réessayez dans un instant."));
                 return;
             }
-            var time = timeWeighting();
+            var time = preferences.apply(timeWeighting(), hopper.getEncodingManager());
             var filter = new DefaultSnapFilter(time, hopper.getEncodingManager().getBooleanEncodedValue("car_subnetwork"));
             var from = hopper.getLocationIndex().findClosest(fromLat, fromLon, filter);
             var to = hopper.getLocationIndex().findClosest(toLat, toLon, filter);

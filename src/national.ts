@@ -1,5 +1,6 @@
 import type { Criterion, ExplorationEvent, NavigationInstruction, Place, RoadGeometry, SearchResult } from './types';
 import { requestDeadline } from './request-deadline';
+import type { RoadPreferences } from './settings';
 
 export const routingApi = import.meta.env?.VITE_ROUTING_API_URL?.replace(/\/$/, '') || '/api';
 export const franceBounds = [41.3, -5.3, 51.2, 9.7] as const;
@@ -12,7 +13,7 @@ export async function checkNationalService() {
     if (!response.ok) throw new Error('Service France indisponible.');
     const health = await response.json();
     if (health.status !== 'ready' || !Array.isArray(health.bounds) || typeof health.edges !== 'number') throw new Error('Service France non prêt.');
-    return health as { status: string; engine?: string; edges: number; nodes: number; dataTimestamp: string; bounds: number[] };
+    return health as { status: string; engine?: string; edges: number; nodes: number; dataTimestamp: string; bounds: number[]; roadPreferences?: boolean };
   } finally { deadline.dispose(); }
 }
 
@@ -82,11 +83,16 @@ export function decodeNationalMessage(message: WireMessage, roads: RoadGeometry,
   throw new Error('Message routier inconnu.');
 }
 
-export async function* nationalRoute(start: Place, end: Place, criterion: Criterion, requestId: string, signal: AbortSignal) {
+export async function* nationalRoute(start: Place, end: Place, criterion: Criterion, requestId: string, signal: AbortSignal, preferences?: RoadPreferences) {
   const deadline = requestDeadline(180_000, signal);
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
   try {
-    const response = await fetch(`${routingApi}/route`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ start: { lat: start.lat, lon: start.lon }, end: { lat: end.lat, lon: end.lon }, criterion, requestId }), signal: deadline.signal });
+    if (preferences?.avoidMotorways || preferences?.avoidTolls) {
+      const health = await checkNationalService();
+      if (deadline.signal.aborted) throw new DOMException('Calcul annulé.', 'AbortError');
+      if (health.roadPreferences !== true) throw new Error('L’évitement nécessite une mise à jour du service et du graphe France. La démo Paris ne prend pas ces options en charge.');
+    }
+    const response = await fetch(`${routingApi}/route`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ start: { lat: start.lat, lon: start.lon }, end: { lat: end.lat, lon: end.lon }, criterion, requestId, ...preferences }), signal: deadline.signal });
     if (!response.ok) {
       let message = response.status === 429 ? 'Le service est sollicité. Attendez 30 secondes puis réessayez.' : 'Le serveur routier est temporairement indisponible. Réessayez dans un instant.';
       try { const body = await response.json(); if (typeof body.error === 'string') message = body.error; } catch { /* A proxy can return HTML when the service is down. */ }

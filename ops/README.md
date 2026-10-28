@@ -8,6 +8,16 @@ Le port **127.0.0.1:8788** évite celui de Hermes (8787).
 
 ## Index et mémoire
 
+### Graphe nécessaire aux évitements mobiles
+
+Le nouvel import encode `road_class` et `toll`. Un ancien graphe continue de servir les trajets sans évitement ; `/api/health` annonce `roadPreferences: false` et les demandes d’évitement sont refusées explicitement. Pour activer les options, importer le même PBF dans **un nouveau dossier**, préparer les deux index, puis transférer ce dossier complet et changer `ECLAIRE_GRAPH_DIR`. Ne jamais écraser le graphe actif ni réutiliser ses anciens index : les identifiants d’arêtes peuvent changer à l’import.
+
+```sh
+ECLAIRE_GRAPH_DIR=server/data/france-graph-mobile-v1 ECLAIRE_LANDMARKS=prepare PORT=8790 java -Xmx12g -jar server/target/eclaire-routing.jar
+```
+
+Attendre `Éclaire France ready` et vérifier les deux marqueurs `eclaire.ready` avant de transférer. Le filtrage utilise les index de base comme bornes inférieures, car il supprime des routes sans diminuer leurs poids. Contrôler `roadPreferences: true`, les deux critères et chaque option après bascule. Conserver l’ancien dossier pour le retour arrière.
+
 Le Dijkstra France complet dépasse la mémoire disponible sur ce Pi. Le nouveau profil
 utilise A* bidirectionnel avec 32 landmarks actifs par critère, sans CH. Les
 index sont calculés sur une machine plus puissante puis transférés avec le graphe.

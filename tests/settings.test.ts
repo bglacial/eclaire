@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readSettings } from '../src/settings';
+import { readSettings, readRoadPreferences } from '../src/settings';
 import { canGuide, screenUpdates } from '../src/device';
 
 test('le guidage exige une application native et un téléphone', () => {
@@ -29,4 +29,13 @@ test('les paramètres valides sont restaurés et les valeurs inconnues sont igno
   data.set('eclaire.theme', 'invalid'); data.set('eclaire.criterion', 'invalid');
   assert.deepEqual(readSettings(storage), { theme: 'auto', criterion: 'time' });
   assert.deepEqual(readSettings({ getItem() { throw new Error('storage'); } }), { theme: 'auto', criterion: 'time' });
+});
+
+test('les évitements sont indépendants et désactivés par défaut, même si le stockage est indisponible', () => {
+  const data = new Map([['eclaire.avoidMotorways', 'true'], ['eclaire.avoidTolls', 'false']]);
+  const storage = { getItem: (key: string) => data.get(key) ?? null };
+  assert.deepEqual(readRoadPreferences(storage), { avoidMotorways: true, avoidTolls: false });
+  data.set('eclaire.avoidTolls', 'true'); data.set('eclaire.avoidMotorways', 'yes');
+  assert.deepEqual(readRoadPreferences(storage), { avoidMotorways: false, avoidTolls: true });
+  assert.deepEqual(readRoadPreferences({ getItem() { throw new Error('storage'); } }), { avoidMotorways: false, avoidTolls: false });
 });

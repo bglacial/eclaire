@@ -11,7 +11,7 @@ import { navigationRoute } from './navigation';
 import { locationError, preciseLocationPermission, selectionPosition } from './location';
 import { requestDeadline } from './request-deadline';
 import { device, isMobileApp } from './device';
-import { readSettings, type Theme } from './settings';
+import { readSettings, readRoadPreferences, type Theme } from './settings';
 import { cancelNationalRoute, checkNationalService, decodeNationalMessage, franceBounds, isInFrance, nationalRoute, searchFrance } from './national';
 import type { Criterion, Dataset, ExplorationEvent, Place, RoadGeometry, RoadGraph, SearchResult, WorkerResponse } from './types';
 
@@ -55,6 +55,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       </div>
       <div class="location-actions"><button id="geolocate" class="location-button" aria-label="Utiliser ma position comme départ">${icon('locate')} Ma position</button><button id="swap" class="swap-button" aria-label="Permuter le départ et l’arrivée">${icon('swap')} Permuter</button></div>
       <fieldset class="criteria"><legend>Critère du trajet</legend><label><input type="radio" name="criterion" value="time" checked><span>${icon('time')} Le plus rapide</span></label><label><input type="radio" name="criterion" value="distance"><span>${icon('route')} Le plus court</span></label></fieldset>
+      <fieldset id="road-preferences" class="road-preferences" hidden aria-describedby="road-preferences-help"><legend>Éviter sur ce trajet</legend><label><input id="avoid-motorways" type="checkbox"> Les autoroutes</label><label><input id="avoid-tolls" type="checkbox"> Les péages</label><p id="road-preferences-help">Selon les données OpenStreetMap, parfois incomplètes. Service France requis, sans secours Paris avec ces options.</p></fieldset>
       <div class="launch-row"><button id="launch" class="primary" disabled>${icon('bolt')}<span>Chargement des routes…</span>${icon('arrow')}</button><button id="reset" class="icon-button reset-button" aria-label="Recommencer avec le parcours initial" title="Recommencer">${icon('reset')}</button></div>
       </div></details>
       <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
@@ -96,8 +97,20 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 const inputs = { start: $<HTMLInputElement>('start'), end: $<HTMLInputElement>('end') };
 const launch = $<HTMLButtonElement>('launch');
 const mobileApp = isMobileApp();
+const roadPreferences = () => ({ avoidMotorways: mobileApp && $<HTMLInputElement>('avoid-motorways').checked, avoidTolls: mobileApp && $<HTMLInputElement>('avoid-tolls').checked });
 if (mobileApp) {
   $('settings-open').hidden = false;
+  $('road-preferences').hidden = false;
+  let avoided = { avoidMotorways: false, avoidTolls: false };
+  try { avoided = readRoadPreferences(localStorage); } catch { /* Storage can be unavailable. */ }
+  for (const [id, key] of [['avoid-motorways', 'avoidMotorways'], ['avoid-tolls', 'avoidTolls']] as const) {
+    const input = $<HTMLInputElement>(id); input.checked = avoided[key];
+    input.addEventListener('change', () => {
+      try { localStorage.setItem(`eclaire.${key}`, String(input.checked)); }
+      catch { notice('Ce choix s’applique au trajet, mais ne pourra pas être mémorisé.'); }
+      stop();
+    });
+  }
   let saved = { theme: 'auto' as Theme, criterion: 'time' as Criterion };
   try { saved = readSettings(localStorage); } catch { /* Storage can be unavailable. */ }
   const theme = $<HTMLSelectElement>('settings-theme'), preferred = $<HTMLSelectElement>('settings-criterion');
@@ -271,7 +284,7 @@ function complete() {
   updateLaunch();
   if (!result) {
     $('playback').hidden = true;
-    notice('Aucun itinéraire automobile dans le réseau chargé. Les accès, sens uniques ou coupures peuvent empêcher le trajet. Essayez d’autres points.', 'error');
+    notice(roadPreferences().avoidMotorways || roadPreferences().avoidTolls ? 'Aucun itinéraire trouvé avec les évitements choisis. Modifiez les points ou désactivez une option.' : 'Aucun itinéraire automobile dans le réseau chargé. Les accès, sens uniques ou coupures peuvent empêcher le trajet. Essayez d’autres points.', 'error');
     return;
   }
   renderer.finish(result);
@@ -334,7 +347,7 @@ function explore() {
   stop();
   notice(''); setPicking(null); closeSuggestions('start'); closeSuggestions('end');
   playing = true; carry = 0;
-  nationalPlayback = nationalReady || selections.start.node === -1 || selections.end.node === -1;
+  nationalPlayback = nationalReady || selections.start.node === -1 || selections.end.node === -1 || roadPreferences().avoidMotorways || roadPreferences().avoidTolls;
   traceStride = 1;
   $('playback').hidden = false;
   $('playback').classList.remove('complete');
@@ -357,7 +370,7 @@ async function exploreNational(activeRun: number, start: Place, end: Place, pref
   const index = new Map<number, number>(); renderer.setGraph(geometry);
   let receivedResult = false;
   try {
-    for await (const message of nationalRoute(start, end, preference, requestId, controller.signal)) {
+    for await (const message of nationalRoute(start, end, preference, requestId, controller.signal, mobileApp ? roadPreferences() : undefined)) {
       if (activeRun !== run) return;
       if ('snapped' in message) {
         if (!Array.isArray(message.snapped) || message.snapped.length !== 2 || !message.snapped.every(isInFrance) || !Number.isInteger(message.traceStride) || message.traceStride < 1) throw new Error('Métadonnées routières invalides.');
