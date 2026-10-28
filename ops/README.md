@@ -35,7 +35,8 @@ d’états et 120 secondes, avec un seul calcul simultané. Jusqu’à **quatre 
 attendent leur tour, dans l’ordre d’arrivée, pendant au plus 30 secondes. Une
 annulation interrompt aussi une demande en attente. Le serveur renvoie 429 si la
 file est pleine ou l’attente expire ; il n’alloue aucun graphe de recherche aux
-demandes en attente. Le service prévoit aussi
+demandes en attente. À l’arrêt, le serveur interrompt les demandes et attend la
+libération du calcul avant de fermer le graphe mappé en mémoire. Le service prévoit aussi
 des limites systemd ; leur contrôle mémoire dépend des contrôleurs cgroup du
 système. Sur le Pi contrôlé, `MemoryCurrent` n’est pas exposé : seule la limite
 de tas Java et la mémoire observée sont confirmées. Une limite atteinte renvoie

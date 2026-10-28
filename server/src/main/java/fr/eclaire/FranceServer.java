@@ -234,7 +234,12 @@ public final class FranceServer {
             try (var out = exchange.getResponseBody()) { Files.copy(file, out); }
         });
         server.start();
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> { server.stop(1); hopper.close(); }));
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            server.stop(1);
+            active.values().forEach(Thread::interrupt);
+            capacity.stop();
+            hopper.close();
+        }));
         System.out.println("Éclaire France ready: http://localhost:" + port);
     }
 

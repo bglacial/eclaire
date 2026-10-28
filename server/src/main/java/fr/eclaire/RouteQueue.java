@@ -23,4 +23,9 @@ final class RouteQueue {
         calculation.release();
         requests.release();
     }
+
+    void stop() {
+        // Hold the graph until process exit so no handler can read it after close.
+        calculation.acquireUninterruptibly();
+    }
 }

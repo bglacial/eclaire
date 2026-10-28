@@ -66,4 +66,18 @@ class RouteQueueTest {
         } finally { queue.release(); }
         assertQueueCapacityAndOrder(queue);
     }
+
+    @Test void shutdownWaitsForTheCurrentHandlerAndPreventsFurtherCalculations() throws Exception {
+        var queue = new RouteQueue();
+        assertTrue(queue.acquire(0));
+        var stopped = new CountDownLatch(1);
+        var shutdown = Thread.ofPlatform().start(() -> { queue.stop(); stopped.countDown(); });
+        try {
+            assertFalse(stopped.await(50, TimeUnit.MILLISECONDS));
+        } finally { queue.release(); }
+        assertTrue(stopped.await(2, TimeUnit.SECONDS));
+        shutdown.join(2000);
+        assertFalse(shutdown.isAlive());
+        assertFalse(queue.acquire(0));
+    }
 }
