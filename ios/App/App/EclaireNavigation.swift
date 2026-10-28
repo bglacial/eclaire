@@ -122,7 +122,7 @@ final class EclaireDevice: CAPPlugin, CAPBridgedPlugin {
         guard let enabled = call.getBool("enabled") else { call.reject("Missing enabled"); return }
         DispatchQueue.main.async { UIApplication.shared.isIdleTimerDisabled = enabled && UIApplication.shared.applicationState == .active; call.resolve() }
     }
-    @objc func getVersion(_ call: CAPPluginCall) { call.resolve(["version": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Indisponible"]) }
+    @objc func getVersion(_ call: CAPPluginCall) { call.resolve(["version": Bundle.main.object(forInfoDictionaryKey: "EclaireVersion") as? String ?? "Indisponible"]) }
 }
 
 final class EclaireViewController: CAPBridgeViewController {

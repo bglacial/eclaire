@@ -217,11 +217,15 @@ Ces temps sont mesurés sur le Mac local et ne prédisent pas les temps du Raspb
 
 ## Préversions alpha
 
+La version **1.1.0-alpha.4** ajoute les évitements mobiles et le guidage natif en arrière-plan Android/iOS. Les deux sujets ont chacun leur commit ; la version est portée par un troisième commit de publication.
+
 Sur téléphone dans l’application Android ou iOS, les options **Éviter les autoroutes** et **Éviter les péages** sont indépendantes, mémorisées sur l’appareil et conservées pour les recalculs. Elles s’appliquent au plus court comme au plus rapide, ainsi qu’au raccordement des points. Les autoroutes incluent leurs bretelles ; les péages réservés aux poids lourds ne sont pas exclus pour une voiture. Les attributs manquants suivent les règles OSM/GraphHopper du pays : ce n’est pas une garantie de gratuité. La signalisation reste prioritaire.
 
 Ces options exigent `/api/health` avec `roadPreferences: true`. L’application refuse un ancien serveur ou graphe et ne bascule jamais sur la démo Paris avec un évitement activé. Aucun contrôle d’évitement n’est proposé sur le web.
 
 La préversion GitHub contient l’APK de test Android, le JAR du serveur et leurs empreintes SHA-256. L’APK utilise `https://eclaire.nriault.fr/api`, garde l’identifiant `fr.eclaire.app` et doit conserver la signature debug des versions précédentes pour permettre leur mise à jour. Le harnais GPS simulé n’est pas inclus dans l’APK. Les builds ne remplacent pas une validation sur téléphone physique.
+
+L’archive `eclaire-1.1.0-alpha.4-ios-simulator.zip` contient aussi un build pour simulateur iOS, ARM64 et Intel. Ce build ne s’installe pas sur iPhone ; la distribution iPhone/TestFlight demande une signature et un profil Apple. Le projet Xcode complet est inclus dans les sources du tag.
 
 La publication d’une release ne déploie pas le serveur public. L’accélération des longs trajets demande le nouveau JAR **et les deux index v2 complets** du même graphe. Les données OSM et les index de plusieurs Go ne sont pas joints à la release. Suivre [les consignes Raspberry](ops/README.md), puis contrôler les deux compteurs `landmarks` de `/api/health`.
 
