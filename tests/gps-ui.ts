@@ -1,9 +1,29 @@
 // Harnais Vite de recette uniquement : exclu du build livré. Le calcul routier reste réel.
+import { GuidanceProgress, type NavigationRoute } from '../src/navigation';
+import type { NativeGuidanceState } from '../src/native-guidance';
+
+const nativeListeners = new Map<string, (state: NativeGuidanceState) => void>();
+let nativeProgress: GuidanceProgress | undefined;
+let nativeState: NativeGuidanceState = { active: false, status: 'stopped' };
 Object.assign(window, {
   CapacitorCustomPlatform: { name: 'android' },
   Capacitor: {
-    PluginHeaders: [{ name: 'EclaireDevice', methods: [{ name: 'setKeepScreenOn', rtype: 'promise' }, { name: 'getVersion', rtype: 'promise' }] }],
-    nativePromise: async (_plugin: string, method: string) => method === 'getVersion' ? { version: 'simulation' } : {},
+    PluginHeaders: [
+      { name: 'EclaireDevice', methods: [{ name: 'setKeepScreenOn', rtype: 'promise' }, { name: 'getVersion', rtype: 'promise' }] },
+      { name: 'EclaireNavigation', methods: ['start', 'stop', 'getState', 'setVoice', 'removeListener'].map(name => ({ name, rtype: 'promise' })).concat([{ name: 'addListener', rtype: 'callback' }]) },
+    ],
+    nativePromise: async (_plugin: string, method: string, options: { route?: NavigationRoute; callbackId?: string }) => {
+      if (method === 'getVersion') return { version: 'simulation' };
+      if (method === 'getState') return nativeState;
+      if (method === 'start') { nativeProgress = new GuidanceProgress(options.route!); nativeState = { active: true, status: 'starting' }; queueMicrotask(emit); }
+      if (method === 'stop') { nativeProgress = undefined; nativeState = { active: false, status: 'stopped' }; }
+      if (method === 'removeListener') nativeListeners.delete(options.callbackId!);
+      updateCount(); return {};
+    },
+    nativeCallback: (_plugin: string, method: string, options: { callbackId?: string }, callback: (state: NativeGuidanceState) => void) => {
+      if (method === 'removeListener') { nativeListeners.delete(options.callbackId!); return; }
+      const id = String(++identifier); nativeListeners.set(id, callback); return id;
+    },
   },
 });
 Object.defineProperty(navigator, 'userAgent', { configurable: true, value: 'Mozilla/5.0 (Linux; Android 14; Test Phone) AppleWebKit/537.36 Chrome/120.0 Mobile Safari/537.36' });
@@ -30,7 +50,15 @@ let delayPosition = false;
 const pendingPositions: (() => void)[] = [];
 const position = () => ({ timestamp: Date.now(), coords: { ...gps, altitude: null, altitudeAccuracy: null, speed, heading } }) as GeolocationPosition;
 const permissionError = { code: 1, message: 'Refus simulé', PERMISSION_DENIED: 1, POSITION_UNAVAILABLE: 2, TIMEOUT: 3 } as GeolocationPositionError;
-function emit() { for (const callback of watches.values()) denied ? callback.error?.(permissionError) : callback.success(position()); }
+function emit() {
+  for (const callback of watches.values()) denied ? callback.error?.(permissionError) : callback.success(position());
+  if (!nativeProgress || !nativeState.active) return;
+  const p = position(), fix = { lat: p.coords.latitude, lon: p.coords.longitude, accuracy: p.coords.accuracy, timestamp: p.timestamp, speed: p.coords.speed, heading: p.coords.heading };
+  const state = nativeProgress.update(fix);
+  nativeState = { active: !denied && state.status !== 'arrived', status: denied ? 'denied' : state.status, fix, match: state.status === 'on-route' || state.status === 'arrived' ? nativeProgress.match : undefined };
+  for (const callback of nativeListeners.values()) callback(nativeState);
+  updateCount();
+}
 Object.defineProperty(navigator, 'geolocation', { configurable: true, value: {
   getCurrentPosition(success: PositionCallback, error?: PositionErrorCallback) {
     const reply = () => denied ? error?.(permissionError) : success(position());
@@ -48,7 +76,7 @@ const label = document.createElement('strong'); label.textContent = 'RECETTE · 
 const count = document.createElement('span'); count.id = 'gps-watch-count'; panel.append(count);
 const controls = document.createElement('details');
 const controlsTitle = document.createElement('summary'); controlsTitle.textContent = 'Commandes de recette'; controls.append(controlsTitle); panel.append(controls);
-function updateCount() { count.textContent = `${watches.size} suivi(s) GPS · service ${serviceMode}`; }
+function updateCount() { count.textContent = `${watches.size + Number(nativeState.active)} suivi(s) GPS · service ${serviceMode}`; }
 function button(label: string, action: () => void) {
   const control = document.createElement('button'); control.textContent = label;
   control.style.cssText = 'font:11px sans-serif;color:#172320;background:#fff;border:1px solid #899084;border-radius:3px;padding:5px;';
@@ -76,6 +104,11 @@ button('Rétablir la carte', () => { document.getElementById('map')!.style.heigh
 button('Masquer l’application', () => {
   Object.defineProperty(document, 'hidden', { configurable: true, value: true }); document.dispatchEvent(new Event('visibilitychange'));
   Object.defineProperty(document, 'hidden', { configurable: true, value: false }); document.dispatchEvent(new Event('visibilitychange'));
+});
+button('Arrêter depuis la notification', () => {
+  nativeProgress = undefined; nativeState = { active: false, status: 'stopped' };
+  for (const callback of nativeListeners.values()) callback(nativeState);
+  updateCount();
 });
 document.body.append(panel); updateCount();
 void import('../src/app');

@@ -17,6 +17,7 @@ public class MainActivity extends BridgeActivity {
 
     @Override protected void onCreate(android.os.Bundle state) {
         registerPlugin(EclaireDevice.class);
+        registerPlugin(EclaireNavigation.class);
         super.onCreate(state);
         EdgeToEdge.enable(this);
         enableLegacyEdgeToEdge();

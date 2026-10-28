@@ -1,9 +1,10 @@
 import L from 'leaflet';
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, type PluginListenerHandle } from '@capacitor/core';
 import { Geolocation } from '@capacitor/geolocation';
 import { GuidanceProgress, RecentSpeed, routePosition, predictedRouteAt, guidanceDistance, usableFix, type GpsFix, type NavigationRoute } from './navigation';
 import { locationError, preciseLocationPermission } from './location';
 import { device, isMobileApp, screenUpdates } from './device';
+import { nativeGuidance, guidanceCommands, type NativeGuidanceState } from './native-guidance';
 
 const element = (id: string) => document.getElementById(id)!;
 const text = (id: string, value: string) => {
@@ -16,7 +17,8 @@ const text = (id: string, value: string) => {
 export class GpsGuidance {
   private route?: NavigationRoute;
   private progress?: GuidanceProgress;
-  private watch?: string;
+  private watch?: PluginListenerHandle;
+  private command = guidanceCommands();
   private generation = 0;
   private timer = 0;
   private marker?: L.Marker;
@@ -27,7 +29,6 @@ export class GpsGuidance {
   private fix?: GpsFix;
   private follow = true;
   private voice = false;
-  private spoken = new Set<string>();
   private session = false;
   private watching = false;
   private starting = false;
@@ -54,28 +55,38 @@ export class GpsGuidance {
       if (this.fix && usableFix(this.fix)) this.onRecalculate(this.fix);
       else this.status('Attendez une position GPS précise avant de recalculer.');
     });
-    element('navigation-voice').hidden = !('speechSynthesis' in window);
+    element('navigation-voice').hidden = !Capacitor.isNativePlatform();
     element('navigation-voice').addEventListener('click', () => {
       this.voice = !this.voice;
       element('navigation-voice').setAttribute('aria-pressed', String(this.voice));
       text('navigation-voice', this.voice ? 'Voix activée' : 'Activer la voix');
-      if (this.voice) this.speak('Guidage vocal activé.'); else window.speechSynthesis?.cancel();
+      const enabled = this.voice;
+      void this.command(() => nativeGuidance.setVoice({ enabled })).catch(() => this.status('La voix native est indisponible. Réessayez.'));
     });
     map.on('dragstart', () => { if (this.session) { this.follow = false; this.map.stopHeadingUp(); this.followLabel(); } });
     map.on('rotate', () => this.rotateVehicle());
-    document.addEventListener('visibilitychange', () => { if (document.hidden && this.watching) this.pause('Guidage en pause. Reprenez le GPS avec l’application visible.'); });
-    window.addEventListener('pagehide', () => this.stop(false));
+    document.addEventListener('visibilitychange', () => {
+      if (!this.watching) return;
+      void this.keepScreenOn(!document.hidden).catch(() => undefined);
+      if (document.hidden) { cancelAnimationFrame(this.frame); this.frame = 0; this.map.stopHeadingUp(); }
+      else {
+        const generation = this.generation;
+        void nativeGuidance.getState().then(state => { if (generation === this.generation) this.receiveNative(state); }).catch(() => { if (generation === this.generation) this.pause('Vérifiez les autorisations GPS, puis reprenez le guidage.'); });
+      }
+    });
+    window.addEventListener('pagehide', () => { if (!Capacitor.isNativePlatform()) this.stop(false); });
   }
 
   setRoute(route: NavigationRoute | null) {
     this.stop(false); this.line?.remove(); this.line = undefined; this.route = route ?? undefined;
     element('navigation-start').hidden = !route || !isMobileApp();
-    text('navigation-availability', !isMobileApp() ? 'Le guidage GPS est disponible dans l’application mobile.' : route ? 'GPS utilisé pendant le guidage, avec votre autorisation.' : 'Le guidage demande les manœuvres du service France à jour.');
+    text('navigation-availability', !isMobileApp() ? 'Le guidage GPS est disponible dans l’application mobile.' : route ? 'Le GPS continue en arrière-plan et écran verrouillé jusqu’à l’arrivée ou à Quitter. Activez la voix pour entendre les indications.' : 'Le guidage demande les manœuvres du service France à jour.');
   }
 
   async start() {
     if (!isMobileApp()) { text('navigation-availability', 'Le guidage GPS est disponible dans l’application mobile.'); return; }
     if (!this.route || this.watching || this.starting || document.hidden) return;
+    const route = this.route;
     const generation = ++this.generation;
     this.session = true; this.starting = true; this.follow = true; this.firstCenter = true; this.lastCenter = undefined; this.speeds = new RecentSpeed(); this.displayAt = undefined;
     this.progress ??= new GuidanceProgress(this.route);
@@ -98,31 +109,18 @@ export class GpsGuidance {
         if (Date.now() - this.lastGoodAt > 15_000) this.uncertain('Signal GPS perdu. Les indications sont suspendues.');
         (element('navigation-recalculate') as HTMLButtonElement).disabled = !this.fix || !usableFix(this.fix);
       }, 1000);
-      const id = await Geolocation.watchPosition({ enableHighAccuracy: true, maximumAge: 0, timeout: 15_000, interval: 2000, minimumUpdateInterval: 1000 }, (position, error) => {
-        if (generation !== this.generation) return;
-        if (error) {
-          const code = (error as { code?: number | string }).code;
-          if (code === 1 || code === 'OS-PLUG-GLOC-0003' || code === 'OS-PLUG-GLOC-0007') this.pause(locationError(error));
-          else this.uncertain(locationError(error));
-          return;
-        }
-        if (!position) return;
-        this.receive({ lat: position.coords.latitude, lon: position.coords.longitude, accuracy: position.coords.accuracy, timestamp: position.timestamp, speed: position.coords.speed, heading: position.coords.heading });
-      });
-      if (generation !== this.generation) await Geolocation.clearWatch({ id });
-      else {
-        this.watch = id;
-        if (Capacitor.getPlatform() === 'android') {
-          await this.keepScreenOn(true);
-        }
-      }
+      const watch = await nativeGuidance.addListener('location', state => { if (generation === this.generation && !document.hidden) this.receiveNative(state); });
+      if (generation !== this.generation) { await watch.remove(); return; }
+      this.watch = watch;
+      await this.command(async () => { if (generation === this.generation) await nativeGuidance.start({ route, voice: this.voice }); });
+      if (generation === this.generation) await this.keepScreenOn(!document.hidden).catch(() => undefined);
     } catch (error) {
-      if (generation === this.generation) this.pause(locationError(error));
+      if (generation === this.generation) this.pause(error instanceof Error && error.message ? error.message : locationError(error));
     }
   }
 
   stop(restore = true) {
-    this.release(); this.session = false; this.progress = undefined; this.fix = undefined; this.spoken.clear(); this.speeds = new RecentSpeed(); this.displayAt = undefined;
+    this.release(); this.session = false; this.progress = undefined; this.fix = undefined; this.speeds = new RecentSpeed(); this.displayAt = undefined;
     this.map.stopHeadingUp(); this.map.setBearing(0);
     this.marker?.remove(); this.accuracy?.remove(); this.approachPoint?.remove(); this.marker = undefined; this.accuracy = undefined; this.approachPoint = undefined;
     element('app').classList.remove('is-guiding'); element('navigation').hidden = true;
@@ -130,11 +128,13 @@ export class GpsGuidance {
     if (restore) { this.onExit(); element('navigation-start').focus(); }
   }
 
-  private release() {
+  private release(stopNative = true) {
     ++this.generation; this.watching = false; this.starting = false; clearInterval(this.timer); cancelAnimationFrame(this.frame); this.frame = 0; this.map.stopHeadingUp();
-    if (Capacitor.getPlatform() === 'android') void this.keepScreenOn(false).catch(() => undefined);
-    if (this.watch !== undefined) { void Geolocation.clearWatch({ id: this.watch }).catch(() => undefined); this.watch = undefined; }
-    window.speechSynthesis?.cancel();
+    if (Capacitor.isNativePlatform()) {
+      void this.keepScreenOn(false).catch(() => undefined);
+      if (stopNative) void this.command(() => nativeGuidance.stop()).catch(() => this.status('Vérifiez que le guidage est arrêté dans les commandes du téléphone.'));
+    }
+    if (this.watch) { void this.watch.remove().catch(() => undefined); this.watch = undefined; }
   }
 
   private pause(message: string) {
@@ -149,7 +149,23 @@ export class GpsGuidance {
     text('navigation-instruction', 'En attente d’un signal précis'); text('navigation-turn-distance', 'GPS');
     text('navigation-remaining', '—'); text('navigation-time', '—');
     element('navigation-recalculate').hidden = true;
-    this.status(message); window.speechSynthesis?.cancel();
+    this.status(message);
+  }
+
+  private receiveNative(state: NativeGuidanceState) {
+    if (state.status === 'arrived') { this.arrive(); return; }
+    if (!state.active) { this.pause(state.status === 'denied' ? 'Localisation refusée. Autorisez le GPS précis dans les réglages du téléphone.' : 'Guidage arrêté sur le téléphone. Reprenez le GPS pour continuer.'); return; }
+    if (state.status === 'uncertain') { this.uncertain('Signal GPS imprécis ou perdu. Les indications sont suspendues.'); return; }
+    if (!state.fix || (this.fix && state.fix.timestamp <= this.fix.timestamp)) return;
+    if (state.match && usableFix(state.fix)) this.progress!.match = state.match;
+    this.receive(state.fix);
+  }
+
+  private arrive() {
+    this.release(false); this.clearSpeed(); text('navigation-instruction', 'Vous êtes arrivé au point routier'); text('navigation-turn-distance', '0 m');
+    text('navigation-remaining', '0 m'); text('navigation-time', '0 min');
+    this.status('Position GPS arrêtée. Vérifiez l’accès final à votre destination.');
+    if (this.follow) this.center();
   }
 
   private receive(fix: GpsFix) {
@@ -184,7 +200,7 @@ export class GpsGuidance {
         this.map.fitBounds(L.latLngBounds([point, target]), { paddingTopLeft: [Math.max(40, left + 20), Math.max(40, top + 20)], paddingBottomRight: [Math.max(40, right + 20), Math.max(40, bottom + 20)], maxZoom: 17, animate: false });
         this.firstCenter = true; this.lastCenter = undefined;
       }
-      window.speechSynthesis?.cancel(); return;
+      return;
     }
     this.approachPoint?.remove(); this.approachPoint = undefined;
     if (state.status === 'off-route') {
@@ -195,7 +211,7 @@ export class GpsGuidance {
       this.status('Recalculez depuis votre position. Ne rejoignez pas la ligne à travers les obstacles.');
       this.followGpsHeading(fix);
       element('navigation-recalculate').hidden = false; (element('navigation-recalculate') as HTMLButtonElement).disabled = false;
-      if (this.follow) this.center(); window.speechSynthesis?.cancel(); return;
+      if (this.follow) this.center(); return;
     }
     element('navigation-recalculate').hidden = true;
     const match = this.progress!.match!;
@@ -207,10 +223,7 @@ export class GpsGuidance {
     if (this.frame) cancelAnimationFrame(this.frame);
     this.animatePosition();
     if (state.status === 'arrived') {
-      this.release(); this.clearSpeed(); text('navigation-instruction', 'Vous êtes arrivé au point routier'); text('navigation-turn-distance', '0 m');
-      text('navigation-remaining', '0 m'); text('navigation-time', '0 min');
-      this.status('Position GPS arrêtée. Vérifiez l’accès final à votre destination.');
-      if (this.follow) this.center(); this.speak('Vous êtes arrivé au point routier.'); return;
+      this.status('Confirmation de l’arrivée par le GPS du téléphone…'); return;
     }
     text('navigation-instruction', state.next.text); text('navigation-turn-distance', state.toTurn < 20 ? 'Maintenant' : `Dans ${guidanceDistance(state.toTurn)}`);
     text('navigation-remaining', guidanceDistance(state.remaining));
@@ -218,11 +231,6 @@ export class GpsGuidance {
     text('navigation-time', minutes < 60 ? `${Math.max(1, minutes)} min` : `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, '0')}`);
     this.status(match.distance > 35 ? `Position rapprochée du trajet à ${Math.round(match.distance)} m. Vérifiez comment rejoindre la route.` : `GPS actif · précision ± ${Math.round(fix.accuracy)} m · estimation sans trafic.`, match.distance > 35);
     if (this.follow) this.center();
-    if (this.voice) {
-      const stage = state.toTurn < 35 ? 'now' : state.toTurn < 200 ? 'near' : 'far';
-      const key = `${state.nextIndex}:${stage}`;
-      if (!this.spoken.has(key)) { this.spoken.add(key); this.speak(`${state.toTurn < 20 ? 'Maintenant' : `Dans ${guidanceDistance(state.toTurn)}`}, ${state.next.text}`); }
-    }
   }
 
   private animatePosition = () => {
@@ -275,8 +283,4 @@ export class GpsGuidance {
   }
   private clearSpeed() { text('navigation-speed', '—'); text('navigation-limit', 'Limite : —'); element('navigation-speed').classList.remove('over-limit'); }
   private status(message: string, visible = true) { text('navigation-status', message); element('navigation-status').hidden = !visible; }
-  private speak(message: string) {
-    if (!this.voice || !('speechSynthesis' in window) || document.hidden) return;
-    window.speechSynthesis.cancel(); const utterance = new SpeechSynthesisUtterance(message); utterance.lang = 'fr-FR'; window.speechSynthesis.speak(utterance);
-  }
 }

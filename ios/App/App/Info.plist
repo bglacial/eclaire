@@ -27,7 +27,9 @@
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>Éclaire utilise votre position pour vous guider sur votre trajet.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Éclaire utilise votre position pour vous guider sur votre trajet.</string>
+	<string>Éclaire utilise votre position pendant le guidage, y compris écran verrouillé ou lorsque vous utilisez une autre application. Le suivi s’arrête quand vous quittez le guidage.</string>
+	<key>UIBackgroundModes</key>
+	<array><string>location</string><string>audio</string></array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

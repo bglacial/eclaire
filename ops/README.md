@@ -172,7 +172,7 @@ La recette compare les coûts optimaux de référence pour Paris–Lyon, Brest�
 script côté loopback du serveur pour vérifier directement le moteur. Il couvre
 aussi Dunkerque–Perpignan pour les deux critères. Le scénario `traversee` de
 `stress-eclaire.py` permet de répéter ce trajet avec plusieurs clients. Le GPS nécessite HTTPS et une permission du
-navigateur. Le guidage expérimental reste limité à l’application visible.
+navigateur. Dans les applications mobiles à jour, le guidage natif continue en arrière-plan ; la publication web seule ne met pas à jour un APK ou une application iOS.
 
 Après mise à jour, vérifier que `/api/health` annonce **32 landmarks pour chacun des deux critères** dans son champ `landmarks`. Le JAR seul, sans les dossiers v2 complets, conserve les anciennes performances. La trace visuelle est désormais bornée pendant le calcul à 60 000 événements ; ses deux fronts restent chronologiques et son facteur d’échantillonnage est transmis au client. Le trajet, les restrictions et la preuve ne sont pas échantillonnés.
 
