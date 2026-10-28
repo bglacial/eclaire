@@ -31,7 +31,11 @@ anciens index à huit landmarks prenait environ six minutes sur le Mac utilisé.
 sans fichier OSM brut et sans recalculer ces index.
 
 `ops/eclaire.service` limite le tas Java à **512 Mo**, la recherche à deux millions
-d’états et 120 secondes, avec un seul calcul simultané. Le service prévoit aussi
+d’états et 120 secondes, avec un seul calcul simultané. Jusqu’à **quatre demandes**
+attendent leur tour, dans l’ordre d’arrivée, pendant au plus 30 secondes. Une
+annulation interrompt aussi une demande en attente. Le serveur renvoie 429 si la
+file est pleine ou l’attente expire ; il n’alloue aucun graphe de recherche aux
+demandes en attente. Le service prévoit aussi
 des limites systemd ; leur contrôle mémoire dépend des contrôleurs cgroup du
 système. Sur le Pi contrôlé, `MemoryCurrent` n’est pas exposé : seule la limite
 de tas Java et la mémoire observée sont confirmées. Une limite atteinte renvoie
@@ -134,9 +138,11 @@ Let’s Encrypt puis active la redirection HTTPS. Il teste Nginx avant rechargem
 et restaure le vhost précédent en cas d’échec. Les autres vhosts, dont la
 restriction domicile de Hermes, sont conservés.
 
-Le proxy limite les créations de trajet à **deux par minute et par IP**, avec une
-petite marge de rafale. Les prérequêtes CORS `OPTIONS` de l’APK ne consomment
-pas ce quota. Le dépassement renvoie 429 en JSON avec `Retry-After: 30` et les
+Le proxy limite les créations de trajet à **30 par minute et par IP**, avec une
+rafale de six demandes pour permettre plusieurs clients sur une même connexion.
+La file bornée du serveur protège la mémoire, indépendamment de ce quota réseau.
+Les prérequêtes CORS `OPTIONS` de l’APK ne consomment
+pas ce quota. Le dépassement renvoie 429 en JSON avec `Retry-After: 2` et les
 en-têtes CORS pour les seules origines autorisées, afin que l’APK affiche le délai.
 Après modification du script, le relancer avec sudo pour mettre à jour le proxy.
 Les requêtes API
@@ -152,8 +158,17 @@ curl -f https://eclaire.nriault.fr/api/health
 ```
 
 La recette compare les coûts optimaux de référence pour Paris–Lyon, Brest–Marseille et Téloché–Le Barcarès, vérifie les deux critères et couvre Ajaccio–Bastia. Les coûts de référence sont liés au snapshot OSM du 24 octobre 2026, aux coordonnées du script et au modèle de poids actuel. Lancer ce
-script côté loopback du serveur ; il dépasse volontairement la fréquence
-publique autorisée par Nginx. Le GPS nécessite HTTPS et une permission du
+script côté loopback du serveur pour vérifier directement le moteur. Il couvre
+aussi Dunkerque–Perpignan pour les deux critères. Le scénario `traversee` de
+`stress-eclaire.py` permet de répéter ce trajet avec plusieurs clients. Le GPS nécessite HTTPS et une permission du
 navigateur. Le guidage expérimental reste limité à l’application visible.
 
 Après mise à jour, vérifier que `/api/health` annonce **32 landmarks pour chacun des deux critères** dans son champ `landmarks`. Le JAR seul, sans les dossiers v2 complets, conserve les anciennes performances. La trace visuelle est désormais bornée pendant le calcul à 60 000 événements ; ses deux fronts restent chronologiques et son facteur d’échantillonnage est transmis au client. Le trajet, les restrictions et la preuve ne sont pas échantillonnés.
+
+Diagnostic du 28 octobre 2026 : le Pi chargeait encore 8 landmarks par critère.
+Dunkerque–Perpignan atteignait 2 000 002 états et renvoyait 422 pour les deux
+critères. Sur le même graphe, les index v2 préparés ramènent le travail à 5 798
+états en rapide et 501 212 en court, avec le même plafond de 512 Mo de tas Java.
+Ces compteurs sont mesurés sur le Mac ; les temps de réponse du Pi doivent être
+mesurés après transfert. Conserver le budget mémoire et déployer les index v2
+avant d’envisager une hausse du plafond de recherche.

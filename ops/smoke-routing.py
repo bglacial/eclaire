@@ -16,6 +16,8 @@ cases = [
     ('Brest–Marseille', 'distance', [48.3904, -4.4861], [43.2965, 5.3698], 1096550.6994009037),
     ('Téloché–Le Barcarès', 'time', [47.885649, 0.277005], [42.787086, 3.034846], 27313.397255289758),
     ('Téloché–Le Barcarès', 'distance', [47.885649, 0.277005], [42.787086, 3.034846], 707877.3176598481),
+    ('Dunkerque–Perpignan', 'time', [51.0344, 2.3768], [42.6887, 2.8948], 37532.205426813314),
+    ('Dunkerque–Perpignan', 'distance', [51.0344, 2.3768], [42.6887, 2.8948], 1058563.6425426053),
     ('Ajaccio–Bastia', 'time', [41.9192, 8.7386], [42.6973, 9.4509], None),
 ]
 for name, criterion, start, end, expected in cases:

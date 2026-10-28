@@ -31,7 +31,7 @@ public final class FranceServer {
     private final NationalHopper hopper;
     private final Profile profile;
     private final LandmarkStorage timeLandmarks, distanceLandmarks;
-    private final Semaphore capacity = new Semaphore(1);
+    private final RouteQueue capacity = new RouteQueue();
     private final ConcurrentHashMap<String, Thread> active = new ConcurrentHashMap<>();
     private final Set<String> origins = Set.of(System.getenv().getOrDefault("ECLAIRE_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173,http://localhost:8787,https://localhost,http://localhost,capacitor://localhost").split(","));
 
@@ -103,8 +103,8 @@ public final class FranceServer {
     }
 
     private void route(HttpExchange exchange) throws IOException {
-        if (!capacity.tryAcquire()) { json(exchange, 429, Map.of("error", "Le service calcule déjà un trajet. Réessayez dans un instant.")); return; }
         String requestId = null;
+        boolean acquired = false;
         try {
             byte[] body = exchange.getRequestBody().readNBytes(8193);
             if (body.length > 8192) throw new IllegalArgumentException("Requête trop volumineuse.");
@@ -115,6 +115,12 @@ public final class FranceServer {
             if (!Set.of("time", "distance").contains(criterion)) throw new IllegalArgumentException("Critère invalide.");
             double fromLat = coordinate(request.get("start"), "lat", 41.3, 51.2), fromLon = coordinate(request.get("start"), "lon", -5.3, 9.7);
             double toLat = coordinate(request.get("end"), "lat", 41.3, 51.2), toLon = coordinate(request.get("end"), "lon", -5.3, 9.7);
+            acquired = capacity.acquire(30_000);
+            if (!acquired) {
+                exchange.getResponseHeaders().set("Retry-After", "5");
+                json(exchange, 429, Map.of("error", "La file de calcul est pleine ou l’attente dépasse 30 secondes. Réessayez dans un instant."));
+                return;
+            }
             var time = timeWeighting();
             var filter = new DefaultSnapFilter(time, hopper.getEncodingManager().getBooleanEncodedValue("car_subnetwork"));
             var from = hopper.getLocationIndex().findClosest(fromLat, fromLon, filter);
@@ -164,14 +170,14 @@ public final class FranceServer {
                         "length", path.getDistance(), "seconds", path.getTime() / 1000.0, "cost", path.getWeight(), "visited", algo.getVisitedNodes(), "computeMs", computeMs,
                         "instructions", navigation(path, queryGraph, queryTime, hopper.getEncodingManager(), hopper.getTranslationMap().getWithFallBack(Locale.FRENCH)))));
             }
-        } catch (CancellationException error) {
+        } catch (CancellationException | InterruptedException error) {
             if (exchange.getResponseCode() == -1) json(exchange, 409, Map.of("error", "Exploration interrompue."));
         } catch (IllegalArgumentException error) {
             if (exchange.getResponseCode() == -1) json(exchange, 400, Map.of("error", error.getMessage() == null ? "Requête invalide." : error.getMessage()));
         } catch (Exception error) {
             System.err.println("Route failed: " + error.getClass().getSimpleName());
             if (exchange.getResponseCode() == -1) json(exchange, 500, Map.of("error", "Le service routier n’a pas pu terminer le calcul."));
-        } finally { if (requestId != null) active.remove(requestId, Thread.currentThread()); Thread.interrupted(); capacity.release(); exchange.close(); }
+        } finally { if (requestId != null) active.remove(requestId, Thread.currentThread()); Thread.interrupted(); if (acquired) capacity.release(); exchange.close(); }
     }
 
     static Double speedLimit(EdgeIteratorState edge, EncodedValueLookup encoding) {

@@ -171,7 +171,15 @@ Ce sont des observations sur cette machine et ces points publics, pas un engagem
 | `ECLAIRE_MAX_TRACE_EVENTS` | `60000` | Budget de trace visuelle |
 | `ECLAIRE_LANDMARKS` | `auto` | `auto` : charge v2 prêt, sinon v1, sinon Dijkstra ; `off` : Dijkstra ; `prepare` : prépare les 32 landmarks v2 ; `load` : charge un index existant sans reconstruction |
 
-Un seul calcul national est accepté à la fois pour maîtriser la mémoire ; le suivant reçoit un message explicite si le service est occupé. Une limite de calcul atteinte produit une erreur, jamais un trajet annoncé optimal. Le service écoute localement par défaut ; un hébergement public doit ajouter HTTPS et une protection adaptée contre les abus.
+Le serveur traite un calcul à la fois et accepte quatre demandes en attente
+pendant 30 secondes au maximum. La file est annulable et bornée pour protéger
+la mémoire. Sur Raspberry, vérifier que `/api/health` annonce 32 landmarks pour
+les deux critères : un index v1 à huit repères peut épuiser le budget de calcul
+sur une traversée de la France, même si le nouveau JAR est installé.
+
+Une limite de calcul atteinte produit une erreur, jamais un trajet annoncé optimal.
+Le service écoute localement par défaut ; un hébergement public doit ajouter
+HTTPS et une protection adaptée contre les abus.
 
 ## Limites connues
 
