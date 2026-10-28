@@ -218,3 +218,15 @@ cd android
 ```
 
 Le build web conserve `/api` comme URL relative. Après une synchronisation Android, refaire `VITE_ROUTING_API_URL= npm run build` pour restaurer ce build web sans écraser les assets déjà copiés dans Android.
+
+## Build iOS
+
+Sur un Mac équipé de Xcode complet, préparer le projet iOS avec l’adresse du service national, puis l’ouvrir dans Xcode :
+
+```sh
+npm ci
+VITE_ROUTING_API_URL=https://eclaire.nriault.fr/api npm run ios:sync
+npm run ios:open
+```
+
+Choisir un simulateur pour tester ou configurer une équipe de signature Apple dans Xcode pour compiler et installer sur un iPhone. Le projet utilise l’identifiant `fr.eclaire.app` et nécessite iOS 15 ou ultérieur. La géolocalisation demande une autorisation à l’utilisation ; le guidage est suspendu lorsque l’application n’est plus visible. Une build signée et un test sur iPhone restent nécessaires avant distribution.

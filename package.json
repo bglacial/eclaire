@@ -13,12 +13,15 @@
     "server:test": "./server/mvnw -f server/pom.xml test",
     "server:start": "java -Xmx12g -jar server/target/eclaire-routing.jar",
     "android:sync": "npm run build && cap sync android",
-    "android:open": "cap open android"
+    "android:open": "cap open android",
+    "ios:sync": "npm run build && cap sync ios",
+    "ios:open": "cap open ios"
   },
   "dependencies": {
     "@capacitor/android": "^8.0.0",
     "@capacitor/core": "^8.0.0",
     "@capacitor/geolocation": "^8.0.0",
+    "@capacitor/ios": "^8.5.3",
     "@tomickigrzegorz/leaflet-rotate": "^0.3.0",
     "leaflet": "^1.9.4"
   },
@@ -30,6 +33,8 @@
     "vite": "^7.3.1"
   },
   "overrides": {
-    "xcode": { "uuid": "^11.1.1" }
+    "xcode": {
+      "uuid": "^11.1.1"
+    }
   }
 }
