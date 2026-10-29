@@ -5,15 +5,18 @@ import type { NativeGuidanceState } from '../src/native-guidance';
 const nativeListeners = new Map<string, (state: NativeGuidanceState) => void>();
 let nativeProgress: GuidanceProgress | undefined;
 let nativeState: NativeGuidanceState = { active: false, status: 'stopped' };
+let updateCheckedAt = 0;
 Object.assign(window, {
   CapacitorCustomPlatform: { name: 'android' },
   Capacitor: {
     PluginHeaders: [
-      { name: 'EclaireDevice', methods: [{ name: 'setKeepScreenOn', rtype: 'promise' }, { name: 'getVersion', rtype: 'promise' }] },
+      { name: 'EclaireDevice', methods: ['setKeepScreenOn', 'getVersion', 'getUpdateStatus', 'checkForUpdates'].map(name => ({ name, rtype: 'promise' })) },
       { name: 'EclaireNavigation', methods: ['start', 'stop', 'getState', 'setVoice', 'removeListener'].map(name => ({ name, rtype: 'promise' })).concat([{ name: 'addListener', rtype: 'callback' }]) },
     ],
     nativePromise: async (_plugin: string, method: string, options: { route?: NavigationRoute; callbackId?: string }) => {
       if (method === 'getVersion') return { version: 'simulation' };
+      if (method === 'getUpdateStatus') return { lastCheckedAt: updateCheckedAt, checking: false };
+      if (method === 'checkForUpdates') { updateCheckedAt = Date.now(); return { status: 'current', lastCheckedAt: updateCheckedAt, checking: false }; }
       if (method === 'getState') return nativeState;
       if (method === 'start') { nativeProgress = new GuidanceProgress(options.route!); nativeState = { active: true, status: 'starting' }; queueMicrotask(emit); }
       if (method === 'stop') { nativeProgress = undefined; nativeState = { active: false, status: 'stopped' }; }

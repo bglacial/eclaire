@@ -11,6 +11,7 @@ import android.os.Build;
 import android.provider.Settings;
 import android.widget.Toast;
 import androidx.core.content.FileProvider;
+import com.getcapacitor.JSObject;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.ByteArrayOutputStream;
@@ -23,6 +24,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.function.Consumer;
 import javax.net.ssl.HttpsURLConnection;
 
 final class AppUpdater {
@@ -45,10 +47,28 @@ final class AppUpdater {
             else { if (pending != null) pending.delete(); pending = null; toast("Autorisation d’installation non accordée."); }
             return;
         }
+        check(false, null);
+    }
+
+    JSObject updateStatus() {
+        var prefs = activity.getPreferences(Activity.MODE_PRIVATE);
+        var result = new JSObject();
+        result.put("lastCheckedAt", prefs.getLong("update_attempt", prefs.getLong("update_check", 0)));
+        result.put("checking", checking);
+        return result;
+    }
+
+    void check(boolean force, Consumer<JSObject> completed) {
+        if (checking) {
+            if (completed != null) { var state = updateStatus(); state.put("status", "checking"); completed.accept(state); }
+            return;
+        }
         long last = activity.getPreferences(Activity.MODE_PRIVATE).getLong("update_check", 0);
-        if (checking || System.currentTimeMillis() - last < CHECK_INTERVAL) return;
+        if (!force && System.currentTimeMillis() - last < CHECK_INTERVAL) return;
         checking = true;
+        activity.getPreferences(Activity.MODE_PRIVATE).edit().putLong("update_attempt", System.currentTimeMillis()).apply();
         worker.execute(() -> {
+            String status = "error";
             try {
                 ReleaseVersion installed = ReleaseVersion.parse(activity.getPackageManager().getPackageInfo(activity.getPackageName(), 0).versionName);
                 if (installed == null) return;
@@ -70,6 +90,7 @@ final class AppUpdater {
                     }
                 }
                 activity.getPreferences(Activity.MODE_PRIVATE).edit().putLong("update_check", System.currentTimeMillis()).apply();
+                status = download == null ? "current" : "available";
                 if (download != null) {
                     String url = download, version = newest.name;
                     activity.runOnUiThread(() -> {
@@ -82,7 +103,13 @@ final class AppUpdater {
                 }
             } catch (Exception ignored) {
                 // Une vérification réseau échouée sera retentée à la prochaine ouverture.
-            } finally { checking = false; }
+            } finally {
+                checking = false;
+                if (completed != null) {
+                    var state = updateStatus(); state.put("status", status);
+                    activity.runOnUiThread(() -> completed.accept(state));
+                }
+            }
         });
     }
 

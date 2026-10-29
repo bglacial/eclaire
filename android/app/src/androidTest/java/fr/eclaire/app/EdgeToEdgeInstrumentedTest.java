@@ -20,6 +20,26 @@ import java.util.concurrent.atomic.AtomicReference;
 
 @RunWith(AndroidJUnit4.class)
 public class EdgeToEdgeInstrumentedTest {
+    @Test public void manualUpdateSearchBypassesCooldownAndDisplaysItsDate() throws Exception {
+        var instrumentation = InstrumentationRegistry.getInstrumentation();
+        var context = instrumentation.getTargetContext();
+        for (String permission : new String[] { android.Manifest.permission.ACCESS_COARSE_LOCATION, android.Manifest.permission.ACCESS_FINE_LOCATION }) instrumentation.getUiAutomation().grantRuntimePermission(context.getPackageName(), permission);
+        context.getSharedPreferences("MainActivity", android.content.Context.MODE_PRIVATE).edit()
+                .putLong("update_check", System.currentTimeMillis() + TimeUnit.HOURS.toMillis(6))
+                .putLong("update_attempt", 0).commit();
+        long started = System.currentTimeMillis();
+        try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(50);
+            while (!"true".equals(js(scenario, "Boolean(document.getElementById('updates-check'))")) && System.nanoTime() < deadline) Thread.sleep(200);
+            js(scenario, "document.getElementById('settings-open').click(); document.getElementById('updates-check').click(); void 0");
+            while (!"\"false\"".equals(js(scenario, "document.getElementById('updates-check').getAttribute('aria-busy')")) && System.nanoTime() < deadline) Thread.sleep(200);
+            String status = js(scenario, "document.getElementById('updates-status').textContent");
+            assertEquals("\"Cette version est à jour.\"", status);
+            assertTrue(context.getSharedPreferences("MainActivity", android.content.Context.MODE_PRIVATE).getLong("update_attempt", 0) >= started);
+            assertTrue(!"\"Jamais\"".equals(js(scenario, "document.getElementById('updates-last-check').textContent")));
+        }
+    }
+
     @Test public void systemBackClosesSettingsAndKeepsMapOpen() throws Exception {
         var instrumentation = InstrumentationRegistry.getInstrumentation();
         String app = instrumentation.getTargetContext().getPackageName();

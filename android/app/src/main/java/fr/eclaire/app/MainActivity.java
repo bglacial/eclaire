@@ -14,7 +14,7 @@ import android.webkit.WebView;
 import java.util.Locale;
 
 public class MainActivity extends BridgeActivity {
-    private AppUpdater updater;
+    AppUpdater updater;
 
     @Override protected void onCreate(android.os.Bundle state) {
         registerPlugin(EclaireDevice.class);

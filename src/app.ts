@@ -11,8 +11,9 @@ import { GpsGuidance } from './guidance';
 import { navigationRoute } from './navigation';
 import { locationError, preciseLocationPermission, selectionPosition } from './location';
 import { requestDeadline } from './request-deadline';
-import { device, isMobileApp } from './device';
+import { device } from './device';
 import { readSettings, readRoadPreferences, type Theme } from './settings';
+import { deployedVersion, lastUpdateCheck, updateCheckDate } from './updates';
 import { cancelNationalRoute, checkNationalService, decodeNationalMessage, franceBounds, isInFrance, nationalRoute, searchFrance } from './national';
 import type { Criterion, Dataset, ExplorationEvent, Place, RoadGeometry, RoadGraph, SearchResult, WorkerResponse } from './types';
 
@@ -87,9 +88,16 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <section id="settings-page" class="settings-page" aria-labelledby="settings-title" hidden>
     <header class="settings-header"><button id="settings-close" class="icon-button" aria-label="Retour à la carte">${icon('close')}</button><h2 id="settings-title">Paramètres</h2></header>
     <div class="settings-content">
-      <label for="settings-theme">Apparence</label><p>Choisissez le thème ou suivez celui du téléphone.</p><select id="settings-theme"><option value="auto">Automatique</option><option value="light">Clair</option><option value="dark">Sombre</option></select>
+      <label for="settings-theme">Apparence</label><p>Choisissez le thème ou suivez celui de l’appareil.</p><select id="settings-theme"><option value="auto">Automatique</option><option value="light">Clair</option><option value="dark">Sombre</option></select>
       <label for="settings-criterion">Trajet préféré</label><p>Ce choix s’applique aux prochains trajets.</p><select id="settings-criterion"><option value="time">Le plus rapide</option><option value="distance">Le plus court</option></select>
-      <p class="settings-version">Version de l’application <strong id="settings-version">—</strong></p><p id="settings-error" role="status" hidden></p>
+      <fieldset class="road-preferences settings-avoidance"><legend>Éviter sur les trajets</legend><label><input id="settings-avoid-motorways" type="checkbox"> Les autoroutes</label><label><input id="settings-avoid-tolls" type="checkbox"> Les péages</label><p>Ces choix sont mémorisés et restent modifiables pendant la préparation du trajet.</p></fieldset>
+      <section class="settings-updates" aria-labelledby="settings-updates-title"><h3 id="settings-updates-title">Mises à jour</h3>
+        <button id="updates-check" class="setting-button">Rechercher les mises à jour</button>
+        <p>Dernière recherche : <time id="updates-last-check">Jamais</time></p>
+        <p id="updates-status" role="status" aria-live="polite"></p>
+        <button id="updates-reload" class="setting-button" hidden>Actualiser l’application</button>
+      </section>
+      <p class="settings-version">Version <strong id="settings-version">${__APP_VERSION__}</strong></p><p id="settings-error" role="status" hidden></p>
     </div>
   </section>`;
 
@@ -100,21 +108,24 @@ document.addEventListener('pointerdown', () => document.documentElement.classLis
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const inputs = { start: $<HTMLInputElement>('start'), end: $<HTMLInputElement>('end') };
 const launch = $<HTMLButtonElement>('launch');
-const mobileApp = isMobileApp();
 const roadPreferences = () => ({ avoidMotorways: $<HTMLInputElement>('avoid-motorways').checked, avoidTolls: $<HTMLInputElement>('avoid-tolls').checked });
 {
   let avoided = { avoidMotorways: false, avoidTolls: false };
   try { avoided = readRoadPreferences(localStorage); } catch { /* Storage can be unavailable. */ }
   for (const [id, key] of [['avoid-motorways', 'avoidMotorways'], ['avoid-tolls', 'avoidTolls']] as const) {
-    const input = $<HTMLInputElement>(id); input.checked = avoided[key];
-    input.addEventListener('change', () => {
-      try { localStorage.setItem(`eclaire.${key}`, String(input.checked)); }
-      catch { notice('Ce choix s’applique au trajet, mais ne pourra pas être mémorisé.'); }
-      stop();
-    });
+    const controls = [$<HTMLInputElement>(id), $<HTMLInputElement>(`settings-${id}`)];
+    for (const input of controls) {
+      input.checked = avoided[key];
+      input.addEventListener('change', () => {
+        controls.forEach(control => { control.checked = input.checked; });
+        try { localStorage.setItem(`eclaire.${key}`, String(input.checked)); }
+        catch { notice('Ce choix s’applique au trajet, mais ne pourra pas être mémorisé.'); }
+        stop();
+      });
+    }
   }
 }
-if (mobileApp) {
+{
   $('settings-open').hidden = false;
   let saved = { theme: 'auto' as Theme, criterion: 'time' as Criterion };
   try { saved = readSettings(localStorage); } catch { /* Storage can be unavailable. */ }
@@ -125,7 +136,7 @@ if (mobileApp) {
   const applyTheme = () => {
     const dark = theme.value === 'dark' || (theme.value === 'auto' && systemTheme.matches);
     document.documentElement.dataset.theme = dark ? 'dark' : 'light';
-    void SystemBars.setStyle({ style: dark ? SystemBarsStyle.Dark : SystemBarsStyle.Light }).catch(() => undefined);
+    if (Capacitor.isNativePlatform()) void SystemBars.setStyle({ style: dark ? SystemBarsStyle.Dark : SystemBarsStyle.Light }).catch(() => undefined);
   };
   const save = (key: string, value: string) => {
     try { localStorage.setItem(key, value); $('settings-error').hidden = true; }
@@ -138,14 +149,48 @@ if (mobileApp) {
     const radio = document.querySelector<HTMLInputElement>(`input[name="criterion"][value="${preferred.value}"]`)!;
     if (!radio.checked) { radio.checked = true; radio.dispatchEvent(new Event('change', { bubbles: true })); }
   });
-  $('settings-open').addEventListener('click', () => { $('settings-page').hidden = false; $('settings-close').focus(); });
+  const android = Capacitor.getPlatform() === 'android';
+  const updateDate = (value: unknown) => {
+    const timestamp = lastUpdateCheck(value), date = $<HTMLTimeElement>('updates-last-check');
+    date.textContent = updateCheckDate(timestamp);
+    date.dateTime = timestamp ? new Date(timestamp).toISOString() : '';
+  };
+  try { updateDate(localStorage.getItem('eclaire.updateAttempt')); } catch { updateDate(0); }
+  $('settings-open').addEventListener('click', () => {
+    $('settings-page').hidden = false; $('settings-close').focus();
+    if (android) void device.getUpdateStatus().then(state => updateDate(state.lastCheckedAt)).catch(() => { $('updates-status').textContent = 'La date de la dernière recherche est indisponible.'; });
+  });
   const closeSettings = () => { $('settings-page').hidden = true; $('settings-open').focus(); };
   $('settings-close').addEventListener('click', closeSettings);
   window.addEventListener('eclaire-back', event => {
     if (!$('settings-page').hidden) { event.preventDefault(); closeSettings(); }
   });
   document.addEventListener('keydown', event => { if (event.key === 'Escape' && !$('settings-page').hidden) closeSettings(); });
-  void device.getVersion().then(info => { $('settings-version').textContent = info.version; }).catch(() => { $('settings-version').textContent = 'Indisponible'; });
+  $('updates-reload').addEventListener('click', () => location.reload());
+  $('updates-check').addEventListener('click', async () => {
+    const button = $<HTMLButtonElement>('updates-check');
+    button.disabled = true; button.setAttribute('aria-busy', 'true');
+    $('updates-status').textContent = 'Recherche en cours…'; $('updates-reload').hidden = true;
+    try {
+      if (android) {
+        const state = await device.checkForUpdates(); updateDate(state.lastCheckedAt);
+        const messages = {
+          available: 'Une mise à jour est disponible. Confirmez son installation dans la fenêtre Android.',
+          current: 'Cette version est à jour.',
+          checking: 'Une recherche est déjà en cours. Réessayez dans un instant.',
+          error: 'Recherche impossible. Vérifiez votre connexion puis réessayez.',
+        };
+        $('updates-status').textContent = messages[state.status ?? 'error'];
+      } else {
+        const timestamp = Date.now(); updateDate(timestamp);
+        try { localStorage.setItem('eclaire.updateAttempt', String(timestamp)); } catch { /* The date remains visible for this session. */ }
+        const version = await deployedVersion();
+        $('updates-status').textContent = version === __APP_VERSION__ ? 'Cette version est à jour.' : Capacitor.isNativePlatform() ? `Le site utilise la version ${version}. Les mises à jour iOS nécessitent une nouvelle installation de l’application.` : `La version ${version} est disponible.`;
+        $('updates-reload').hidden = version === __APP_VERSION__ || Capacitor.isNativePlatform();
+      }
+    } catch { $('updates-status').textContent = 'Recherche impossible. Vérifiez votre connexion puis réessayez.'; }
+    finally { button.disabled = false; button.setAttribute('aria-busy', 'false'); }
+  });
 }
 type Endpoint = 'start' | 'end';
 type Selection = Place & { node: number; snapDistance: number };

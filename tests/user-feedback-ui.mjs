@@ -3,6 +3,7 @@
 import { createRequire } from 'node:module';
 import assert from 'node:assert/strict';
 const { chromium } = createRequire(import.meta.url)('playwright');
+const { version } = createRequire(import.meta.url)('../package.json');
 const base = process.env.ECLAIRE_TEST_URL || 'http://127.0.0.1:5173';
 const browser = await chromium.launch({ headless: true, channel: 'chrome' });
 const passed = [];
@@ -54,6 +55,25 @@ async function calculate(page) {
 try {
   const web = await setup();
   assert.equal(await web.page.locator('#end').inputValue(), '');
+  await web.page.locator('#settings-open').click();
+  assert.equal(await web.page.locator('#settings-version').textContent(), version);
+  assert.equal(await web.page.locator('#updates-last-check').textContent(), 'Jamais');
+  await web.page.locator('#settings-avoid-motorways').check();
+  assert.equal(await web.page.locator('#avoid-motorways').isChecked(), true);
+  await web.page.locator('#updates-check').click();
+  await web.page.waitForFunction(() => document.getElementById('updates-status').textContent === 'Cette version est à jour.');
+  assert.notEqual(await web.page.locator('#updates-last-check').textContent(), 'Jamais');
+  await web.page.screenshot({ path: '/tmp/eclaire-alpha6-settings.png' });
+  await web.page.route('**/version.json', route => route.fulfill({ json: { version: '99.0.0-alpha.1' } }));
+  await web.page.locator('#updates-check').click();
+  await web.page.locator('#updates-reload').waitFor({ state: 'visible' });
+  await web.page.route('**/version.json', route => route.fulfill({ status: 503, body: 'offline' }));
+  await web.page.locator('#updates-check').click();
+  await web.page.waitForFunction(() => document.getElementById('updates-status').textContent.includes('Recherche impossible'));
+  assert.equal(await web.page.locator('#updates-reload').isVisible(), false);
+  assert.equal(await web.page.locator('#updates-check').isEnabled(), true);
+  await web.page.locator('#settings-close').click();
+  check('Paramètres Web : version, évitements synchronisés, date, version disponible et erreur réseau explicite');
   await web.page.locator('#road-preferences').waitFor({ state: 'visible' });
   await web.page.locator('#avoid-motorways').check(); await web.page.locator('#avoid-tolls').check();
   await choose(web.page, 'end', 'Panthéon');
@@ -76,6 +96,10 @@ try {
   assert.equal(await web.page.locator('#route-result').isVisible(), true);
   await web.page.reload(); await web.page.locator('#loading').waitFor({ state: 'hidden' });
   assert.equal(await web.page.locator('#avoid-tolls').isChecked(), true);
+  await web.page.locator('#settings-open').click();
+  assert.equal(await web.page.locator('#settings-avoid-tolls').isChecked(), true);
+  assert.notEqual(await web.page.locator('#updates-last-check').textContent(), 'Jamais');
+  await web.page.locator('#settings-close').click();
   check('Panneau réductible, carte manipulable, restauration et préférences mémorisées');
   assert.deepEqual(web.errors, []); await web.context.close();
 
@@ -98,6 +122,9 @@ try {
   const { page } = native;
   await page.locator('#gps-fixture').evaluate(el => { el.style.display = 'none'; });
   await page.locator('#settings-open').click();
+  await page.locator('#updates-check').click();
+  await page.waitForFunction(() => document.getElementById('updates-status').textContent === 'Cette version est à jour.');
+  assert.notEqual(await page.locator('#updates-last-check').textContent(), 'Jamais');
   const handled = await page.evaluate(() => !window.dispatchEvent(new Event('eclaire-back', { cancelable: true })));
   assert.equal(handled, true); assert.equal(await page.locator('#settings-page').isVisible(), false);
   assert.equal(await page.evaluate(() => window.dispatchEvent(new Event('eclaire-back', { cancelable: true }))), true);

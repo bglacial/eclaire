@@ -213,6 +213,11 @@ input[type=search]::-webkit-search-cancel-button { display: none; }
 .settings-content select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .settings-content .settings-version { margin-top: 32px; display: flex; justify-content: space-between; gap: 12px; border-top: 1px solid var(--line); padding-top: 20px; }
 .settings-content .settings-version strong { color: var(--ink); }
+.settings-content .settings-avoidance { margin-top: 28px; }
+.settings-content .settings-avoidance label { display: flex; align-items: center; min-height: 44px; margin-top: 0; font-weight: 400; }
+.settings-updates { margin-top: 28px; }
+.settings-updates h3 { margin: 0 0 16px; font-size: 18px; }
+.settings-updates .setting-button { width: 100%; }
 :root[data-theme=dark] .national-tiles { filter: grayscale(0.7) invert(1) hue-rotate(180deg) brightness(0.8); opacity: 1; }
 :root[data-theme=dark] .navigation-actions button[aria-pressed=true], :root[data-theme=dark] .setting-button[aria-pressed=true], :root[data-theme=dark] .suggestion[aria-selected=true] { background: oklch(0.38 0.07 270); }
 :root[data-theme=dark] .field-point, :root[data-theme=dark] .endpoint-badge { background: oklch(0.33 0.05 210); }

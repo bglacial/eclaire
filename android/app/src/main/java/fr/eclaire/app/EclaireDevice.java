@@ -10,6 +10,17 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 
 @CapacitorPlugin(name = "EclaireDevice")
 public class EclaireDevice extends Plugin {
+    @PluginMethod public void getUpdateStatus(PluginCall call) {
+        getActivity().runOnUiThread(() -> call.resolve(((MainActivity) getActivity()).updater.updateStatus()));
+    }
+
+    @PluginMethod public void checkForUpdates(PluginCall call) {
+        getActivity().runOnUiThread(() -> {
+            if (!getActivity().getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.RESUMED)) { call.reject("Ouvrez Éclaire pour rechercher une mise à jour."); return; }
+            ((MainActivity) getActivity()).updater.check(true, call::resolve);
+        });
+    }
+
     @PluginMethod public void setKeepScreenOn(PluginCall call) {
         Boolean enabled = call.getBoolean("enabled");
         if (enabled == null) { call.reject("Missing enabled"); return; }
