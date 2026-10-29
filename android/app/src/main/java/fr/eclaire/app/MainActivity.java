@@ -3,6 +3,7 @@ package fr.eclaire.app;
 import com.getcapacitor.BridgeActivity;
 import com.getcapacitor.WebViewListener;
 import androidx.activity.EdgeToEdge;
+import androidx.activity.OnBackPressedCallback;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
@@ -22,6 +23,16 @@ public class MainActivity extends BridgeActivity {
         EdgeToEdge.enable(this);
         enableLegacyEdgeToEdge();
         updater = new AppUpdater(this);
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override public void handleOnBackPressed() {
+                getBridge().getWebView().evaluateJavascript("!window.dispatchEvent(new Event('eclaire-back', {cancelable:true}))", handled -> {
+                    if ("true".equals(handled)) return;
+                    setEnabled(false);
+                    try { getOnBackPressedDispatcher().onBackPressed(); }
+                    finally { setEnabled(true); }
+                });
+            }
+        });
     }
 
     private void enableLegacyEdgeToEdge() {

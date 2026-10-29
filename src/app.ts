@@ -6,6 +6,7 @@ import { Capacitor, SystemBars, SystemBarsStyle } from '@capacitor/core';
 import { buildRoadGraph, nearestNode } from './graph';
 import { createMap, pointMarker } from './map';
 import { ExplorationRenderer } from './animation';
+import { playbackRate } from './animation-timing';
 import { GpsGuidance } from './guidance';
 import { navigationRoute } from './navigation';
 import { locationError, preciseLocationPermission, selectionPosition } from './location';
@@ -46,6 +47,8 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <main>
     <div id="map" aria-label="Carte interactive de France. Utilisez les boutons Choisir sur la carte, puis touchez une route." role="region"></div>
     <section class="planner" aria-labelledby="planner-title">
+      <button id="route-panel-toggle" class="setting-button" aria-expanded="true" aria-controls="planner-content" hidden>Réduire le panneau trajet</button>
+      <div id="planner-content">
       <div class="planner-intro"><span class="eyebrow">${icon('car')} À vous la route</span><h1 id="planner-title">Votre prochain<br><span>trajet.</span></h1><p>Choisissez deux points.<br>Regardez le chemin prendre vie.</p></div>
       <div class="exploring-heading"><span class="eyebrow">${icon('bolt')} Exploration</span><h2>Les routes font le lien.</h2><p>Deux fronts, un itinéraire à trouver.</p></div>
       <details id="route-editor" open><summary>Modifier le trajet ${icon('route')}</summary><div class="route-form">
@@ -55,12 +58,13 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       </div>
       <div class="location-actions"><button id="geolocate" class="location-button" aria-label="Utiliser ma position comme départ">${icon('locate')} Ma position</button><button id="swap" class="swap-button" aria-label="Permuter le départ et l’arrivée">${icon('swap')} Permuter</button></div>
       <fieldset class="criteria"><legend>Critère du trajet</legend><label><input type="radio" name="criterion" value="time" checked><span>${icon('time')} Le plus rapide</span></label><label><input type="radio" name="criterion" value="distance"><span>${icon('route')} Le plus court</span></label></fieldset>
-      <fieldset id="road-preferences" class="road-preferences" hidden aria-describedby="road-preferences-help"><legend>Éviter sur ce trajet</legend><label><input id="avoid-motorways" type="checkbox"> Les autoroutes</label><label><input id="avoid-tolls" type="checkbox"> Les péages</label><p id="road-preferences-help">Selon les données OpenStreetMap, parfois incomplètes. Service France requis, sans secours Paris avec ces options.</p></fieldset>
-      <div class="launch-row"><button id="launch" class="primary" disabled>${icon('bolt')}<span>Chargement des routes…</span>${icon('arrow')}</button><button id="reset" class="icon-button reset-button" aria-label="Recommencer avec le parcours initial" title="Recommencer">${icon('reset')}</button></div>
+      <fieldset id="road-preferences" class="road-preferences" aria-describedby="road-preferences-help"><legend>Éviter sur ce trajet</legend><label><input id="avoid-motorways" type="checkbox"> Les autoroutes</label><label><input id="avoid-tolls" type="checkbox"> Les péages</label><p id="road-preferences-help">Selon les données OpenStreetMap, parfois incomplètes. Service France requis, sans secours Paris avec ces options.</p></fieldset>
+      <div class="launch-row"><button id="launch" class="primary" disabled>${icon('bolt')}<span>Chargement des routes…</span>${icon('arrow')}</button><button id="reset" class="icon-button reset-button" aria-label="Effacer le trajet et utiliser ma position" title="Recommencer">${icon('reset')}</button></div>
       </div></details>
       <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
       <div id="route-result" class="route-result" role="status" aria-live="polite" hidden><div class="result-heading"><span>${icon('check')} Trajet trouvé</span><span id="result-criterion"></span></div><div id="route-endpoints" class="route-endpoints"></div><div class="metrics"><div><strong id="duration"></strong><span>durée estimée</span></div><div><strong id="distance"></strong><span>distance</span></div></div><p>Estimation sans trafic en direct.</p><button id="navigation-start" class="primary" hidden>${icon('locate')} Démarrer le guidage GPS</button><p id="navigation-availability"></p></div>
       <div class="planner-footer">${icon('car')} En voiture <span>·</span><span id="coverage">Connexion au service France…</span></div>
+      </div>
     </section>
     <div class="map-tools"><button id="france" class="icon-button france-button" aria-label="Voir toute la France" title="Voir toute la France">FR</button><button id="fit" class="icon-button" aria-label="Recentrer sur les deux points" title="Recentrer">${icon('expand')}</button><div class="zoom-controls"><button id="zoom-in" class="icon-button" aria-label="Zoom avant">${icon('plus')}</button><button id="zoom-out" class="icon-button" aria-label="Zoom arrière">${icon('minus')}</button></div></div>
     <div id="pick-hint" class="pick-hint" role="status" hidden><span></span><button id="cancel-pick" class="icon-button" aria-label="Annuler la sélection">${icon('close')}</button></div>
@@ -77,7 +81,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       </div>
     </section>
     <div class="map-legend"><span><i class="cyan"></i>Départ A</span><span><i class="amber"></i>Arrivée B</span><span><i class="final"></i>Trajet</span></div>
-    <dialog id="about" class="about" aria-labelledby="about-title"><button id="close-about" class="icon-button" aria-label="Fermer l’aide">${icon('close')}</button><h2 id="about-title">Comment ça marche</h2><p>Un front cyan part de A, un front ambre part de B. Chaque branche suit une route réellement explorée.</p><p>La première rencontre ne suffit pas. Le trajet apparaît quand le calcul confirme qu’aucun meilleur chemin n’existe dans le réseau chargé.</p><dl><div><dt>Le plus court</dt><dd>Minimise la longueur des routes.</dd></div><div><dt>Le plus rapide</dt><dd>Minimise le temps estimé selon les vitesses OSM, sans trafic en direct.</dd></div></dl><button id="lite" class="setting-button" aria-pressed="false">${icon('layers')} Mode léger</button><p>Réduit les halos et le nombre de fronts pour les appareils modestes. La réduction des animations suit aussi votre préférence système.</p><details><summary>Données et limites</summary><p>Le service France utilise une recherche bidirectionnelle exacte. Les grandes traces sont échantillonnées pour préserver le téléphone ; le calcul et le trajet final restent complets. Sans service, seule la démo Paris utilise le calcul embarqué.</p><p id="data-info"></p><p>Les points sont raccordés à une route accessible à 2 km maximum. Les accès privés et de desserte sont exclus. Certaines restrictions OSM ne sont pas prises en charge. Vérifiez l’accès final et respectez la signalisation.</p><p>Le guidage GPS expérimental est réservé à l’application mobile sur téléphone. Le GPS continue écran verrouillé jusqu’à l’arrivée ou à Quitter. Aucun trafic en direct n’est intégré.</p><a href="/data/provenance.json" target="_blank" rel="noopener">Provenance de la démo Paris</a></details><details><summary>Position et confidentialité</summary><p>Le GPS reste sur l’appareil pendant le suivi. Un recalcul transmet la position au service routier configuré. L’IGN reçoit le texte recherché. Le fournisseur des tuiles reçoit les zones consultées. Aucun historique GPS n’est enregistré par l’application.</p></details></dialog>
+    <dialog id="about" class="about" aria-labelledby="about-title"><button id="close-about" class="icon-button" aria-label="Fermer l’aide">${icon('close')}</button><h2 id="about-title">Comment ça marche</h2><p>Un front cyan part de A, un front ambre part de B. Chaque branche suit une route réellement explorée.</p><p>La première rencontre ne suffit pas. Le trajet apparaît quand le calcul confirme qu’aucun meilleur chemin n’existe dans le réseau chargé.</p><dl><div><dt>Le plus court</dt><dd>Minimise la longueur des routes.</dd></div><div><dt>Le plus rapide</dt><dd>Minimise le temps estimé selon les vitesses OSM, sans trafic en direct.</dd></div></dl><button id="lite" class="setting-button" aria-pressed="false">${icon('layers')} Mode léger</button><p>Réduit les halos et le nombre de fronts pour les appareils modestes. La réduction des animations suit aussi votre préférence système.</p><details><summary>Données et limites</summary><p>Le service France utilise une recherche bidirectionnelle exacte. Les grandes traces sont échantillonnées pour préserver le téléphone ; le calcul et le trajet final restent complets. Sans service, seule la démo Paris utilise le calcul embarqué.</p><p id="data-info"></p><p>Les points sont raccordés à une route accessible à 2 km maximum. Les accès privés et de desserte sont exclus. Certaines restrictions OSM ne sont pas prises en charge. Vérifiez l’accès final et respectez la signalisation.</p><p>Le guidage GPS expérimental est réservé à l’application mobile sur téléphone. Le GPS continue écran verrouillé jusqu’à l’arrivée ou à Quitter. Aucun trafic en direct n’est intégré.</p><a href="/data/provenance.json" target="_blank" rel="noopener">Provenance de la démo Paris</a></details><details><summary>Position et confidentialité</summary><p>Le GPS reste sur l’appareil pendant le suivi. Le calcul d’un trajet depuis votre position transmet ce point au service routier configuré, ainsi que les recalculs. L’IGN reçoit le texte recherché. Le fournisseur des tuiles reçoit les zones consultées. Aucun historique GPS n’est enregistré par l’application.</p></details></dialog>
     <div id="loading" class="loading" role="status"><span class="loading-bolt">${icon('bolt')}</span><strong>Chargement de la carte</strong><p>Chargement des données OpenStreetMap…</p><button id="retry" class="primary" hidden>Réessayer</button></div>
   </main>
   <section id="settings-page" class="settings-page" aria-labelledby="settings-title" hidden>
@@ -97,10 +101,8 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 const inputs = { start: $<HTMLInputElement>('start'), end: $<HTMLInputElement>('end') };
 const launch = $<HTMLButtonElement>('launch');
 const mobileApp = isMobileApp();
-const roadPreferences = () => ({ avoidMotorways: mobileApp && $<HTMLInputElement>('avoid-motorways').checked, avoidTolls: mobileApp && $<HTMLInputElement>('avoid-tolls').checked });
-if (mobileApp) {
-  $('settings-open').hidden = false;
-  $('road-preferences').hidden = false;
+const roadPreferences = () => ({ avoidMotorways: $<HTMLInputElement>('avoid-motorways').checked, avoidTolls: $<HTMLInputElement>('avoid-tolls').checked });
+{
   let avoided = { avoidMotorways: false, avoidTolls: false };
   try { avoided = readRoadPreferences(localStorage); } catch { /* Storage can be unavailable. */ }
   for (const [id, key] of [['avoid-motorways', 'avoidMotorways'], ['avoid-tolls', 'avoidTolls']] as const) {
@@ -111,6 +113,9 @@ if (mobileApp) {
       stop();
     });
   }
+}
+if (mobileApp) {
+  $('settings-open').hidden = false;
   let saved = { theme: 'auto' as Theme, criterion: 'time' as Criterion };
   try { saved = readSettings(localStorage); } catch { /* Storage can be unavailable. */ }
   const theme = $<HTMLSelectElement>('settings-theme'), preferred = $<HTMLSelectElement>('settings-criterion');
@@ -136,6 +141,9 @@ if (mobileApp) {
   $('settings-open').addEventListener('click', () => { $('settings-page').hidden = false; $('settings-close').focus(); });
   const closeSettings = () => { $('settings-page').hidden = true; $('settings-open').focus(); };
   $('settings-close').addEventListener('click', closeSettings);
+  window.addEventListener('eclaire-back', event => {
+    if (!$('settings-page').hidden) { event.preventDefault(); closeSettings(); }
+  });
   document.addEventListener('keydown', event => { if (event.key === 'Escape' && !$('settings-page').hidden) closeSettings(); });
   void device.getVersion().then(info => { $('settings-version').textContent = info.version; }).catch(() => { $('settings-version').textContent = 'Indisponible'; });
 }
@@ -189,6 +197,8 @@ function updateLaunch() {
 
 function stop(clear = true) {
   cancelLocationRequest();
+  setPanelCollapsed(false);
+  $('route-panel-toggle').hidden = true;
   $<HTMLDetailsElement>('route-editor').open = true;
   guidance?.setRoute(null); resumeGuidance = false;
   routeAbort?.abort(); routeAbort = undefined;
@@ -256,7 +266,11 @@ function fitPoints() {
   const compact = mobile && matchMedia('(max-height: 700px)').matches;
   const showingResult = !$<HTMLDetailsElement>('route-editor').open && !$('route-result').hidden;
   const plannerHeight = document.querySelector('.planner')!.getBoundingClientRect().height;
-  map.fitBounds(L.latLngBounds(markers.start!.getLatLng(), markers.end!.getLatLng()), {
+  const bounds = result?.path.length ? L.latLngBounds(result.path.flatMap(id => {
+    const edge = routeGeometry.edges[id];
+    return edge.geometry?.map(p => L.latLng(p[0], p[1])) ?? [routeGeometry.nodes[edge.from], routeGeometry.nodes[edge.to]].map(p => L.latLng(p.lat, p.lon));
+  })) : L.latLngBounds(markers.start!.getLatLng(), markers.end!.getLatLng());
+  map.fitBounds(bounds, {
     paddingTopLeft: mobile ? [48, compact ? showingResult ? 70 : playing ? 110 : 126 : playing ? 220 : 170] : [470, 100], paddingBottomRight: mobile ? [85, plannerHeight + 52] : [110, playing ? 220 : 130], maxZoom: 16, animate: !renderer.reducedMotion && !document.documentElement.classList.contains('keyboard-input'),
   });
 }
@@ -304,6 +318,7 @@ function complete() {
   editor.open = false;
   document.querySelector('.planner')!.scrollTop = 0;
   $('route-result').hidden = false;
+  $('route-panel-toggle').hidden = false;
   if (restoreFocus) editor.querySelector('summary')!.focus({ preventScroll: true });
   $('playback-title').textContent = 'La rencontre a eu lieu.';
   $('playback-count').textContent = `${result.visited.toLocaleString('fr-FR')} états explorés · optimalité confirmée`;
@@ -312,8 +327,8 @@ function complete() {
   $('playback').classList.add('complete');
   notice(nationalPlayback && traceStride > 1 ? `${result.visited.toLocaleString('fr-FR', { notation: 'compact', maximumFractionDigits: 2 })} états explorés · trace 1/${traceStride} par front.` : '');
   $('playback').hidden = true;
-  if (resumeGuidance) { resumeGuidance = false; void guidance?.start(); }
-  else if (matchMedia('(max-width: 720px)').matches) requestAnimationFrame(fitPoints);
+  if (resumeGuidance) { resumeGuidance = false; void guidance?.start(false); }
+  else requestAnimationFrame(fitPoints);
 }
 
 const criterion = () => document.querySelector<HTMLInputElement>('input[name="criterion"]:checked')!.value as Criterion;
@@ -322,7 +337,7 @@ function tick(now: number) {
   if (!playing) return;
   const elapsed = Math.min(80, now - lastTick);
   lastTick = now;
-  const speed = resumeGuidance || renderer.reducedMotion ? 100_000 : Math.max(45, queue.length / (nationalPlayback ? 10 : 7.5));
+  const speed = playbackRate(queue.length, resumeGuidance || renderer.reducedMotion);
   carry = queue.length > cursor ? carry + elapsed * speed / 1000 : 0;
   const count = Math.min(queue.length - cursor, Math.floor(carry));
   if (count > 0) { renderer.visit(queue.slice(cursor, cursor + count), now); cursor += count; carry -= count; }
@@ -370,7 +385,7 @@ async function exploreNational(activeRun: number, start: Place, end: Place, pref
   const index = new Map<number, number>(); renderer.setGraph(geometry);
   let receivedResult = false;
   try {
-    for await (const message of nationalRoute(start, end, preference, requestId, controller.signal, mobileApp ? roadPreferences() : undefined)) {
+    for await (const message of nationalRoute(start, end, preference, requestId, controller.signal, roadPreferences())) {
       if (activeRun !== run) return;
       if ('snapped' in message) {
         if (!Array.isArray(message.snapped) || message.snapped.length !== 2 || !message.snapped.every(isInFrance) || !Number.isInteger(message.traceStride) || message.traceStride < 1) throw new Error('Métadonnées routières invalides.');
@@ -511,12 +526,11 @@ async function initialize() {
     renderer = new ExplorationRenderer(map, roads);
     guidance = new GpsGuidance(map, () => { renderer.clear(); showAbout(false); }, () => requestAnimationFrame(fitPoints), fix => {
       if (selectPoint('start', { name: 'Ma position GPS', lat: fix.lat, lon: fix.lon })) {
-        explore(); resumeGuidance = true; notice('Recalcul depuis votre position. Le guidage reprendra après confirmation du trajet.');
+        explore(); resumeGuidance = true; notice('Recalcul depuis votre position avant de démarrer le guidage.');
       }
     });
     $<HTMLButtonElement>('lite').setAttribute('aria-pressed', String(renderer.lite));
     buildSearchIndex();
-    selectPoint('start', defaults.start, false); selectPoint('end', defaults.end, false);
     setupSearch('start'); setupSearch('end');
     makeWorker();
     const date = new Date(data.metadata.osmTimestamp).toLocaleDateString('fr-FR');
@@ -535,11 +549,12 @@ async function initialize() {
     });
     map.on('resize', () => {
       if (guidance?.active || picking) return;
-      if (locationCircle && !playing) { const point = locationCircle.getLatLng(); focusPoint({ lat: point.lat, lon: point.lng }); }
+      if (locationCircle && !playing && $('route-result').hidden) { const point = locationCircle.getLatLng(); focusPoint({ lat: point.lat, lon: point.lng }); }
       else fitPoints();
     });
     $('loading').hidden = true;
-    requestAnimationFrame(() => { map.invalidateSize(); fitPoints(); });
+    map.fitBounds([[franceBounds[0], franceBounds[1]], [franceBounds[2], franceBounds[3]]], { animate: false });
+    void locate();
   } catch {
     $('loading').querySelector('strong')!.textContent = 'Paris attend la connexion.';
     $('loading').querySelector('p')!.textContent = 'Les données n’ont pas pu être chargées. Vérifiez votre connexion puis réessayez.';
@@ -550,7 +565,13 @@ async function initialize() {
 
 launch.addEventListener('click', explore);
 $('retry').addEventListener('click', () => { map?.remove(); void initialize(); });
-$('reset').addEventListener('click', () => { if (!roads) return; stop(); setPicking(null); selectPoint('start', defaults.start, false); selectPoint('end', defaults.end, false); notice(''); fitPoints(); });
+$('reset').addEventListener('click', () => {
+  if (!roads) return;
+  stop(); setPicking(null);
+  for (const side of ['start', 'end'] as const) { selections[side] = null; inputs[side].value = ''; markers[side]?.remove(); }
+  locationCircle?.remove(); locationCircle = undefined; $('app').classList.remove('has-gps-start');
+  updateLaunch(); void locate();
+});
 $('swap').addEventListener('click', () => {
   if (!roads) return;
   const a = selections.start, b = selections.end;
@@ -580,7 +601,15 @@ $('help').addEventListener('click', () => showAbout(!$<HTMLDialogElement>('about
 $('about').addEventListener('close', () => { $('help').setAttribute('aria-expanded', 'false'); });
 document.querySelector('#route-editor > summary')!.addEventListener('click', () => requestAnimationFrame(fitPoints));
 $('close-about').addEventListener('click', () => showAbout(false));
-$('geolocate').addEventListener('click', async () => {
+function setPanelCollapsed(collapsed: boolean) {
+  document.querySelector('.planner')!.classList.toggle('is-collapsed', collapsed);
+  $('planner-content').hidden = collapsed;
+  $('route-panel-toggle').setAttribute('aria-expanded', String(!collapsed));
+  $('route-panel-toggle').textContent = collapsed ? 'Afficher le trajet' : 'Réduire le panneau trajet';
+}
+$('route-panel-toggle').addEventListener('click', () => setPanelCollapsed(!$('planner-content').hidden));
+
+async function locate() {
   if (!roads) return;
   if (locating) { cancelLocationRequest(); notice('Recherche de position annulée.'); return; }
   stop(); setPicking(null);
@@ -604,6 +633,7 @@ $('geolocate').addEventListener('click', async () => {
   } catch (error) {
     if (request === locationRequest) notice(locationError(error), 'error');
   } finally { if (request === locationRequest) cancelLocationRequest(); }
-});
+}
+$('geolocate').addEventListener('click', () => { void locate(); });
 
 void initialize();

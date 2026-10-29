@@ -1,6 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { confirmationPhase, measureLine, motion, pointAlong, trailOpacity } from '../src/animation-timing';
+import { confirmationPhase, measureLine, motion, playbackRate, pointAlong, trailOpacity } from '../src/animation-timing';
+
+test('la trace se lit en deux secondes au plus, et les recalculs GPS en 200 ms', () => {
+  for (const events of [0, 100, 10_000, 1_000_000]) {
+    assert.ok(events / playbackRate(events, false) <= 2);
+    assert.ok(events / playbackRate(events, true) <= 0.2);
+  }
+  assert.ok(confirmationPhase(650, false).done);
+});
 
 test('la convergence précède l’onde et la révélation du parcours', () => {
   assert.equal(confirmationPhase(0, false).reveal, 0);

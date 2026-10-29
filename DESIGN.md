@@ -16,4 +16,4 @@ En guidage sur téléphone, la carte occupe toute la hauteur disponible et la ba
 
 ## Mouvement
 
-Conserver le moteur Canvas de l'éclair et ses timings explicatifs. Les transitions d'interface durent 200 ms avec --ease-out: cubic-bezier(0.23, 1, 0.32, 1). Seulement opacité et transformation. Aucun mouvement au clavier ni aux commandes de zoom répétées. En mode réduit, garder un retour d'opacité, supprimer les déplacements et le zoom animé. Pas de bibliothèque supplémentaire.
+Conserver le moteur Canvas de l'éclair avec une lecture de la trace d'environ deux secondes et une confirmation finale de 650 ms. Le calcul serveur garde sa durée propre ; les recalculs GPS lisent la trace en 200 ms au plus. Les transitions d'interface durent 200 ms avec --ease-out: cubic-bezier(0.23, 1, 0.32, 1). Seulement opacité et transformation. Aucun mouvement au clavier ni aux commandes de zoom répétées. En mode réduit, garder un retour d'opacité, supprimer les déplacements et le zoom animé. Pas de bibliothèque supplémentaire.

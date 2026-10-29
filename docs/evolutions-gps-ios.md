@@ -2,7 +2,7 @@
 
 | Amélioration | Faisabilité avec l’existant | Travail principal |
 | --- | --- | --- |
-| Éviter les autoroutes et les péages | Implémenté pour les applications mobiles, alpha.4 | Préférences indépendantes et mémorisées ; filtres sur les deux critères et le raccordement ; import `road_class`/`toll` et nouveau graphe avec ses index. Tests de bretelles, absence de chemin, données manquantes et ancien serveur. Le secours Paris est refusé avec évitement. Vérifier `roadPreferences: true` dans `/api/health` après déploiement du nouveau graphe. |
+| Éviter les autoroutes et les péages | Implémenté sur mobile (alpha.4) et Web (alpha.5) | Préférences indépendantes et mémorisées ; filtres sur les deux critères et le raccordement ; import `road_class`/`toll` et nouveau graphe avec ses index. Tests de bretelles, absence de chemin, données manquantes et ancien serveur. Le secours Paris est refusé avec évitement. Vérifier `roadPreferences: true` dans `/api/health` après déploiement du nouveau graphe. |
 | Recalcul automatique | Le calcul et le recalcul manuel existent | Déclencher après confirmation de sortie de route, limiter les requêtes, gérer les retours GPS et les échecs sans lancer plusieurs calculs concurrents. Le service actuel ne calcule qu’un trajet à la fois. |
 | Position sur routes parallèles et sens de circulation | Le rapprochement géométrique actuel fournit une base | Ajouter un map matching multi-hypothèse utilisant cap, vitesse, topologie et historique, puis l’évaluer sur des trajets enregistrés et des échangeurs. |
 | Guidage vocal fiable | Synthèse vocale web disponible selon la WebView | Tester les langues et interruptions ; gérer le volume, la priorité audio, Bluetooth et les interruptions avec les API natives si nécessaire. |

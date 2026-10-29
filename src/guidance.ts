@@ -2,7 +2,7 @@ import L from 'leaflet';
 import { Capacitor, type PluginListenerHandle } from '@capacitor/core';
 import { Geolocation } from '@capacitor/geolocation';
 import { GuidanceProgress, RecentSpeed, routePosition, predictedRouteAt, guidanceDistance, usableFix, type GpsFix, type NavigationRoute } from './navigation';
-import { locationError, preciseLocationPermission } from './location';
+import { locationError, preciseLocationPermission, selectionPosition } from './location';
 import { device, isMobileApp, screenUpdates } from './device';
 import { nativeGuidance, guidanceCommands, type NativeGuidanceState } from './native-guidance';
 
@@ -83,7 +83,7 @@ export class GpsGuidance {
     text('navigation-availability', !isMobileApp() ? 'Le guidage GPS est disponible dans l’application mobile.' : route ? 'Le GPS continue en arrière-plan et écran verrouillé jusqu’à l’arrivée ou à Quitter. Activez la voix pour entendre les indications.' : 'Le guidage demande les manœuvres du service France à jour.');
   }
 
-  async start() {
+  async start(recalculate = true) {
     if (!isMobileApp()) { text('navigation-availability', 'Le guidage GPS est disponible dans l’application mobile.'); return; }
     if (!this.route || this.watching || this.starting || document.hidden) return;
     const route = this.route;
@@ -103,7 +103,17 @@ export class GpsGuidance {
         await preciseLocationPermission(Geolocation);
       }
       if (generation !== this.generation) return;
+      const position = await Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 30_000, maximumAge: 0 });
+      if (generation !== this.generation) return;
+      const fix: GpsFix = { ...selectionPosition(position), timestamp: position.timestamp };
+      if (!usableFix(fix)) throw { code: 'INACCURATE_POSITION' };
       if (document.hidden) { this.pause('Guidage en pause. Reprenez le GPS avec l’application visible.'); return; }
+      const initial = new GuidanceProgress(route).update(fix);
+      if (initial.status !== 'on-route' && initial.status !== 'arrived') {
+        if (recalculate) { this.stop(false); this.onRecalculate(fix); }
+        else this.pause('Votre position reste éloignée du trajet. Rejoignez une route accessible, puis reprenez le GPS.');
+        return;
+      }
       this.starting = false; this.watching = true; this.lastGoodAt = Date.now();
       this.timer = window.setInterval(() => {
         if (Date.now() - this.lastGoodAt > 15_000) this.uncertain('Signal GPS perdu. Les indications sont suspendues.');

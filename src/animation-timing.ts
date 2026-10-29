@@ -1,4 +1,6 @@
-export const motion = { travel: 180, trail: 900, converge: 500, shock: 500, reveal: 900, fade: 200 } as const;
+export const motion = { travel: 100, trail: 450, converge: 200, shock: 200, reveal: 350, fade: 200 } as const;
+// Two seconds of trace playback, without delaying a GPS recalculation.
+export const playbackRate = (events: number, fast: boolean) => Math.max(fast ? 100_000 : 180, events / (fast ? 0.2 : 2));
 export const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
 export const easeOutQuint = (value: number) => 1 - (1 - clamp01(value)) ** 5;
 

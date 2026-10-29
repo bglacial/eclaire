@@ -20,6 +20,22 @@ import java.util.concurrent.atomic.AtomicReference;
 
 @RunWith(AndroidJUnit4.class)
 public class EdgeToEdgeInstrumentedTest {
+    @Test public void systemBackClosesSettingsAndKeepsMapOpen() throws Exception {
+        var instrumentation = InstrumentationRegistry.getInstrumentation();
+        String app = instrumentation.getTargetContext().getPackageName();
+        for (String permission : new String[] { android.Manifest.permission.ACCESS_COARSE_LOCATION, android.Manifest.permission.ACCESS_FINE_LOCATION }) instrumentation.getUiAutomation().grantRuntimePermission(app, permission);
+        try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(20);
+            while (!"true".equals(js(scenario, "Boolean(document.getElementById('settings-open'))")) && System.nanoTime() < deadline) Thread.sleep(200);
+            js(scenario, "document.getElementById('settings-open').click(); void 0");
+            assertEquals("false", js(scenario, "document.getElementById('settings-page').hidden"));
+            instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK);
+            while (!"true".equals(js(scenario, "document.getElementById('settings-page').hidden")) && System.nanoTime() < deadline) Thread.sleep(100);
+            assertEquals("true", js(scenario, "document.getElementById('settings-page').hidden"));
+            scenario.onActivity(activity -> assertTrue(!activity.isFinishing()));
+        }
+    }
+
     @Test public void screenFlagAndVersionAreAvailableThroughBridge() throws Exception {
         try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
             long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(20);
