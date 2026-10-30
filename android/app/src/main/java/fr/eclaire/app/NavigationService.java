@@ -1,7 +1,9 @@
 package fr.eclaire.app;
 
 import android.app.*;
+import android.Manifest;
 import android.content.*;
+import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
 import android.location.*;
 import android.media.AudioManager;
@@ -10,6 +12,7 @@ import android.speech.tts.TextToSpeech;
 import android.speech.tts.UtteranceProgressListener;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.ServiceCompat;
+import androidx.core.content.ContextCompat;
 import com.getcapacitor.JSObject;
 import java.util.Locale;
 import java.util.HashSet;
@@ -57,11 +60,14 @@ public final class NavigationService extends Service implements LocationListener
     void start(GuidanceTracker route, boolean enabled, Consumer<JSObject> events) {
         tracker = route; voice = enabled; listener = events; active = true; lastGoodAt = System.currentTimeMillis();
         try {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED)
+                throw new SecurityException("Localisation précise non autorisée.");
             boolean requested = false;
             for (String provider : new String[] { LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER }) if (locations.isProviderEnabled(provider)) {
                 locations.requestLocationUpdates(provider, 1000, 0, this, Looper.getMainLooper()); requested = true;
             }
             if (!requested) throw new IllegalStateException("Activez la localisation du téléphone.");
+            CarGuidance.update(new CarGuidance.Snapshot(tracker, null, null, "starting", message));
             handler.post(checkSignal);
         } catch (RuntimeException error) { stopSelf(); throw error; }
     }
@@ -125,6 +131,7 @@ public final class NavigationService extends Service implements LocationListener
         if (fix != null) event.put("fix", new JSObject().put("lat", fix.lat()).put("lon", fix.lon()).put("accuracy", fix.accuracy()).put("timestamp", fix.timestamp()).put("speed", fix.speed()).put("heading", fix.heading()));
         if (progress != null) event.put("match", new JSObject().put("at", progress.at()).put("seconds", progress.seconds()).put("distance", progress.distance()));
         latest = event;
+        CarGuidance.update(running ? new CarGuidance.Snapshot(tracker, fix, progress, status, message) : null);
         if (listener != null) listener.accept(event);
     }
 

@@ -42,12 +42,15 @@ public class BackgroundGuidanceInstrumentedTest {
             assertTrue(connected.await(10, TimeUnit.SECONDS));
             try {
                 instrumentation.runOnMainSync(() -> service.get().start(new GuidanceTracker(
-                        List.of(new GuidanceTracker.Point(48, 2, 0, 0), new GuidanceTracker.Point(48.002, 2, 222, 40)),
-                        List.of(new GuidanceTracker.Step(0, "Continuez"), new GuidanceTracker.Step(222, "Arrivée"))), false, state -> {}));
+                        java.util.Arrays.asList(new GuidanceTracker.Point(48, 2, 0, 0), new GuidanceTracker.Point(48.002, 2, 222, 40)),
+                        java.util.Arrays.asList(new GuidanceTracker.Step(0, "Continuez"), new GuidanceTracker.Step(222, "Arrivée"))), false, state -> {}));
+                assertEquals("starting", CarGuidance.current().status());
                 scenario.moveToState(Lifecycle.State.CREATED);
                 long time = System.currentTimeMillis();
                 instrumentation.runOnMainSync(() -> service.get().onLocationChanged(fix(48.001, time)));
                 assertEquals("on-route", service.get().state().getString("status"));
+                assertEquals("on-route", CarGuidance.current().status());
+                assertNotNull(CarGuidance.current().progress());
                 assertTrue(service.get().state().getBoolean("active"));
                 var notifications = ((NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE)).getActiveNotifications();
                 assertEquals(1, notifications.length);
@@ -56,6 +59,7 @@ public class BackgroundGuidanceInstrumentedTest {
                 long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
                 while (!service.get().state().optString("status").equals("stopped") && System.nanoTime() < deadline) Thread.sleep(100);
                 assertEquals("stopped", service.get().state().getString("status"));
+                assertNull(CarGuidance.current());
                 instrumentation.runOnMainSync(() -> service.get().onLocationChanged(fix(48.0015, time + 2000)));
                 assertEquals("stopped", service.get().state().getString("status"));
                 assertFalse(service.get().state().getBoolean("active"));

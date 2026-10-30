@@ -34,4 +34,14 @@ public class GuidanceTrackerTest {
         assertEquals("arrived", tracker.update(fix(48.002, 2, 5, 114000, null), 114000).status());
         assertThrows(IllegalArgumentException.class, () -> new GuidanceTracker(List.of(), List.of()));
     }
+
+    @Test public void routeKeepsAnImmutableCopyOfItsInputs() {
+        var points = new java.util.ArrayList<>(List.of(new GuidanceTracker.Point(48, 2, 0, 0), new GuidanceTracker.Point(48.001, 2, 111, 20)));
+        var steps = new java.util.ArrayList<>(List.of(new GuidanceTracker.Step(0, "Continuez")));
+        var tracker = new GuidanceTracker(points, steps);
+        points.clear(); steps.clear();
+        assertEquals(2, tracker.points.size());
+        assertEquals(1, tracker.steps.size());
+        assertThrows(UnsupportedOperationException.class, () -> tracker.points.clear());
+    }
 }

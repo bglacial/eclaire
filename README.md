@@ -98,6 +98,12 @@ Les positions de plus de 15 secondes ou de précision supérieure à 50 m suspen
 
 Le suivi continue **en arrière-plan et écran verrouillé** après un démarrage avec l’application visible. Android utilise un service de premier plan de type `location`, avec notification persistante et action **Arrêter le guidage** ; l’autorisation de notification est requise à partir d’Android 13. iOS utilise Core Location avec l’autorisation à l’usage, l’indicateur système et les modes `location`/`audio`. Aucune permission de localisation permanente n’est demandée. La progression et les annonces tournent nativement, indépendamment de la WebView. Revenir dans l’application récupère l’état courant, sans recommencer le trajet.
 
+### Android Auto · alpha
+
+Préparer le trajet et démarrer le guidage sur le téléphone, puis ouvrir Éclaire sur l’écran Android Auto. La voiture affiche le même trajet, la prochaine manœuvre, la distance restante et un bouton d’arrêt partagé avec le téléphone. Les annonces vocales se règlent sur le téléphone. En cas de perte GPS ou de sortie de route, les manœuvres sont suspendues ; le recalcul se lance sur le téléphone. Les tuiles OpenStreetMap nécessitent une connexion, sauf si elles sont déjà en cache. La position reste en mémoire sur l’appareil ; le fournisseur de tuiles voit les zones consultées.
+
+Cette intégration est une préversion : les tests utilisent un hôte automobile simulé et un émulateur Android, sans essai sur téléphone ni véhicule. Pour un APK installé hors Google Play, activer au besoin le mode développeur Android Auto et l’option autorisant les sources inconnues. Tester à l’arrêt avant tout trajet ; la signalisation et les conditions réelles restent prioritaires.
+
 Android et iOS maintiennent l’écran allumé uniquement pendant le suivi visible. **Quitter**, un refus de permission ou l’arrivée libèrent le GPS. L’arrêt dans la notification fonctionne aussi application masquée. Un arrêt forcé de l’application ou une terminaison par le système ne relance pas automatiquement le suivi : rouvrir l’application et démarrer le guidage. Les positions et le trajet restent en mémoire ; aucun historique GPS n’est enregistré. Le recalcul manuel transmet la position au service routier configuré et conserve les évitements. Le fournisseur de fond de carte voit les zones consultées.
 
 Dans l’application, **Paramètres** permet de choisir l’apparence claire, sombre ou automatique et le critère par défaut du prochain trajet. Les choix sont enregistrés sur l’appareil ; la version installée apparaît sur la même page.

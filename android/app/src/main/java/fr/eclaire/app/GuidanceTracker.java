@@ -27,7 +27,8 @@ final class GuidanceTracker {
                 throw new IllegalArgumentException("Manœuvre de guidage invalide.");
             previous = step.at;
         }
-        this.points = List.copyOf(points); this.steps = List.copyOf(steps);
+        this.points = java.util.Collections.unmodifiableList(new java.util.ArrayList<>(points));
+        this.steps = java.util.Collections.unmodifiableList(new java.util.ArrayList<>(steps));
     }
 
     State update(Fix fix, long now) {
