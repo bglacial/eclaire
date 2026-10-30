@@ -59,7 +59,6 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       </div>
       <div class="location-actions"><button id="geolocate" class="location-button" aria-label="Utiliser ma position comme départ">${icon('locate')} Ma position</button><button id="swap" class="swap-button" aria-label="Permuter le départ et l’arrivée">${icon('swap')} Permuter</button></div>
       <fieldset class="criteria"><legend>Critère du trajet</legend><label><input type="radio" name="criterion" value="time" checked><span>${icon('time')} Le plus rapide</span></label><label><input type="radio" name="criterion" value="distance"><span>${icon('route')} Le plus court</span></label></fieldset>
-      <fieldset id="road-preferences" class="road-preferences" aria-describedby="road-preferences-help"><legend>Éviter sur ce trajet</legend><label><input id="avoid-motorways" type="checkbox"> Les autoroutes</label><label><input id="avoid-tolls" type="checkbox"> Les péages</label><p id="road-preferences-help">Selon les données OpenStreetMap, parfois incomplètes. Service France requis, sans secours Paris avec ces options.</p></fieldset>
       <div class="launch-row"><button id="launch" class="primary" disabled>${icon('bolt')}<span>Chargement des routes…</span>${icon('arrow')}</button><button id="reset" class="icon-button reset-button" aria-label="Effacer le trajet et utiliser ma position" title="Recommencer">${icon('reset')}</button></div>
       </div></details>
       <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
@@ -90,7 +89,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <div class="settings-content">
       <label for="settings-theme">Apparence</label><p>Choisissez le thème ou suivez celui de l’appareil.</p><select id="settings-theme"><option value="auto">Automatique</option><option value="light">Clair</option><option value="dark">Sombre</option></select>
       <label for="settings-criterion">Trajet préféré</label><p>Ce choix s’applique aux prochains trajets.</p><select id="settings-criterion"><option value="time">Le plus rapide</option><option value="distance">Le plus court</option></select>
-      <fieldset class="road-preferences settings-avoidance"><legend>Éviter sur les trajets</legend><label><input id="settings-avoid-motorways" type="checkbox"> Les autoroutes</label><label><input id="settings-avoid-tolls" type="checkbox"> Les péages</label><p>Ces choix sont mémorisés et restent modifiables pendant la préparation du trajet.</p></fieldset>
+      <fieldset class="road-preferences settings-avoidance"><legend>Éviter sur les trajets</legend><label><input id="settings-avoid-motorways" type="checkbox"> Les autoroutes</label><label><input id="settings-avoid-tolls" type="checkbox"> Les péages</label><p>Ces choix sont mémorisés. Selon les données OpenStreetMap, parfois incomplètes. Service France requis, sans secours Paris avec ces options.</p></fieldset>
       <section class="settings-updates" aria-labelledby="settings-updates-title"><h3 id="settings-updates-title">Mises à jour</h3>
         <button id="updates-check" class="setting-button">Rechercher les mises à jour</button>
         <p>Dernière recherche : <time id="updates-last-check">Jamais</time></p>
@@ -108,21 +107,18 @@ document.addEventListener('pointerdown', () => document.documentElement.classLis
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const inputs = { start: $<HTMLInputElement>('start'), end: $<HTMLInputElement>('end') };
 const launch = $<HTMLButtonElement>('launch');
-const roadPreferences = () => ({ avoidMotorways: $<HTMLInputElement>('avoid-motorways').checked, avoidTolls: $<HTMLInputElement>('avoid-tolls').checked });
+const roadPreferences = () => ({ avoidMotorways: $<HTMLInputElement>('settings-avoid-motorways').checked, avoidTolls: $<HTMLInputElement>('settings-avoid-tolls').checked });
 {
   let avoided = { avoidMotorways: false, avoidTolls: false };
   try { avoided = readRoadPreferences(localStorage); } catch { /* Storage can be unavailable. */ }
   for (const [id, key] of [['avoid-motorways', 'avoidMotorways'], ['avoid-tolls', 'avoidTolls']] as const) {
-    const controls = [$<HTMLInputElement>(id), $<HTMLInputElement>(`settings-${id}`)];
-    for (const input of controls) {
-      input.checked = avoided[key];
-      input.addEventListener('change', () => {
-        controls.forEach(control => { control.checked = input.checked; });
-        try { localStorage.setItem(`eclaire.${key}`, String(input.checked)); }
-        catch { notice('Ce choix s’applique au trajet, mais ne pourra pas être mémorisé.'); }
-        stop();
-      });
-    }
+    const input = $<HTMLInputElement>(`settings-${id}`);
+    input.checked = avoided[key];
+    input.addEventListener('change', () => {
+      try { localStorage.setItem(`eclaire.${key}`, String(input.checked)); }
+      catch { notice('Ce choix s’applique au trajet, mais ne pourra pas être mémorisé.'); }
+      stop();
+    });
   }
 }
 {

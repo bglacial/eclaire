@@ -223,13 +223,15 @@ Ces temps sont mesurés sur le Mac local et ne prédisent pas les temps du Raspb
 
 ## Préversions alpha
 
+La version **1.1.0-alpha.8** retire les cases d’évitement de la vue carte : les préférences restent disponibles dans les paramètres, mémorisées et appliquées aux prochains calculs et recalculs.
+
 La version **1.1.0-alpha.6** complète les paramètres : évitements synchronisés avec la préparation du trajet, recherche manuelle des mises à jour, date de dernière recherche et version affichée sur toutes les interfaces, y compris le Web. Sur Android, le bouton interroge GitHub sans attendre le délai automatique de six heures et conserve le parcours d’installation sécurisé. Sur le Web, il vérifie `version.json` sans cache et propose une actualisation si la version déployée diffère de celle affichée. Sur iOS, la vérification consulte la version du site ; une mise à jour de l’application native exige toujours une nouvelle installation iOS. Les corrections GPS et carte de l’alpha.5 et le guidage en arrière-plan sont conservés.
 
 Sur le Web comme dans les applications Android et iOS, les options **Éviter les autoroutes** et **Éviter les péages** sont indépendantes, mémorisées sur l’appareil et conservées pour les recalculs. Elles s’appliquent au plus court comme au plus rapide, ainsi qu’au raccordement des points. Les autoroutes incluent leurs bretelles ; les péages réservés aux poids lourds ne sont pas exclus pour une voiture. Les attributs manquants suivent les règles OSM/GraphHopper du pays : ce n’est pas une garantie de gratuité. La signalisation reste prioritaire.
 
 Ces options exigent `/api/health` avec `roadPreferences: true`. L’application refuse un ancien serveur ou graphe et ne bascule jamais sur la démo Paris avec un évitement activé.
 
-La préversion GitHub contient l’APK de test Android, le JAR du serveur et leurs empreintes SHA-256. L’APK utilise `https://eclaire.nriault.fr/api`, garde l’identifiant `fr.eclaire.app` et doit conserver la signature debug des versions précédentes pour permettre leur mise à jour. Le harnais GPS simulé n’est pas inclus dans l’APK. Les builds ne remplacent pas une validation sur téléphone physique.
+La préversion GitHub contient l’APK de test Android et son empreinte SHA-256 ; les binaires serveur restent disponibles dans les préversions qui les incluent. L’APK utilise `https://eclaire.nriault.fr/api`, garde l’identifiant `fr.eclaire.app` et doit conserver la signature debug des versions précédentes pour permettre leur mise à jour. Le harnais GPS simulé n’est pas inclus dans l’APK. Les builds ne remplacent pas une validation sur téléphone physique.
 
 L’archive `eclaire-1.1.0-alpha.6-ios-simulator.zip` contient aussi un build pour simulateur iOS, ARM64 et Intel. Ce build ne s’installe pas sur iPhone ; la distribution iPhone/TestFlight demande une signature et un profil Apple. Le projet Xcode complet est inclus dans les sources du tag.
 
