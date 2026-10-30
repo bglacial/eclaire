@@ -41,11 +41,11 @@ public class BackgroundGuidanceInstrumentedTest {
             });
             assertTrue(connected.await(10, TimeUnit.SECONDS));
             try {
+                scenario.moveToState(Lifecycle.State.CREATED);
                 instrumentation.runOnMainSync(() -> service.get().start(new GuidanceTracker(
                         java.util.Arrays.asList(new GuidanceTracker.Point(48, 2, 0, 0), new GuidanceTracker.Point(48.002, 2, 222, 40)),
                         java.util.Arrays.asList(new GuidanceTracker.Step(0, "Continuez"), new GuidanceTracker.Step(222, "Arrivée"))), false, state -> {}));
                 assertEquals("starting", CarGuidance.current().status());
-                scenario.moveToState(Lifecycle.State.CREATED);
                 long time = System.currentTimeMillis();
                 instrumentation.runOnMainSync(() -> service.get().onLocationChanged(fix(48.001, time)));
                 assertEquals("on-route", service.get().state().getString("status"));

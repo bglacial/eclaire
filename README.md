@@ -223,6 +223,8 @@ Ces temps sont mesurés sur le Mac local et ne prédisent pas les temps du Raspb
 
 ## Préversions alpha
 
+La version **1.1.0-alpha.10** ajoute le mode image dans l’image Android (Android 8 et plus, sur les appareils compatibles). Pendant un guidage GPS actif, revenir à l’accueil ou ouvrir une autre application affiche une fenêtre flottante avec la carte et la prochaine indication. La fenêtre reprend le service GPS et les indications vocales existants ; toucher la fenêtre puis l’action d’agrandissement rend l’application à nouveau visible. La fonction dépend de l’autorisation « Picture-in-picture » d’Android. Le recalcul après une sortie de route nécessite toujours de revenir à l’application complète.
+
 La version **1.1.0-alpha.9** masque le recentrage tant que la carte suit la position, recalcule après deux positions GPS confirmant une sortie de route et complète la recherche avec Photon et l’Annuaire des entreprises. En cas de coupure, la position affichée est estimée à partir de la vitesse récente pendant 15 secondes au maximum et signalée comme telle ; ensuite les indications sont suspendues jusqu’au retour du GPS. L’estimation ne confirme ni une arrivée ni une sortie de route. Le recalcul automatique est effectué lorsque l’application est visible ; en arrière-plan, ouvrir Éclaire pour reprendre après une sortie de route. Les données des services de recherche peuvent être incomplètes ou indisponibles.
 
 La version **1.1.0-alpha.8** retire les cases d’évitement de la vue carte : les préférences restent disponibles dans les paramètres, mémorisées et appliquées aux prochains calculs et recalculs.

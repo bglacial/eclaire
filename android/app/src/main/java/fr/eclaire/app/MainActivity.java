@@ -7,7 +7,11 @@ import androidx.activity.OnBackPressedCallback;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
+import android.app.PictureInPictureParams;
 import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
+import android.content.res.Configuration;
+import android.util.Rational;
 import android.os.Build;
 import android.view.View;
 import android.webkit.WebView;
@@ -15,6 +19,9 @@ import java.util.Locale;
 
 public class MainActivity extends BridgeActivity {
     AppUpdater updater;
+    private PipGuidanceView pipView;
+    private boolean pipEnabled;
+    private final Runnable guidanceChanged = this::updatePip;
 
     @Override protected void onCreate(android.os.Bundle state) {
         registerPlugin(EclaireDevice.class);
@@ -23,6 +30,7 @@ public class MainActivity extends BridgeActivity {
         EdgeToEdge.enable(this);
         enableLegacyEdgeToEdge();
         updater = new AppUpdater(this);
+        CarGuidance.observe(guidanceChanged);
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override public void handleOnBackPressed() {
                 getBridge().getWebView().evaluateJavascript("!window.dispatchEvent(new Event('eclaire-back', {cancelable:true}))", handled -> {
@@ -63,6 +71,40 @@ public class MainActivity extends BridgeActivity {
         ViewCompat.requestApplyInsets(decor);
     }
 
+    private void updatePip() {
+        var state = CarGuidance.current();
+        if (pipView != null) pipView.update(state);
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || !getPackageManager().hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)) return;
+        boolean enabled = state != null;
+        if (pipEnabled == enabled) return;
+        pipEnabled = enabled;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            setPictureInPictureParams(new PictureInPictureParams.Builder()
+                    .setAspectRatio(new Rational(16, 9)).setAutoEnterEnabled(enabled).setSeamlessResizeEnabled(false).build());
+        }
+    }
+
+    @Override public void onUserLeaveHint() {
+        super.onUserLeaveHint();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && Build.VERSION.SDK_INT < Build.VERSION_CODES.S && pipEnabled) {
+            try { enterPictureInPictureMode(new PictureInPictureParams.Builder().setAspectRatio(new Rational(16, 9)).build()); }
+            catch (IllegalStateException | SecurityException ignored) { /* Android can disallow PiP for this app. */ }
+        }
+    }
+
+    @Override public void onPictureInPictureModeChanged(boolean inPip, Configuration configuration) {
+        super.onPictureInPictureModeChanged(inPip, configuration);
+        if (inPip && pipView == null) {
+            pipView = new PipGuidanceView(this);
+            addContentView(pipView, new android.view.ViewGroup.LayoutParams(-1, -1));
+            pipView.update(CarGuidance.current());
+        } else if (!inPip && pipView != null) {
+            pipView.close();
+            ((android.view.ViewGroup) pipView.getParent()).removeView(pipView);
+            pipView = null;
+        }
+    }
+
     @Override public void onResume() {
         super.onResume();
         if (updater != null) updater.onResume();
@@ -74,6 +116,8 @@ public class MainActivity extends BridgeActivity {
     }
 
     @Override public void onDestroy() {
+        CarGuidance.remove(guidanceChanged);
+        if (pipView != null) { pipView.close(); pipView = null; }
         if (updater != null) updater.close();
         super.onDestroy();
     }
