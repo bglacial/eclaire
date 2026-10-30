@@ -64,12 +64,13 @@ final class EclaireNavigation: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDel
         guard active, let location = locations.last else { return }
         let fix = GuidanceFix(lat: location.coordinate.latitude, lon: location.coordinate.longitude, accuracy: location.horizontalAccuracy, timestamp: location.timestamp.timeIntervalSince1970 * 1000, speed: location.speed >= 0 ? location.speed : nil, heading: location.course >= 0 ? location.course : nil)
         guard let state = tracker?.update(fix, now: Date().timeIntervalSince1970 * 1000) else { return }
+        if state.status == "uncertain" && Date().timeIntervalSince(lastGoodAt) <= 3 { return }
+        if state.status != "uncertain" { lastGoodAt = Date() }
         var coordinates: JSObject = ["lat": fix.lat, "lon": fix.lon, "accuracy": fix.accuracy, "timestamp": fix.timestamp]
         if let speed = fix.speed { coordinates["speed"] = speed }
         if let heading = fix.heading { coordinates["heading"] = heading }
         var event: JSObject = ["active": state.status != "arrived", "status": state.status, "fix": coordinates]
         if state.status == "on-route" || state.status == "arrived" {
-            lastGoodAt = Date()
             event["match"] = ["at": state.at, "seconds": state.seconds, "distance": state.distance]
             let stage = state.toTurn < 35 ? "now" : state.toTurn < 200 ? "near" : "far"
             let key = state.status == "arrived" ? "arrived" : "\(state.nextIndex):\(stage)"
@@ -90,7 +91,7 @@ final class EclaireNavigation: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDel
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         guard active else { return }
         if (error as? CLError)?.code == .denied { finish(); publish(["active": false, "status": "denied"]) }
-        else { speech.stopSpeaking(at: .immediate); releaseAudio(); publish(["active": true, "status": "uncertain"]) }
+        else if Date().timeIntervalSince(lastGoodAt) > 3 { speech.stopSpeaking(at: .immediate); releaseAudio(); publish(["active": true, "status": "uncertain"]) }
     }
     private func publish(_ state: JSObject) { latest = state; notifyListeners("location", data: state) }
     private func speak(_ message: String) -> Bool {

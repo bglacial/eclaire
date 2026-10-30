@@ -33,6 +33,7 @@ export class GpsGuidance {
   private watching = false;
   private starting = false;
   private lastGoodAt = 0;
+  private offRouteCount = 0;
   private firstCenter = true;
   private speeds = new RecentSpeed();
   private frame = 0;
@@ -51,10 +52,6 @@ export class GpsGuidance {
     element('navigation-stop').addEventListener('click', () => this.stop());
     element('navigation-resume').addEventListener('click', () => { void this.start(); });
     element('navigation-follow').addEventListener('click', () => { this.follow = true; this.lastCenter = undefined; this.center(); this.followLabel(); });
-    element('navigation-recalculate').addEventListener('click', () => {
-      if (this.fix && usableFix(this.fix)) this.onRecalculate(this.fix);
-      else this.status('Attendez une position GPS précise avant de recalculer.');
-    });
     element('navigation-voice').hidden = !Capacitor.isNativePlatform();
     element('navigation-voice').addEventListener('click', () => {
       this.voice = !this.voice;
@@ -88,13 +85,13 @@ export class GpsGuidance {
     if (!this.route || this.watching || this.starting || document.hidden) return;
     const route = this.route;
     const generation = ++this.generation;
-    this.session = true; this.starting = true; this.follow = true; this.firstCenter = true; this.lastCenter = undefined; this.speeds = new RecentSpeed(); this.displayAt = undefined;
+    this.session = true; this.starting = true; this.follow = true; this.firstCenter = true; this.lastCenter = undefined; this.speeds = new RecentSpeed(); this.displayAt = undefined; this.offRouteCount = 0;
     this.progress ??= new GuidanceProgress(this.route);
     this.onEnter();
     if (!this.line) this.line = L.polyline(this.route.points.map(p => [p.lat, p.lon]), { renderer: this.renderer, color: getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(), weight: 6, opacity: 0.95, interactive: false }).addTo(this.map);
     element('app').classList.add('is-guiding'); element('navigation').hidden = false;
     this.map.invalidateSize({ pan: false, animate: false });
-    element('navigation-resume').hidden = true; element('navigation-recalculate').hidden = true;
+    element('navigation-resume').hidden = true;
     text('navigation-instruction', 'Recherche de votre position…'); text('navigation-turn-distance', 'GPS');
     text('navigation-remaining', '—'); text('navigation-time', '—'); text('navigation-speed', '—');
     this.status('Autorisez la localisation pour démarrer.'); this.followLabel();
@@ -116,8 +113,9 @@ export class GpsGuidance {
       }
       this.starting = false; this.watching = true; this.lastGoodAt = Date.now();
       this.timer = window.setInterval(() => {
-        if (Date.now() - this.lastGoodAt > 15_000) this.uncertain('Signal GPS perdu. Les indications sont suspendues.');
-        (element('navigation-recalculate') as HTMLButtonElement).disabled = !this.fix || !usableFix(this.fix);
+        const age = Date.now() - this.lastGoodAt;
+        if (age > 15_000) this.uncertain('Signal GPS perdu. Les indications sont suspendues.');
+        else if (age > 3000 && this.progress?.match) this.status('Position estimée selon la dernière vitesse. Vérifiez la route.');
       }, 1000);
       const watch = await nativeGuidance.addListener('location', state => { if (generation === this.generation && !document.hidden) this.receiveNative(state); });
       if (generation !== this.generation) { await watch.remove(); return; }
@@ -151,21 +149,23 @@ export class GpsGuidance {
     this.release(); this.status(message);
     text('navigation-instruction', 'Guidage en pause'); text('navigation-turn-distance', 'GPS');
     text('navigation-remaining', '—'); text('navigation-time', '—'); this.clearSpeed();
-    element('navigation-resume').hidden = false; element('navigation-recalculate').hidden = true;
+    element('navigation-resume').hidden = false;
   }
 
   private uncertain(message: string) {
     cancelAnimationFrame(this.frame); this.frame = 0; this.map.stopHeadingUp(); this.clearSpeed();
     text('navigation-instruction', 'En attente d’un signal précis'); text('navigation-turn-distance', 'GPS');
     text('navigation-remaining', '—'); text('navigation-time', '—');
-    element('navigation-recalculate').hidden = true;
     this.status(message);
   }
 
   private receiveNative(state: NativeGuidanceState) {
     if (state.status === 'arrived') { this.arrive(); return; }
     if (!state.active) { this.pause(state.status === 'denied' ? 'Localisation refusée. Autorisez le GPS précis dans les réglages du téléphone.' : 'Guidage arrêté sur le téléphone. Reprenez le GPS pour continuer.'); return; }
-    if (state.status === 'uncertain') { this.uncertain('Signal GPS imprécis ou perdu. Les indications sont suspendues.'); return; }
+    if (state.status === 'uncertain') {
+      if (Date.now() - this.lastGoodAt > 15_000) this.uncertain('Signal GPS imprécis ou perdu. Les indications sont suspendues.');
+      return;
+    }
     if (!state.fix || (this.fix && state.fix.timestamp <= this.fix.timestamp)) return;
     if (state.match && usableFix(state.fix)) this.progress!.match = state.match;
     this.receive(state.fix);
@@ -179,9 +179,9 @@ export class GpsGuidance {
   }
 
   private receive(fix: GpsFix) {
-    if (!usableFix(fix)) { this.uncertain(`Position imprécise ou ancienne. Précision requise : 50 m maximum.`); return; }
+    if (!usableFix(fix)) return;
     const state = this.progress!.update(fix);
-    if (state.status === 'uncertain') { this.uncertain('Mise à jour GPS en attente.'); return; }
+    if (state.status === 'uncertain') return;
     this.fix = fix; this.lastGoodAt = Date.now(); this.speeds.add(fix);
     text('navigation-speed', fix.speed != null && Number.isFinite(fix.speed) && fix.speed >= 0 && fix.speed <= 100 ? String(Math.round(fix.speed * 3.6)) : '—');
     const point = L.latLng(fix.lat, fix.lon);
@@ -195,7 +195,6 @@ export class GpsGuidance {
       else this.approachPoint.setLatLng(target);
       text('navigation-instruction', 'Rejoignez le point routier'); text('navigation-turn-distance', `À ${guidanceDistance(state.match.distance)}`);
       text('navigation-remaining', '—'); text('navigation-time', '—'); text('navigation-limit', 'Limite : —'); element('navigation-speed').classList.remove('over-limit');
-      element('navigation-recalculate').hidden = true;
       this.status('Point routier le plus proche du trajet. Rejoignez-le par une voie accessible.');
       this.followGpsHeading(fix);
       if (this.follow) {
@@ -214,16 +213,17 @@ export class GpsGuidance {
     }
     this.approachPoint?.remove(); this.approachPoint = undefined;
     if (state.status === 'off-route') {
+      if (++this.offRouteCount < 2) return;
       cancelAnimationFrame(this.frame); this.frame = 0; this.displayAt = undefined; this.marker.setLatLng(point);
       text('navigation-limit', 'Limite : —'); element('navigation-speed').classList.remove('over-limit');
       text('navigation-instruction', 'Vous êtes hors du trajet'); text('navigation-turn-distance', '↗');
       text('navigation-remaining', '—'); text('navigation-time', '—');
-      this.status('Recalculez depuis votre position. Ne rejoignez pas la ligne à travers les obstacles.');
+      this.status('Recalcul du trajet depuis votre position…');
       this.followGpsHeading(fix);
-      element('navigation-recalculate').hidden = false; (element('navigation-recalculate') as HTMLButtonElement).disabled = false;
-      if (this.follow) this.center(); return;
+      if (this.follow) this.center();
+      this.stop(false); this.onRecalculate(fix); return;
     }
-    element('navigation-recalculate').hidden = true;
+    this.offRouteCount = 0;
     const match = this.progress!.match!;
     const limit = match.distance <= Math.max(20, fix.accuracy) ? routePosition(this.route!, match.at).speedLimit : undefined;
     const overLimit = limit !== undefined && fix.speed != null && Number.isFinite(fix.speed) && fix.speed >= 0 && fix.speed <= 100 && fix.speed * 3.6 > limit;
@@ -281,7 +281,7 @@ export class GpsGuidance {
     this.lastCenter = { x: projected.x, y: projected.y };
     this.map.setView(this.map.unproject(projected, zoom), zoom, { animate: false });
   }
-  private followLabel() { element('navigation-follow').setAttribute('aria-pressed', String(this.follow)); text('navigation-follow', this.follow ? 'Position suivie' : 'Suivre ma position'); }
+  private followLabel() { element('navigation-follow').hidden = this.follow; }
   private rotateVehicle() {
     const image = this.marker?.getElement()?.querySelector<HTMLElement>('.vehicle-image');
     if (image) image.style.transform = `rotate(${this.vehicleHeading + this.map.getBearing()}deg)`;

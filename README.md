@@ -223,6 +223,8 @@ Ces temps sont mesurés sur le Mac local et ne prédisent pas les temps du Raspb
 
 ## Préversions alpha
 
+La version **1.1.0-alpha.9** masque le recentrage tant que la carte suit la position, recalcule après deux positions GPS confirmant une sortie de route et complète la recherche avec Photon et l’Annuaire des entreprises. En cas de coupure, la position affichée est estimée à partir de la vitesse récente pendant 15 secondes au maximum et signalée comme telle ; ensuite les indications sont suspendues jusqu’au retour du GPS. L’estimation ne confirme ni une arrivée ni une sortie de route. Le recalcul automatique est effectué lorsque l’application est visible ; en arrière-plan, ouvrir Éclaire pour reprendre après une sortie de route. Les données des services de recherche peuvent être incomplètes ou indisponibles.
+
 La version **1.1.0-alpha.8** retire les cases d’évitement de la vue carte : les préférences restent disponibles dans les paramètres, mémorisées et appliquées aux prochains calculs et recalculs.
 
 La version **1.1.0-alpha.6** complète les paramètres : évitements synchronisés avec la préparation du trajet, recherche manuelle des mises à jour, date de dernière recherche et version affichée sur toutes les interfaces, y compris le Web. Sur Android, le bouton interroge GitHub sans attendre le délai automatique de six heures et conserve le parcours d’installation sécurisé. Sur le Web, il vérifie `version.json` sans cache et propose une actualisation si la version déployée diffère de celle affichée. Sur iOS, la vérification consulte la version du site ; une mise à jour de l’application native exige toujours une nouvelle installation iOS. Les corrections GPS et carte de l’alpha.5 et le guidage en arrière-plan sont conservés.

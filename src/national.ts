@@ -18,18 +18,45 @@ export async function checkNationalService() {
 }
 
 export async function searchFrance(query: string, signal: AbortSignal): Promise<Place[]> {
-  const url = new URL('https://data.geopf.fr/geocodage/search');
-  url.search = new URLSearchParams({ q: query, limit: '6' }).toString();
-  const response = await fetch(url, { signal });
-  if (!response.ok) throw new Error('Recherche nationale indisponible.');
-  const result = await response.json();
-  if (!Array.isArray(result.features)) throw new Error('Réponse de recherche invalide.');
-  return result.features.flatMap((feature: { geometry?: { coordinates?: number[] }; properties?: { label?: string; name?: string; city?: string } }) => {
-    const coordinates = feature.geometry?.coordinates;
-    if (!coordinates || typeof feature.properties?.label !== 'string') return [];
-    const place = { name: feature.properties.label, lon: coordinates[0], lat: coordinates[1], detail: feature.properties.city || 'IGN · France' };
-    return isInFrance(place) ? [place] : [];
-  });
+  const ign = new URL('https://data.geopf.fr/geocodage/search');
+  ign.search = new URLSearchParams({ q: query, limit: '6' }).toString();
+  const photon = new URL('https://photon.komoot.io/api/');
+  photon.search = new URLSearchParams({ q: query, limit: '6', lang: 'fr', bbox: '-5.3,41.3,9.7,51.2' }).toString();
+  const search = async (url: URL, source: 'IGN' | 'OSM'): Promise<Place[]> => {
+    const response = await fetch(url, { signal });
+    if (!response.ok) throw new Error('Recherche nationale indisponible.');
+    const result = await response.json();
+    if (!Array.isArray(result.features)) throw new Error('Réponse de recherche invalide.');
+    return result.features.flatMap((feature: { geometry?: { coordinates?: number[] }; properties?: { label?: string; name?: string; city?: string; street?: string; housenumber?: string; postcode?: string } }) => {
+      const coordinates = feature.geometry?.coordinates, properties = feature.properties;
+      const name = source === 'IGN' ? properties?.label : properties?.name;
+      if (!coordinates || typeof name !== 'string' || !name.trim()) return [];
+      const detail = source === 'IGN' ? properties?.city || 'IGN · France' : [properties?.housenumber, properties?.street, properties?.postcode, properties?.city].filter(Boolean).join(' ') || 'OpenStreetMap';
+      const place = { name, lon: coordinates[0], lat: coordinates[1], detail };
+      return isInFrance(place) ? [place] : [];
+    });
+  };
+  const businesses = async (): Promise<Place[]> => {
+    const url = new URL('https://recherche-entreprises.api.gouv.fr/search');
+    url.search = new URLSearchParams({ q: query, per_page: '6', etat_administratif: 'A' }).toString();
+    const response = await fetch(url, { signal });
+    if (!response.ok) throw new Error('Recherche d’entreprises indisponible.');
+    const result = await response.json();
+    if (!Array.isArray(result.results)) throw new Error('Réponse de recherche invalide.');
+    const words = query.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().split(/\s+/).filter(Boolean);
+    return result.results.flatMap((company: { nom_complet?: string; matching_etablissements?: { latitude?: string; longitude?: string; adresse?: string; nom_commercial?: string; liste_enseignes?: string[]; etat_administratif?: string }[] }) =>
+      (company.matching_etablissements ?? []).flatMap(establishment => {
+        if (establishment.etat_administratif !== 'A') return [];
+        const name = establishment.liste_enseignes?.find(value => typeof value === 'string' && value.trim()) || establishment.nom_commercial || company.nom_complet;
+        if (typeof name !== 'string' || typeof establishment.latitude !== 'string' || typeof establishment.longitude !== 'string' || !establishment.latitude.trim() || !establishment.longitude.trim()) return [];
+        const place = { name, lat: Number(establishment.latitude), lon: Number(establishment.longitude), detail: establishment.adresse || 'Annuaire des entreprises' };
+        const label = `${place.name} ${place.detail}`.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+        return words.every(word => label.includes(word)) && isInFrance(place) ? [place] : [];
+      }));
+  };
+  const results = await Promise.allSettled([businesses(), search(photon, 'OSM'), search(ign, 'IGN')]);
+  if (results.every(result => result.status === 'rejected')) throw new Error('Recherche nationale indisponible.');
+  return results.flatMap(result => result.status === 'fulfilled' ? result.value : []);
 }
 
 export interface NationalMetadata { type: 'metadata'; visited: number; computeMs: number; traceStride: number; traceEvents: number; snapped: { lat: number; lon: number; distance: number }[] }

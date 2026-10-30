@@ -95,7 +95,8 @@ test('la moyenne GPS ignore les vitesses invalides et les mesures de plus de vin
 test('la prédiction reste bornée, s’arrête et respecte la réduction des mouvements', () => {
   const moving = { ...fix(0), speed: 20 };
   assert.equal(predictedRouteAt(200, 50, moving, 20, 101_000), 70);
-  assert.equal(predictedRouteAt(200, 50, moving, 20, 110_000), 80);
+  assert.equal(predictedRouteAt(500, 50, moving, 20, 110_000), 250);
+  assert.equal(predictedRouteAt(1000, 50, moving, 20, 130_000), 350);
   assert.equal(predictedRouteAt(60, 50, moving, 20, 110_000), 60);
   assert.equal(predictedRouteAt(200, 50, { ...moving, speed: 0 }, 20, 110_000), 50);
   assert.equal(predictedRouteAt(200, 50, moving, 20, 110_000, true), 50);

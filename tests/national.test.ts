@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { appendNationalEdges, decodeNationalMessage, isInFrance, nationalRoute } from '../src/national';
+import { appendNationalEdges, decodeNationalMessage, isInFrance, nationalRoute, searchFrance } from '../src/national';
 import type { RoadGeometry } from '../src/types';
 
 const road = { key: 10, geometry: [[48.85, 2.34], [48.85, 2.341], [48.851, 2.341]] as [number, number][], length: 180, seconds: 30, name: 'Rue test' };
@@ -102,4 +102,24 @@ test('les évitements sont transmis au calcul et au recalcul, pour les deux crit
     for await (const message of nationalRoute({ name: 'A', lat: 48, lon: 2 }, { name: 'B', lat: 49, lon: 2 }, criterion, 'test', new AbortController().signal, { avoidMotorways: true, avoidTolls: true })) assert.equal(message.type, 'result');
     assert.deepEqual(bodies.at(-1), { start: { lat: 48, lon: 2 }, end: { lat: 49, lon: 2 }, criterion, requestId: 'test', avoidMotorways: true, avoidTolls: true });
   }
+});
+
+
+test('la recherche trouve une enseigne ouverte et conserve les lieux lorsque une source échoue', async context => {
+  const fetchMock = context.mock.method(globalThis, 'fetch', async url => {
+    if (String(url).includes('recherche-entreprises')) return Response.json({ results: [{ nom_complet: 'LECLUSE', matching_etablissements: [
+      { liste_enseignes: ['LECLUSE AUTOMOBILES VOLKSWAGEN LE MANS'], adresse: '20 BOULEVARD RENE CASSIN 72000 LE MANS', latitude: '47.979982079', longitude: '0.198400238', etat_administratif: 'A' },
+      { liste_enseignes: ['VOLKSWAGEN LE MANS'], adresse: 'LE MANS', latitude: '48', longitude: '0', etat_administratif: 'F' },
+      { liste_enseignes: ['VOLKSWAGEN LE MANS'], adresse: 'LE MANS', latitude: '', longitude: '0', etat_administratif: 'A' },
+    ] }] });
+    if (String(url).includes('photon')) return new Response('', { status: 503 });
+    return Response.json({ features: [{ properties: { label: 'Le Mans', city: 'Le Mans' }, geometry: { coordinates: [0.19, 48] } }] });
+  });
+  const places = await searchFrance('Volkswagen le mans', new AbortController().signal);
+  assert.equal(places.length, 2);
+  assert.match(places[0].name, /VOLKSWAGEN LE MANS/);
+  assert.equal(places[0].lat, 47.979982079);
+  assert.equal(places[1].name, 'Le Mans');
+  fetchMock.mock.mockImplementation(async () => new Response('', { status: 503 }));
+  await assert.rejects(searchFrance('test', new AbortController().signal), /indisponible/);
 });

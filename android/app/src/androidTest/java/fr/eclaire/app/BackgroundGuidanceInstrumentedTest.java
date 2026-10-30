@@ -52,6 +52,11 @@ public class BackgroundGuidanceInstrumentedTest {
                 assertEquals("on-route", CarGuidance.current().status());
                 assertNotNull(CarGuidance.current().progress());
                 assertTrue(service.get().state().getBoolean("active"));
+                instrumentation.runOnMainSync(() -> {
+                    var inaccurate = fix(48.001, time + 1000); inaccurate.setAccuracy(150);
+                    service.get().onLocationChanged(inaccurate);
+                });
+                assertEquals("on-route", service.get().state().getString("status"));
                 var notifications = ((NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE)).getActiveNotifications();
                 assertEquals(1, notifications.length);
                 assertTrue(notifications[0].getNotification().actions.length > 0);

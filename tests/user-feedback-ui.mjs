@@ -17,6 +17,8 @@ async function setup({ native = false, gps = 'normal', width = 390, height = 844
   page.on('pageerror', e => errors.push(e.message));
   await page.route('https://tile.openstreetmap.org/**', route => route.abort());
   await page.route('https://data.geopf.fr/**', route => route.fulfill({ json: { features: [] } }));
+  await page.route('https://photon.komoot.io/**', route => route.fulfill({ json: { features: [] } }));
+  await page.route('https://recherche-entreprises.api.gouv.fr/**', route => route.fulfill({ json: { results: [{ nom_complet: 'LECLUSE', matching_etablissements: [{ liste_enseignes: ['LECLUSE AUTOMOBILES VOLKSWAGEN LE MANS'], adresse: '20 BOULEVARD RENE CASSIN 72000 LE MANS', latitude: '47.979982079', longitude: '0.198400238', etat_administratif: 'A' }] }] } }));
   await page.route('**/api/health', route => route.fulfill({ json: health }));
   await page.route('**/api/route', route => {
     const body = route.request().postDataJSON(); requests.push(body);
@@ -126,6 +128,38 @@ try {
   assert.equal(await delayed.page.locator('#start').inputValue(), 'Musée du Louvre');
   assert.deepEqual(delayed.errors, []); await delayed.context.close();
   check('GPS tardif : ne remplace pas un départ choisi entre-temps');
+
+  const guidance = await setup({ native: true });
+  const g = guidance.page;
+  await g.locator('#gps-fixture').evaluate(el => { el.style.display = 'none'; });
+  await g.locator('#end').fill('Volkswagen le mans');
+  await g.locator('#end-results [role=option]').filter({ hasText: 'VOLKSWAGEN LE MANS' }).waitFor();
+  assert.match(await g.locator('#end-results [role=option]').first().textContent(), /20 BOULEVARD RENE CASSIN/);
+  await choose(g, 'end', 'Panthéon'); await calculate(g);
+  await g.locator('#navigation-start').click();
+  await g.waitForFunction(() => document.getElementById('gps-watch-count').textContent.startsWith('1 suivi'));
+  assert.equal(await g.locator('#navigation-follow').isVisible(), false);
+  await g.mouse.move(180, 360); await g.mouse.down(); await g.mouse.move(240, 410, { steps: 5 }); await g.mouse.up();
+  await g.locator('#navigation-follow').waitFor({ state: 'visible' });
+  await g.locator('#navigation-follow').click();
+  assert.equal(await g.locator('#navigation-follow').isVisible(), false);
+  await g.getByRole('button', { name: 'GPS 50 km/h vers est', exact: true, includeHidden: true }).dispatchEvent('click');
+  await g.waitForTimeout(100);
+  await g.getByRole('button', { name: 'GPS imprécis', exact: true, includeHidden: true }).dispatchEvent('click');
+  assert.notEqual(await g.locator('#navigation-instruction').textContent(), 'En attente d’un signal précis');
+  await g.waitForFunction(() => document.getElementById('navigation-status').textContent.includes('Position estimée'), null, { timeout: 6000 });
+  assert.equal(await g.locator('#navigation-recalculate').count(), 0);
+  await g.waitForFunction(() => document.getElementById('navigation-instruction').textContent === 'En attente d’un signal précis', null, { timeout: 16000 });
+  await g.getByRole('button', { name: 'Avant virage', exact: true, includeHidden: true }).dispatchEvent('click');
+  await g.waitForFunction(() => document.getElementById('navigation-instruction').textContent !== 'En attente d’un signal précis');
+  await g.getByRole('button', { name: 'Hors trajet', exact: true, includeHidden: true }).dispatchEvent('click');
+  await g.waitForTimeout(100);
+  await g.getByRole('button', { name: 'Hors trajet', exact: true, includeHidden: true }).dispatchEvent('click');
+  await g.waitForFunction(() => document.getElementById('gps-watch-count').textContent.startsWith('1 suivi') && document.getElementById('navigation').hidden === false, null, { timeout: 10000 });
+  assert.equal(guidance.requests.length, 2);
+  assert.ok(Math.abs(guidance.requests[1].start.lat - 48.862) < 1e-6);
+  assert.deepEqual(guidance.errors, []); await guidance.context.close();
+  check('Enseigne, recentrage, coupure GPS brève et recalcul automatique sur sortie confirmée');
 
   const native = await setup({ native: true });
   const { page } = native;

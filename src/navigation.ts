@@ -28,8 +28,8 @@ export class RecentSpeed {
 
 export function predictedRouteAt(length: number, at: number, fix: GpsFix, averageSpeed: number, now = Date.now(), reduced = false) {
   const speed = reduced || fix.speed == null || !Number.isFinite(fix.speed) || fix.speed < 0.5 || fix.speed > 100 ? 0 : Math.max(0, averageSpeed);
-  // shortcut: prédiction limitée à 3 s et 30 m ; utiliser les capteurs inertiels si disponibles.
-  return Math.min(length, at + Math.min(30, speed * Math.min(3, Math.max(0, (now - fix.timestamp) / 1000))));
+  // shortcut: estimation limitée à 15 s et 300 m ; utiliser les capteurs inertiels pour les tunnels plus longs.
+  return Math.min(length, at + Math.min(300, speed * Math.min(15, Math.max(0, (now - fix.timestamp) / 1000))));
 }
 
 export function navigationRoute(roads: RoadGeometry, result: SearchResult): NavigationRoute | null {

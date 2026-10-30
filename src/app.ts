@@ -73,15 +73,15 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       <div id="navigation-next" tabindex="0" aria-label="Prochaine instruction"><strong id="navigation-turn-distance">GPS</strong><h2 id="navigation-instruction" role="status" aria-live="polite" aria-atomic="true">Recherche de votre position…</h2></div>
       <div class="navigation-bottom">
         <p id="navigation-status" role="status"></p>
-        <button id="navigation-recalculate" class="primary" hidden>Recalculer depuis ma position</button><button id="navigation-resume" class="primary" hidden>Reprendre le GPS</button>
+        <button id="navigation-resume" class="primary" hidden>Reprendre le GPS</button>
         <div class="navigation-metrics"><div><strong id="navigation-time">—</strong><span>durée estimée</span></div><div><strong id="navigation-remaining">—</strong><span>restants</span></div><div><strong id="navigation-speed">—</strong><span>km/h · GPS</span><span id="navigation-limit">Limite : —</span></div></div>
-        <div class="navigation-actions"><button id="navigation-follow" aria-pressed="true">Position suivie</button><button id="navigation-voice" aria-pressed="false">Activer la voix</button><button id="navigation-stop" aria-label="Quitter le guidage">Quitter</button></div>
+        <div class="navigation-actions"><button id="navigation-follow" hidden>Suivre ma position</button><button id="navigation-voice" aria-pressed="false">Activer la voix</button><button id="navigation-stop" aria-label="Quitter le guidage">Quitter</button></div>
         <small>Guidage expérimental, sans trafic en direct. La voix et le GPS continuent écran verrouillé. Respectez la signalisation.</small>
         <div class="navigation-attribution">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> · <a href="https://opendatacommons.org/licenses/odbl/1-0/" target="_blank" rel="noopener">ODbL</a></div>
       </div>
     </section>
     <div class="map-legend"><span><i class="cyan"></i>Départ A</span><span><i class="amber"></i>Arrivée B</span><span><i class="final"></i>Trajet</span></div>
-    <dialog id="about" class="about" aria-labelledby="about-title"><button id="close-about" class="icon-button" aria-label="Fermer l’aide">${icon('close')}</button><h2 id="about-title">Comment ça marche</h2><p>Un front cyan part de A, un front ambre part de B. Chaque branche suit une route réellement explorée.</p><p>La première rencontre ne suffit pas. Le trajet apparaît quand le calcul confirme qu’aucun meilleur chemin n’existe dans le réseau chargé.</p><dl><div><dt>Le plus court</dt><dd>Minimise la longueur des routes.</dd></div><div><dt>Le plus rapide</dt><dd>Minimise le temps estimé selon les vitesses OSM, sans trafic en direct.</dd></div></dl><button id="lite" class="setting-button" aria-pressed="false">${icon('layers')} Mode léger</button><p>Réduit les halos et le nombre de fronts pour les appareils modestes. La réduction des animations suit aussi votre préférence système.</p><details><summary>Données et limites</summary><p>Le service France utilise une recherche bidirectionnelle exacte. Les grandes traces sont échantillonnées pour préserver le téléphone ; le calcul et le trajet final restent complets. Sans service, seule la démo Paris utilise le calcul embarqué.</p><p id="data-info"></p><p>Les points sont raccordés à une route accessible à 2 km maximum. Les accès privés et de desserte sont exclus. Certaines restrictions OSM ne sont pas prises en charge. Vérifiez l’accès final et respectez la signalisation.</p><p>Le guidage GPS expérimental est réservé à l’application mobile sur téléphone. Le GPS continue écran verrouillé jusqu’à l’arrivée ou à Quitter. Aucun trafic en direct n’est intégré.</p><a href="/data/provenance.json" target="_blank" rel="noopener">Provenance de la démo Paris</a></details><details><summary>Position et confidentialité</summary><p>Le GPS reste sur l’appareil pendant le suivi. Le calcul d’un trajet depuis votre position transmet ce point au service routier configuré, ainsi que les recalculs. L’IGN reçoit le texte recherché. Le fournisseur des tuiles reçoit les zones consultées. Aucun historique GPS n’est enregistré par l’application.</p></details></dialog>
+    <dialog id="about" class="about" aria-labelledby="about-title"><button id="close-about" class="icon-button" aria-label="Fermer l’aide">${icon('close')}</button><h2 id="about-title">Comment ça marche</h2><p>Un front cyan part de A, un front ambre part de B. Chaque branche suit une route réellement explorée.</p><p>La première rencontre ne suffit pas. Le trajet apparaît quand le calcul confirme qu’aucun meilleur chemin n’existe dans le réseau chargé.</p><dl><div><dt>Le plus court</dt><dd>Minimise la longueur des routes.</dd></div><div><dt>Le plus rapide</dt><dd>Minimise le temps estimé selon les vitesses OSM, sans trafic en direct.</dd></div></dl><button id="lite" class="setting-button" aria-pressed="false">${icon('layers')} Mode léger</button><p>Réduit les halos et le nombre de fronts pour les appareils modestes. La réduction des animations suit aussi votre préférence système.</p><details><summary>Données et limites</summary><p>Le service France utilise une recherche bidirectionnelle exacte. Les grandes traces sont échantillonnées pour préserver le téléphone ; le calcul et le trajet final restent complets. Sans service, seule la démo Paris utilise le calcul embarqué.</p><p id="data-info"></p><p>Les points sont raccordés à une route accessible à 2 km maximum. Les accès privés et de desserte sont exclus. Certaines restrictions OSM ne sont pas prises en charge. Vérifiez l’accès final et respectez la signalisation.</p><p>Le guidage GPS expérimental est réservé à l’application mobile sur téléphone. Le GPS continue écran verrouillé jusqu’à l’arrivée ou à Quitter. Aucun trafic en direct n’est intégré.</p><a href="/data/provenance.json" target="_blank" rel="noopener">Provenance de la démo Paris</a></details><details><summary>Position et confidentialité</summary><p>Le GPS reste sur l’appareil pendant le suivi. Le calcul d’un trajet depuis votre position transmet ce point au service routier configuré, ainsi que les recalculs. L’IGN, Photon (Komoot / OpenStreetMap) et l’Annuaire des entreprises reçoivent le texte recherché. Le fournisseur des tuiles reçoit les zones consultées. Aucun historique GPS n’est enregistré par l’application.</p></details></dialog>
     <div id="loading" class="loading" role="status"><span class="loading-bolt">${icon('bolt')}</span><strong>Chargement de la carte</strong><p>Chargement des données OpenStreetMap…</p><button id="retry" class="primary" hidden>Réessayer</button></div>
   </main>
   <section id="settings-page" class="settings-page" aria-labelledby="settings-title" hidden>
@@ -496,17 +496,17 @@ function setupSearch(side: Endpoint) {
     render(local);
     if (query.length < 3) return;
     timer = window.setTimeout(async () => {
-      controller = new AbortController();
-      const timeout = window.setTimeout(() => controller?.abort(), 6000);
+      const request = controller = new AbortController();
+      const timeout = window.setTimeout(() => request.abort(), 6000);
       try {
-        const remote = await searchFrance(text, controller.signal);
+        const remote = await searchFrance(text, request.signal);
         if (current !== sequence || document.activeElement !== input) return;
         const names = new Set<string>();
-        render([...remote, ...local].filter(p => { const name = normalize(p.name); if (names.has(name)) return false; names.add(name); return true; }).slice(0, 7));
+        render([...remote, ...local].filter(p => { const name = normalize(`${p.name} ${p.detail ?? ''}`); if (names.has(name)) return false; names.add(name); return true; }).slice(0, 7));
       } catch {
-        if (current === sequence && document.activeElement === input && !local.length) list.textContent = 'Recherche IGN indisponible. Choisissez un point sur la carte.';
+        if (current === sequence && document.activeElement === input && !local.length) list.textContent = 'Recherche de lieux indisponible. Choisissez un point sur la carte.';
       } finally { clearTimeout(timeout); }
-    }, 300);
+    }, 650);
   };
   input.addEventListener('input', () => {
     stop(); selections[side] = null; markers[side]?.remove(); updateLaunch(); show();
@@ -567,7 +567,7 @@ async function initialize() {
     renderer = new ExplorationRenderer(map, roads);
     guidance = new GpsGuidance(map, () => { renderer.clear(); showAbout(false); }, () => requestAnimationFrame(fitPoints), fix => {
       if (selectPoint('start', { name: 'Ma position GPS', lat: fix.lat, lon: fix.lon })) {
-        explore(); resumeGuidance = true; notice('Recalcul depuis votre position avant de démarrer le guidage.');
+        explore(); resumeGuidance = true; notice('Recalcul du trajet depuis votre position…');
       }
     });
     $<HTMLButtonElement>('lite').setAttribute('aria-pressed', String(renderer.lite));

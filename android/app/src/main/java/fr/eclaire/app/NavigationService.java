@@ -96,9 +96,10 @@ public final class NavigationService extends Service implements LocationListener
         if (!active) return;
         var fix = new GuidanceTracker.Fix(location.getLatitude(), location.getLongitude(), location.hasAccuracy() ? location.getAccuracy() : Double.POSITIVE_INFINITY, location.getTime(), location.hasSpeed() ? (double) location.getSpeed() : null, location.hasBearing() ? (double) location.getBearing() : null);
         var progress = tracker.update(fix, System.currentTimeMillis());
+        if (progress.status().equals("uncertain") && System.currentTimeMillis() - lastGoodAt <= 3000) return;
+        if (!progress.status().equals("uncertain")) lastGoodAt = System.currentTimeMillis();
         boolean onRoute = progress.status().equals("on-route") || progress.status().equals("arrived");
         if (onRoute) {
-            lastGoodAt = System.currentTimeMillis();
             message = progress.status().equals("arrived") ? "Vous êtes arrivé au point routier." : (progress.toTurn() < 20 ? "Maintenant, " : "Dans " + distance(progress.toTurn()) + ", ") + tracker.steps.get(progress.nextIndex()).text();
             String key = progress.status().equals("arrived") ? "arrived" : progress.nextIndex() + ":" + (progress.toTurn() < 35 ? "now" : progress.toTurn() < 200 ? "near" : "far");
             if (voice && speechReady && !spoken.contains(key) && audio.requestAudioFocus(focus, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
@@ -109,7 +110,7 @@ public final class NavigationService extends Service implements LocationListener
             silence();
             message = switch (progress.status()) {
                 case "approach" -> "Rejoignez le point routier par une voie accessible.";
-                case "off-route" -> "Hors du trajet. Ouvrez Éclaire pour recalculer.";
+                case "off-route" -> "Hors du trajet. Ouvrez Éclaire pour reprendre le guidage.";
                 default -> "En attente d’un signal GPS précis.";
             };
         }
