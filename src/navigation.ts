@@ -3,8 +3,26 @@ import type { NavigationInstruction, RoadGeometry, SearchResult } from './types'
 
 export interface GpsFix { lat: number; lon: number; accuracy: number; timestamp: number; speed?: number | null; heading?: number | null }
 interface RoutePoint { lat: number; lon: number; at: number; seconds: number; speedLimit?: number }
-export interface NavigationRoute { points: RoutePoint[]; instructions: NavigationInstruction[]; length: number; seconds: number }
+export interface NavigationRoute { points: RoutePoint[]; instructions: NavigationInstruction[]; length: number; seconds: number; waypointAt?: number }
 export interface RouteMatch { at: number; seconds: number; distance: number }
+
+export function isNavigationRoute(value: unknown): value is NavigationRoute {
+  if (!value || typeof value !== 'object') return false;
+  const route = value as NavigationRoute;
+  if (!Number.isFinite(route.length) || route.length < 1 || !Number.isFinite(route.seconds) || route.seconds < 0 || (route.waypointAt !== undefined && (!Number.isFinite(route.waypointAt) || route.waypointAt <= 0 || route.waypointAt >= route.length)) || !Array.isArray(route.points) || route.points.length < 2 || route.points.length > 1_000_000 || !Array.isArray(route.instructions) || !route.instructions.length || route.instructions.length > 50_000) return false;
+  let at = -1, seconds = -1;
+  for (const point of route.points) {
+    if (!point || !Number.isFinite(point.lat) || Math.abs(point.lat) > 90 || !Number.isFinite(point.lon) || Math.abs(point.lon) > 180 || !Number.isFinite(point.at) || point.at < 0 || point.at < at || !Number.isFinite(point.seconds) || point.seconds < 0 || point.seconds < seconds || (point.speedLimit !== undefined && (!Number.isFinite(point.speedLimit) || point.speedLimit <= 0 || point.speedLimit > 250))) return false;
+    at = point.at; seconds = point.seconds;
+  }
+  if (route.points[0].at !== 0 || route.points[0].seconds !== 0 || Math.abs(at - route.length) > 2 || Math.abs(seconds - route.seconds) > 2) return false;
+  at = -1;
+  for (const step of route.instructions) {
+    if (!step || !Number.isFinite(step.at) || step.at < 0 || step.at < at || step.at > route.length + 1 || !Number.isSafeInteger(step.sign) || typeof step.text !== 'string' || step.text.length > 2000 || typeof step.name !== 'string' || step.name.length > 2000) return false;
+    at = step.at;
+  }
+  return route.instructions[0].at === 0 && route.instructions.at(-1)!.sign === 4 && Math.abs(at - route.length) <= 1;
+}
 
 export function routePosition(route: NavigationRoute, at: number) {
   let low = 1, high = route.points.length - 1;
@@ -55,7 +73,7 @@ export function navigationRoute(roads: RoadGeometry, result: SearchResult): Navi
   if (Math.abs(at - result.length) > 2) throw new Error('Distance du guidage incohérente.');
   // Les temps des arêtes excluent certains coûts de virage ; conserver la durée totale du moteur.
   if (seconds) for (const p of points) p.seconds *= result.seconds / seconds;
-  return { points, instructions: result.instructions, length: result.length, seconds: result.seconds };
+  return { points, instructions: result.instructions, length: result.length, seconds: result.seconds, ...(result.waypointAt !== undefined ? { waypointAt: result.waypointAt } : {}) };
 }
 
 export function usableFix(fix: GpsFix, now = Date.now()) {
@@ -66,19 +84,33 @@ export function usableFix(fix: GpsFix, now = Date.now()) {
 
 export function matchRoute(route: NavigationRoute, fix: GpsFix, previous?: RouteMatch, elapsed = 0): RouteMatch {
   let best: RouteMatch = { at: previous?.at ?? 0, seconds: previous?.seconds ?? 0, distance: Infinity };
+  let bestScore = Infinity;
   const scaleX = 111_195 * Math.cos(fix.lat * Math.PI / 180), scaleY = 111_195;
   const speed = fix.speed != null && Number.isFinite(fix.speed) && fix.speed >= 0 && fix.speed <= 100 ? fix.speed : 0;
   const forward = Math.max(180, (speed + 15) * elapsed / 1000 + fix.accuracy * 2);
-  for (let i = 1; i < route.points.length; i++) {
+  let first = 1;
+  if (previous) {
+    let low = 1, high = route.points.length - 1;
+    while (low < high) { const mid = (low + high) >>> 1; if (route.points[mid].at < previous.at - 60) low = mid + 1; else high = mid; }
+    first = low;
+  }
+  for (let i = first; i < route.points.length; i++) {
     const a = route.points[i - 1], b = route.points[i];
+    if (previous && a.at > previous.at + forward) break;
     const x = (b.lon - a.lon) * scaleX, y = (b.lat - a.lat) * scaleY;
     const px = (fix.lon - a.lon) * scaleX, py = (fix.lat - a.lat) * scaleY;
     const t = x || y ? Math.max(0, Math.min(1, (px * x + py * y) / (x * x + y * y))) : 0;
     const at = a.at + (b.at - a.at) * t;
-    // shortcut: rapprochement géométrique à continuité bornée ; remplacer par un map matching si voies parallèles/étagées ambiguës.
     if (previous && (at < previous.at - 60 || at > previous.at + forward)) continue;
     const distance = Math.hypot(px - x * t, py - y * t);
-    if (distance < best.distance) best = { at, distance, seconds: a.seconds + (b.seconds - a.seconds) * t };
+    if (distance > bestScore) continue;
+    // shortcut: sans historique ni altitude fiable, les voies superposées restent ambiguës ; utiliser un vrai map matching pour identifier le niveau au départ.
+    const heading = speed >= 3 && fix.heading != null && Number.isFinite(fix.heading) && fix.heading >= 0 && fix.heading < 360 && Math.hypot(x, y) >= 10;
+    const penalty = heading ? 12.5 * (1 - Math.cos(Math.atan2(x, y) - fix.heading! * Math.PI / 180)) : 0;
+    const motion = previous && elapsed > 0 && elapsed <= 15_000 && fix.speed != null && Number.isFinite(fix.speed) && fix.speed >= 0 && fix.speed <= 100
+      ? Math.min(25, Math.abs(at - previous.at - speed * elapsed / 1000) * 0.25) : 0;
+    const score = distance + penalty + motion + (distance > Math.max(75, fix.accuracy * 1.5) ? 100 : 0);
+    if (score < bestScore) { bestScore = score; best = { at, distance, seconds: a.seconds + (b.seconds - a.seconds) * t }; }
   }
   return best;
 }

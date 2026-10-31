@@ -43,7 +43,7 @@ public class PipGuidanceInstrumentedTest {
         try (var scenario = ActivityScenario.launch(MainActivity.class)) {
             Thread.sleep(2000);
             scenario.onActivity(activity -> {
-                CarGuidance.update(new CarGuidance.Snapshot(route, null, null, "starting", "Recherche GPS"));
+                CarGuidance.update(new CarGuidance.Snapshot(route, null, null, "starting", "Recherche GPS", false));
             });
             instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_HOME);
             var entered = new AtomicBoolean();
@@ -56,8 +56,8 @@ public class PipGuidanceInstrumentedTest {
             scenario.onActivity(activity -> {
                 var fix = new GuidanceTracker.Fix(48.005, 2, 5, System.currentTimeMillis(), 5.0, 0.0);
                 var progress = new GuidanceTracker.State("on-route", 300, 30, 0, 1, 200);
-                CarGuidance.update(new CarGuidance.Snapshot(route, fix, progress, "on-route", "Dans 200 mètres, tournez"));
-                assertEquals("Dans 200 mètres, tournez", ((TextView) find(activity.getWindow().getDecorView()).getChildAt(1)).getText().toString());
+                CarGuidance.update(new CarGuidance.Snapshot(route, fix, progress, "on-route", "Dans 200 mètres, tournez", false));
+                assertTrue(((TextView) find(activity.getWindow().getDecorView()).getChildAt(1)).getText().toString().contains("Dans 200 mètres, tournez"));
             });
             var drawn = new AtomicBoolean();
             deadline = System.currentTimeMillis() + 5000;
@@ -82,5 +82,30 @@ public class PipGuidanceInstrumentedTest {
             }
             assertTrue("Le retour en plein écran doit retirer la vue PiP", expanded.get());
         } finally { instrumentation.runOnMainSync(() -> CarGuidance.update(null)); }
+    }
+
+    @Test public void disabledAutomaticPreferencePersistsButManualEntryStillWorks() throws Exception {
+        assumeTrue(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O);
+        var instrumentation = InstrumentationRegistry.getInstrumentation();
+        var context = instrumentation.getTargetContext();
+        assumeTrue(context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE));
+        for (String permission : new String[] { Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION }) instrumentation.getUiAutomation().grantRuntimePermission(context.getPackageName(), permission);
+        if (Build.VERSION.SDK_INT >= 33) instrumentation.getUiAutomation().grantRuntimePermission(context.getPackageName(), Manifest.permission.POST_NOTIFICATIONS);
+        var route = new GuidanceTracker(List.of(new GuidanceTracker.Point(48, 2, 0, 0), new GuidanceTracker.Point(48.01, 2, 1000, 100)), List.of(new GuidanceTracker.Step(0, "Continuez")));
+        try (var scenario = ActivityScenario.launch(MainActivity.class)) {
+            scenario.onActivity(activity -> activity.setPipAutomatic(false));
+            scenario.recreate(); Thread.sleep(2000);
+            var entered = new AtomicBoolean();
+            scenario.onActivity(activity -> {
+                assertFalse(activity.pipAutomatic());
+                CarGuidance.update(new CarGuidance.Snapshot(route, null, null, "starting", "Recherche GPS", false));
+                if (Build.VERSION.SDK_INT >= 31) assertFalse(activity.pipParams(CarGuidance.current()).isAutoEnterEnabled());
+                entered.set(activity.enterPip());
+            });
+            assertTrue("Le PiP manuel doit rester disponible", entered.get());
+        } finally {
+            context.getSharedPreferences("MainActivity", android.content.Context.MODE_PRIVATE).edit().remove("pipAutomatic").commit();
+            instrumentation.runOnMainSync(() -> CarGuidance.update(null));
+        }
     }
 }

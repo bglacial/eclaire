@@ -84,13 +84,13 @@ export function createMap(data: Dataset, roads: RoadGraph) {
   return { map, networkNodes };
 }
 
-export function pointMarker(map: L.Map, lat: number, lon: number, side: 'start' | 'end', label: string, onMove?: (point: L.LatLng) => void) {
+export function pointMarker(map: L.Map, lat: number, lon: number, side: 'start' | 'end' | 'via', label: string, onMove?: (point: L.LatLng) => void) {
   const el = document.createElement('div');
   el.className = `point-marker ${side}`;
-  const pin = document.createElement('span'); pin.className = 'pin-core'; pin.textContent = side === 'start' ? 'A' : 'B';
+  const pin = document.createElement('span'); pin.className = 'pin-core'; pin.textContent = side === 'start' ? 'A' : side === 'via' ? '•' : 'B';
   const text = document.createElement('span'); text.className = 'pin-label'; text.textContent = label;
   el.append(pin, text);
-  const marker = L.marker([lat, lon], { icon: L.divIcon({ className: 'point-icon', html: el, iconSize: [44, 44], iconAnchor: [22, 22] }), draggable: !!onMove, autoPan: true, interactive: !!onMove, keyboard: !!onMove, title: `${side === 'start' ? 'Départ' : 'Arrivée'} : ${label}. Déplacez le repère pour l’ajuster.`, zIndexOffset: 1000 }).addTo(map);
+  const marker = L.marker([lat, lon], { icon: L.divIcon({ className: 'point-icon', html: el, iconSize: [44, 44], iconAnchor: [22, 22] }), draggable: !!onMove, autoPan: true, interactive: !!onMove, keyboard: !!onMove, title: `${side === 'start' ? 'Départ' : side === 'via' ? 'Étape' : 'Arrivée'} : ${label}. Déplacez le repère pour l’ajuster.`, zIndexOffset: 1000 }).addTo(map);
   if (onMove) marker.on('dragend', () => onMove(marker.getLatLng()));
   return marker;
 }

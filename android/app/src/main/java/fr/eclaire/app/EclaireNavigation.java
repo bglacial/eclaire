@@ -16,6 +16,8 @@ public class EclaireNavigation extends Plugin {
     private NavigationService service;
     private PluginCall pending;
     private GuidanceTracker route;
+    private JSONObject routeWire;
+    private NativeRouting.Config routing;
     private boolean bound;
     private JSObject latest = new JSObject().put("active", false).put("status", "stopped");
     private final ServiceConnection connection = new ServiceConnection() {
@@ -24,7 +26,7 @@ public class EclaireNavigation extends Plugin {
             PluginCall call = pending; pending = null;
             if (call == null) { close(); return; }
             try {
-                service.start(route, Boolean.TRUE.equals(call.getBoolean("voice", false)), event -> { latest = event; notifyListeners("location", event); });
+                service.start(route, Boolean.TRUE.equals(call.getBoolean("voice", false)), event -> { latest = event; notifyListeners("location", event); }, routeWire, routing);
                 latest = new JSObject().put("active", true).put("status", "starting");
                 call.resolve();
             } catch (RuntimeException error) { close(); call.reject("Impossible de démarrer le GPS. Vérifiez la localisation et ses autorisations.", error); }
@@ -36,12 +38,11 @@ public class EclaireNavigation extends Plugin {
         try {
             var data = call.getObject("route");
             if (data == null) throw new IllegalArgumentException();
-            JSONArray points = data.getJSONArray("points"), steps = data.getJSONArray("instructions");
-            if (points.length() > 1000000 || steps.length() > 50000) throw new IllegalArgumentException();
-            var geometry = new ArrayList<GuidanceTracker.Point>(); var instructions = new ArrayList<GuidanceTracker.Step>();
-            for (int i = 0; i < points.length(); i++) { var p = points.getJSONObject(i); geometry.add(new GuidanceTracker.Point(p.getDouble("lat"), p.getDouble("lon"), p.getDouble("at"), p.getDouble("seconds"))); }
-            for (int i = 0; i < steps.length(); i++) { var s = steps.getJSONObject(i); instructions.add(new GuidanceTracker.Step(s.getDouble("at"), s.getString("text"))); }
-            route = new GuidanceTracker(geometry, instructions);
+            route = GuidanceTracker.fromJson(data);
+            routeWire = data;
+            var config = call.getObject("routing");
+            routing = config == null ? null : NativeRouting.Config.fromJson(config);
+            if (routing != null && routing.viaAt() != null && routing.viaAt() >= route.points.get(route.points.size() - 1).at()) throw new IllegalArgumentException("Étape hors du trajet.");
         } catch (JSONException | IllegalArgumentException error) { call.reject("Parcours de guidage invalide."); return; }
         if (Build.VERSION.SDK_INT >= 33 && getPermissionState("notifications") != PermissionState.GRANTED) { requestPermissionForAlias("notifications", call, "notificationsResult"); return; }
         begin(call);
@@ -64,12 +65,12 @@ public class EclaireNavigation extends Plugin {
             } catch (RuntimeException error) { pending = null; close(); call.reject("Impossible de démarrer le guidage en arrière-plan.", error); }
         });
     }
-    @PluginMethod public void getState(PluginCall call) { getActivity().runOnUiThread(() -> call.resolve(latest)); }
+    @PluginMethod public void getState(PluginCall call) { getActivity().runOnUiThread(() -> call.resolve(service == null ? latest : service.state())); }
     @PluginMethod public void setVoice(PluginCall call) { getActivity().runOnUiThread(() -> { if (service != null) service.setVoice(Boolean.TRUE.equals(call.getBoolean("enabled", false))); call.resolve(); }); }
     @PluginMethod public void stop(PluginCall call) { getActivity().runOnUiThread(() -> { close(); call.resolve(); }); }
     private void close() {
         if (bound) { getContext().unbindService(connection); bound = false; }
-        getContext().stopService(new Intent(getContext(), NavigationService.class)); service = null; route = null;
+        getContext().stopService(new Intent(getContext(), NavigationService.class)); service = null; route = null; routeWire = null; routing = null;
         latest = new JSObject().put("active", false).put("status", "stopped");
     }
     @Override protected void handleOnDestroy() { getActivity().runOnUiThread(this::close); }

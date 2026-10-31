@@ -48,6 +48,7 @@ export interface SearchResult {
   length: number;
   seconds: number;
   computeMs?: number;
+  waypointAt?: number;
   instructions?: NavigationInstruction[];
 }
 export type WorkerResponse =

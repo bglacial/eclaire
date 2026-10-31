@@ -6,6 +6,9 @@ export const isMobileApp = () => canGuide(Capacitor.getPlatform(), isPhoneDevice
 export interface UpdateStatus { lastCheckedAt: number; checking: boolean; status?: 'current' | 'available' | 'checking' | 'error' }
 export const device = registerPlugin<{
   setKeepScreenOn(options: { enabled: boolean }): Promise<void>;
+  getPipSettings(): Promise<{ supported: boolean; automatic: boolean }>;
+  setPipAutomatic(options: { enabled: boolean }): Promise<void>;
+  enterPip(): Promise<void>;
   getVersion(): Promise<{ version: string }>;
   getUpdateStatus(): Promise<UpdateStatus>;
   checkForUpdates(): Promise<UpdateStatus>;

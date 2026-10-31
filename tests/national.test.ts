@@ -123,3 +123,24 @@ test('la recherche trouve une enseigne ouverte et conserve les lieux lorsque une
   fetchMock.mock.mockImplementation(async () => new Response('', { status: 503 }));
   await assert.rejects(searchFrance('test', new AbortController().signal), /indisponible/);
 });
+
+
+test('les résultats rapides s’affichent sans attendre les autres sources et une recherche annulée ne les publie plus', async context => {
+  let release!: () => void;
+  const slow = new Promise<void>(resolve => { release = resolve; });
+  let first!: () => void;
+  const received = new Promise<void>(resolve => { first = resolve; });
+  context.mock.method(globalThis, 'fetch', async url => {
+    if (String(url).includes('recherche-entreprises')) { await slow; return Response.json({ results: [] }); }
+    if (String(url).includes('photon')) return Response.json({ features: [{ properties: { name: 'Gare', city: 'Le Mans' }, geometry: { coordinates: [0.19, 48] } }] });
+    return Response.json({ features: [] });
+  });
+  const updates: string[][] = [], controller = new AbortController();
+  const pending = searchFrance('Gare', controller.signal, places => { updates.push(places.map(place => place.name)); if (places.length) first(); });
+  await received;
+  assert.deepEqual(updates.at(-1), ['Gare']);
+  const count = updates.length;
+  controller.abort(); release();
+  await assert.rejects(pending, { name: 'AbortError' });
+  assert.equal(updates.length, count);
+});

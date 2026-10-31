@@ -17,7 +17,7 @@ export async function checkNationalService() {
   } finally { deadline.dispose(); }
 }
 
-export async function searchFrance(query: string, signal: AbortSignal): Promise<Place[]> {
+export async function searchFrance(query: string, signal: AbortSignal, onUpdate?: (places: Place[]) => void): Promise<Place[]> {
   const ign = new URL('https://data.geopf.fr/geocodage/search');
   ign.search = new URLSearchParams({ q: query, limit: '6' }).toString();
   const photon = new URL('https://photon.komoot.io/api/');
@@ -54,9 +54,16 @@ export async function searchFrance(query: string, signal: AbortSignal): Promise<
         return words.every(word => label.includes(word)) && isInFrance(place) ? [place] : [];
       }));
   };
-  const results = await Promise.allSettled([businesses(), search(photon, 'OSM'), search(ign, 'IGN')]);
+  const partial: Place[][] = [[], [], []];
+  const searches = [businesses(), search(photon, 'OSM'), search(ign, 'IGN')].map((request, index) => request.then(places => {
+    partial[index] = places;
+    if (!signal.aborted) onUpdate?.(partial.flat());
+    return places;
+  }));
+  const results = await Promise.allSettled(searches);
+  if (signal.aborted) throw new DOMException('Recherche annulée.', 'AbortError');
   if (results.every(result => result.status === 'rejected')) throw new Error('Recherche nationale indisponible.');
-  return results.flatMap(result => result.status === 'fulfilled' ? result.value : []);
+  return partial.flat();
 }
 
 export interface NationalMetadata { type: 'metadata'; visited: number; computeMs: number; traceStride: number; traceEvents: number; snapped: { lat: number; lon: number; distance: number }[] }

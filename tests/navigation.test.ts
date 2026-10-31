@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { GuidanceProgress, RecentSpeed, matchRoute, navigationRoute, predictedRouteAt, routePosition, usableFix, type GpsFix } from '../src/navigation';
+import { GuidanceProgress, RecentSpeed, isNavigationRoute, matchRoute, navigationRoute, predictedRouteAt, routePosition, usableFix, type GpsFix } from '../src/navigation';
 import type { RoadGeometry, SearchResult } from '../src/types';
 
 const lat = 48.85, lon = 2.35, north = 100 / 111195, east = 100 / (111195 * Math.cos(lat * Math.PI / 180));
@@ -14,6 +14,15 @@ const result: SearchResult = { path: [0, 1], length: 200, seconds: 44, cost: 44,
 const fix = (at: number, timestamp = 100_000): GpsFix => at <= 100
   ? { lat: lat + north * at / 100, lon, accuracy: 5, timestamp, speed: 0 }
   : { lat: lat + north, lon: lon + east * (at - 100) / 100, accuracy: 5, timestamp, speed: 0 };
+
+test('un nouveau trajet natif est validé avant de remplacer le guidage', () => {
+  const route = navigationRoute(roads, result)!;
+  assert.equal(isNavigationRoute(route), true);
+  assert.equal(isNavigationRoute({ ...route, length: NaN }), false);
+  assert.equal(isNavigationRoute({ ...route, points: [{ ...route.points[0], lat: NaN }, ...route.points.slice(1)] }), false);
+  assert.equal(isNavigationRoute({ ...route, instructions: route.instructions.slice(0, -1) }), false);
+  assert.equal(isNavigationRoute({ ...route, points: route.points.map((point, index) => index === 1 ? { ...point, seconds: -1 } : point) }), false);
+});
 
 test('le guidage conserve les coudes, les distances et les temps du moteur', () => {
   const route = navigationRoute(roads, result)!;
@@ -55,6 +64,35 @@ test('le rapprochement ne saute pas à une portion lointaine qui recroise la rou
   assert.ok(Math.abs(match.at - 30) < 0.1);
 });
 
+test('la recherche bornée conserve un long segment qui traverse les limites de continuité', () => {
+  const route = navigationRoute(roads, result)!;
+  route.points = [{ lat: 48, lon: 2, at: 0, seconds: 0 }, { lat: 48.01, lon: 2, at: 1000, seconds: 100 }, { lat: 48.02, lon: 2, at: 2000, seconds: 200 }];
+  const position = { lat: 48.005, lon: 2, accuracy: 5, timestamp: 100_000, speed: 0 };
+  const match = matchRoute(route, position, { at: 490, seconds: 49, distance: 0 }, 1000);
+  assert.ok(Math.abs(match.at - 500) < 0.01);
+});
+
+test('le suivi d’un long trajet ne parcourt pas toute sa géométrie à chaque mesure', () => {
+  const route = navigationRoute(roads, result)!;
+  const points = Array.from({ length: 100_000 }, (_, at) => ({ lat: 48 + at / 111_195, lon: 2, at, seconds: at / 10 }));
+  let reads = 0;
+  route.points = new Proxy(points, { get(target, key, receiver) { if (typeof key === 'string' && /^\d+$/.test(key)) reads++; return Reflect.get(target, key, receiver); } });
+  const position = { lat: 48 + 50_000 / 111_195, lon: 2, accuracy: 5, timestamp: 100_000, speed: 10 };
+  const match = matchRoute(route, position, { at: 49_990, seconds: 4999, distance: 0 }, 1000);
+  assert.ok(Math.abs(match.at - 50_000) < 0.01);
+  assert.ok(reads < 1000, `Trop de points consultés : ${reads}`);
+});
+
+test('le cap en mouvement distingue deux portions parallèles de sens opposés', () => {
+  const route = navigationRoute(roads, result)!;
+  route.points = [{ lat: 48.001, lon: 2, at: 0, seconds: 0 }, { lat: 48, lon: 2, at: 111, seconds: 10 },
+    { lat: 48, lon: 2.0002, at: 126, seconds: 12 }, { lat: 48.001, lon: 2.0002, at: 237, seconds: 22 }];
+  const position = { lat: 48.0005, lon: 2, accuracy: 5, timestamp: 100_000, speed: 10, heading: 0 };
+  assert.ok(matchRoute(route, position).at > 126);
+  assert.ok(matchRoute(route, { ...position, speed: 0 }).at < 111);
+  assert.ok(matchRoute(route, { ...position, heading: 360 }).at < 111);
+});
+
 test('l’arrivée demande deux positions proches et précises espacées de trois secondes', () => {
   const progress = new GuidanceProgress(navigationRoute(roads, result)!);
   assert.equal(progress.update(fix(195), 100_000).status, 'on-route');
@@ -63,6 +101,29 @@ test('l’arrivée demande deux positions proches et précises espacées de troi
   const moving = new GuidanceProgress(navigationRoute(roads, result)!);
   moving.update({ ...fix(195), speed: 15 }, 100_000);
   assert.equal(moving.update({ ...fix(200, 104_000), speed: 15 }, 104_000).status, 'on-route');
+});
+
+test('la vitesse et l’historique évitent les sauts entre portions parallèles ou superposées', () => {
+  for (const offset of [0, 5]) {
+    const route = navigationRoute(roads, result)!;
+    const point = (north: number, east: number, at: number) => ({ lat: 48 + north / 111195, lon: 2 + east / (111195 * Math.cos(48 * Math.PI / 180)), at, seconds: at / 10 });
+    route.points = [point(0, 0, 0), point(30, 0, 30), point(30, 10, 40), point(0, 10, 70), point(0, offset, 80 - offset), point(60, offset, 140 - offset)];
+    const progress = new GuidanceProgress(route);
+    const gps = (north: number, east: number, time: number, heading: number) => ({ ...point(north, east, 0), accuracy: 5, timestamp: time, speed: 10, heading });
+    progress.update(gps(10, 10, 100_000, 180), 100_000);
+    assert.ok(Math.abs(progress.match!.at - 60) < 0.01);
+    progress.update(gps(15, offset, 103_500, 0), 103_500);
+    assert.ok(Math.abs(progress.match!.at - (95 - offset)) < 0.01, `Retour intempestif sur la première portion : ${progress.match!.at}`);
+    const firstPass = new GuidanceProgress(route);
+    firstPass.update(gps(10, 0, 100_000, 0), 100_000);
+    firstPass.update(gps(20, offset, 101_000, 0), 101_000);
+    assert.ok(Math.abs(firstPass.match!.at - 20) < 0.01, `Saut prématuré sur la seconde portion : ${firstPass.match!.at}`);
+    if (offset === 5) {
+      const previous = { at: 10, seconds: 1, distance: 0 };
+      for (const speed of [null, NaN, -1, 101]) assert.ok(matchRoute(route, { ...gps(20, offset, 101_000, 0), speed }, previous, 1000).at > 80);
+      assert.ok(matchRoute(route, gps(20, offset, 120_000, 0), previous, 20_000).at > 80);
+    }
+  }
 });
 
 test('un trajet sans manœuvres ne prétend pas fournir un guidage et un trajet discontinu est refusé', () => {

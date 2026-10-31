@@ -39,9 +39,18 @@ class NavigationTest {
             assertEquals(path.getDistance(), instructions.getLast().get("at"));
             assertEquals(4, instructions.getLast().get("sign"));
             assertTrue(instructions.stream().anyMatch(i -> i.get("text").toString().toLowerCase(Locale.FRENCH).contains("droite")));
+            var route = FranceServer.guidanceRoute(path, graph, time, manager, french);
+            @SuppressWarnings("unchecked") var routePoints = (java.util.List<java.util.Map<String, Object>>) route.get("points");
+            assertEquals(3, routePoints.size());
+            assertEquals(0d, (double) routePoints.getFirst().get("at"), 1e-6);
+            assertEquals(path.getDistance(), (double) routePoints.getLast().get("at"), 1e-6);
+            assertEquals(path.getTime() / 1000d, (double) routePoints.getLast().get("seconds"), 1e-6);
+            assertEquals(48.851, (double) routePoints.get(1).get("lat"), 1e-6);
+            assertEquals(instructions, route.get("instructions"));
             var same = new DijkstraBidirectionRef(graph, time, TraversalMode.NODE_BASED).calcPath(0, 0);
             var sameInstructions = FranceServer.navigation(same, graph, time, manager, french);
             assertEquals(1, sameInstructions.size()); assertEquals(4, sameInstructions.getFirst().get("sign"));
+            assertThrows(IllegalArgumentException.class, () -> FranceServer.guidanceRoute(same, graph, time, manager, french));
         }
     }
 }

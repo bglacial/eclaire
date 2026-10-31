@@ -1,6 +1,6 @@
 {
   "name": "eclaire",
-  "version": "1.1.0-alpha.10",
+  "version": "1.1.0-alpha.11",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,6 +8,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 0.0.0.0",
     "test": "node --import tsx --test tests/*.test.ts",
+    "test:ios": "node scripts/test-ios-guidance.mjs",
     "data:import": "node scripts/import-osm.mjs",
     "server:build": "./server/mvnw -f server/pom.xml package",
     "server:test": "./server/mvnw -f server/pom.xml test",

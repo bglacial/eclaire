@@ -46,6 +46,18 @@ public class BackgroundGuidanceInstrumentedTest {
                         java.util.Arrays.asList(new GuidanceTracker.Point(48, 2, 0, 0), new GuidanceTracker.Point(48.002, 2, 222, 40)),
                         java.util.Arrays.asList(new GuidanceTracker.Step(0, "Continuez"), new GuidanceTracker.Step(222, "Arrivée"))), false, state -> {}));
                 assertEquals("starting", CarGuidance.current().status());
+                assertFalse(CarGuidance.current().voice());
+                var actions = new AtomicReference<java.util.List<android.app.RemoteAction>>();
+                scenario.onActivity(activity -> actions.set(activity.pipParams(CarGuidance.current()).getActions()));
+                assertEquals(2, actions.get().size());
+                assertEquals("Activer la voix", actions.get().get(0).getTitle().toString());
+                assertEquals("Arrêter le guidage", actions.get().get(1).getTitle().toString());
+                actions.get().get(0).getActionIntent().send();
+                long voiceDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+                while (!CarGuidance.current().voice() && System.nanoTime() < voiceDeadline) Thread.sleep(100);
+                assertTrue(CarGuidance.current().voice());
+                instrumentation.runOnMainSync(() -> service.get().onStartCommand(new Intent(context, NavigationService.class).setAction("voice"), 0, 0));
+                assertFalse(CarGuidance.current().voice());
                 long time = System.currentTimeMillis();
                 instrumentation.runOnMainSync(() -> service.get().onLocationChanged(fix(48.001, time)));
                 assertEquals("on-route", service.get().state().getString("status"));

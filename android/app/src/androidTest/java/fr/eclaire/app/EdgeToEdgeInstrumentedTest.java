@@ -59,7 +59,9 @@ public class EdgeToEdgeInstrumentedTest {
     @Test public void screenFlagAndVersionAreAvailableThroughBridge() throws Exception {
         try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
             long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(20);
-            while (!"true".equals(js(scenario, "Boolean(window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.EclaireDevice)")) && System.nanoTime() < deadline) Thread.sleep(200);
+            String ready = "Boolean(document.getElementById('loading') && document.getElementById('loading').hidden && window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.EclaireDevice)";
+            while (!"true".equals(js(scenario, ready)) && System.nanoTime() < deadline) Thread.sleep(200);
+            assertEquals("La carte doit être initialisée avant de modifier la veille", "true", js(scenario, ready));
             js(scenario, "window.__deviceTest='waiting'; Capacitor.Plugins.EclaireDevice.setKeepScreenOn({enabled:true}).then(()=>window.__deviceTest='ok').catch(()=>window.__deviceTest='error'); void 0");
             while (!"\"ok\"".equals(js(scenario, "window.__deviceTest")) && System.nanoTime() < deadline) Thread.sleep(200);
             assertEquals("\"ok\"", js(scenario, "window.__deviceTest"));
@@ -86,7 +88,7 @@ public class EdgeToEdgeInstrumentedTest {
             long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(20);
             int top = 0;
             while (top == 0 && System.nanoTime() < deadline) {
-                top = Integer.parseInt(js(scenario, "parseInt(getComputedStyle(document.documentElement).getPropertyValue('--safe-area-inset-top'))||0"));
+                top = Integer.parseInt(js(scenario, "document.documentElement && parseInt(getComputedStyle(document.documentElement).getPropertyValue('--safe-area-inset-top'))||0"));
                 if (top == 0) Thread.sleep(200);
             }
             assertTrue("Le haut de la zone sûre doit être transmis à la page", top > 0);

@@ -22,7 +22,7 @@ async function setup({ native = false, gps = 'normal', width = 390, height = 844
   await page.route('**/api/health', route => route.fulfill({ json: health }));
   await page.route('**/api/route', route => {
     const body = route.request().postDataJSON(); requests.push(body);
-    const geometry = [[body.start.lat, body.start.lon], [body.end.lat, body.end.lon]];
+    const geometry = body.criterion === 'distance' ? [[body.start.lat, body.start.lon], [(body.start.lat + body.end.lat) / 2 + 0.001, (body.start.lon + body.end.lon) / 2], [body.end.lat, body.end.lon]] : [[body.start.lat, body.start.lon], [body.end.lat, body.end.lon]];
     const length = Math.max(10, Math.hypot((body.start.lat - body.end.lat) * 111195, (body.start.lon - body.end.lon) * 74000));
     const messages = [
       { type: 'metadata', snapped: [body.start, body.end], traceStride: 1 },
@@ -78,11 +78,30 @@ try {
   check('Paramètres Web : version, évitements, date, version disponible et erreur réseau explicite');
   assert.equal(await web.page.locator('#road-preferences, #avoid-motorways, #avoid-tolls').count(), 0);
   await choose(web.page, 'end', 'Panthéon');
+  await web.page.locator('.saved-places summary').click();
+  await web.page.locator('#save-home').click();
+  await web.page.locator('#save-favorite').click();
+  assert.match(await web.page.locator('#saved-places-list').textContent(), /Domicile : Panthéon/);
+  await web.page.locator('.saved-places summary').click();
   const began = Date.now(); await calculate(web.page);
   assert.ok(Date.now() - began < 4500, 'La lecture de la trace ne doit plus durer dix secondes');
   assert.equal(web.requests[0].start.lat, 45.7578);
   assert.equal(web.requests[0].avoidMotorways, true); assert.equal(web.requests[0].avoidTolls, true);
   check('Web : GPS à l’ouverture, arrivée vide, évitements transmis, animation accélérée');
+  const beforeReplay = web.requests.length;
+  await web.page.locator('#replay').click();
+  await web.page.locator('#route-result').waitFor({ state: 'visible' });
+  assert.equal(web.requests.length, beforeReplay);
+  assert.match(await web.page.locator('#result-explanation').textContent(), /temps estimé/);
+  check('Relecture de l’exploration sans nouveau calcul');
+  await web.page.locator('#compare-routes').click();
+  await web.page.locator('#choose-alternative').waitFor({ state: 'visible' });
+  assert.equal(web.requests.at(-1).criterion, 'distance');
+  await web.page.locator('#choose-alternative').click();
+  assert.equal(await web.page.locator('#result-criterion').textContent(), 'Le plus court');
+  await web.page.locator('#choose-alternative').click();
+  assert.equal(await web.page.locator('#result-criterion').textContent(), 'Le plus rapide');
+  check('Comparaison et sélection des critères sans recalcul supplémentaire');
   const expanded = await web.page.locator('.planner').boundingBox();
   await web.page.locator('#route-panel-toggle').click();
   assert.equal(await web.page.locator('#route-panel-toggle').getAttribute('aria-expanded'), 'false');
@@ -111,8 +130,41 @@ try {
   assert.equal(await web.page.locator('#settings-avoid-tolls').isChecked(), true);
   assert.notEqual(await web.page.locator('#updates-last-check').textContent(), 'Jamais');
   await web.page.locator('#settings-close').click();
+  await web.page.locator('.saved-places summary').click();
+  assert.match(await web.page.locator('#saved-places-list').textContent(), /Domicile : Panthéon/);
+  assert.match(await web.page.locator('#saved-places-list').textContent(), /Favoris/);
+  await web.page.getByRole('button', { name: 'Supprimer domicile' }).click();
+  await web.page.getByRole('button', { name: 'Supprimer Panthéon des favoris' }).click();
+  await web.page.locator('#clear-recent').click();
+  assert.equal(await web.page.locator('#saved-places-list').textContent(), '');
+  check('Domicile, favoris et destinations récentes : persistance et suppression');
   check('Panneau réductible, carte manipulable, restauration et préférences mémorisées');
   assert.deepEqual(web.errors, []); await web.context.close();
+
+  const via = await setup();
+  await choose(via.page, 'via', 'Musée du Louvre'); await choose(via.page, 'end', 'Panthéon');
+  await calculate(via.page);
+  assert.equal(via.requests.length, 2);
+  assert.deepEqual(via.requests[0].end, via.requests[1].start);
+  assert.match(await via.page.locator('#route-endpoints').textContent(), /Musée du Louvre/);
+  await via.page.locator('#compare-routes').click();
+  await via.page.locator('#choose-alternative').waitFor({ state: 'visible' });
+  assert.equal(via.requests.length, 4);
+  assert.deepEqual(via.requests[2].end, via.requests[3].start);
+  await via.page.locator('#choose-alternative').click();
+  assert.equal(await via.page.locator('#result-criterion').textContent(), 'Le plus court');
+  assert.deepEqual(via.errors, []); await via.context.close();
+  check('Étape intermédiaire : deux portions et comparaison avec la même étape');
+
+  const viaNative = await setup({ native: true });
+  await viaNative.page.locator('#gps-fixture').evaluate(el => { el.style.display = 'none'; });
+  await choose(viaNative.page, 'via', 'Musée du Louvre'); await choose(viaNative.page, 'end', 'Panthéon');
+  await calculate(viaNative.page); await viaNative.page.locator('#navigation-start').click();
+  await viaNative.page.waitForFunction(() => window.testNativeRouting?.via?.at > 0);
+  const nativeConfig = await viaNative.page.evaluate(() => window.testNativeRouting);
+  assert.ok(Math.abs(nativeConfig.via.lat - viaNative.requests[0].end.lat) < 1e-7);
+  assert.deepEqual(viaNative.errors, []); await viaNative.context.close();
+  check('L’étape et sa position sur le trajet sont transmises au guidage natif');
 
   const denied = await setup({ gps: 'denied' });
   await denied.page.waitForFunction(() => document.getElementById('notice').textContent.includes('refusée'));
@@ -161,10 +213,43 @@ try {
   assert.deepEqual(guidance.errors, []); await guidance.context.close();
   check('Enseigne, recentrage, coupure GPS brève et recalcul automatique sur sortie confirmée');
 
+  const rerouting = await setup({ native: true });
+  const r = rerouting.page;
+  await r.locator('#gps-fixture').evaluate(el => { el.style.display = 'none'; });
+  await choose(r, 'end', 'Panthéon'); await calculate(r);
+  await r.locator('#navigation-start').click();
+  await r.waitForFunction(() => document.getElementById('gps-watch-count').textContent.startsWith('1 suivi'));
+  await rerouting.context.setOffline(true);
+  await r.locator('#navigation-offline').waitFor({ state: 'visible' });
+  assert.equal(await r.locator('#navigation').isVisible(), true);
+  await rerouting.context.setOffline(false);
+  await r.locator('#navigation-offline').waitFor({ state: 'hidden' });
+  await r.getByRole('button', { name: 'Activer recalcul natif simulé', exact: true, includeHidden: true }).dispatchEvent('click');
+  await r.getByRole('button', { name: 'Hors trajet', exact: true, includeHidden: true }).dispatchEvent('click');
+  await r.waitForTimeout(100);
+  await r.getByRole('button', { name: 'Hors trajet', exact: true, includeHidden: true }).dispatchEvent('click');
+  assert.equal(rerouting.requests.length, 1);
+  assert.equal(await r.locator('#navigation').isVisible(), true);
+  await r.getByRole('button', { name: 'Échec recalcul natif simulé', exact: true, includeHidden: true }).dispatchEvent('click');
+  assert.match(await r.locator('#navigation-status').textContent(), /indisponible/);
+  await r.getByRole('button', { name: 'Nouveau trajet natif simulé', exact: true, includeHidden: true }).dispatchEvent('click');
+  await r.waitForFunction(() => document.getElementById('route-endpoints').textContent.includes('Départ recalculé'));
+  assert.equal(rerouting.requests.length, 1);
+  assert.equal(await r.locator('#navigation').isVisible(), true);
+  assert.deepEqual(rerouting.errors, []); await rerouting.context.close();
+  check('Recalcul natif : pas de doublon Web, erreur visible et nouveau trajet repris');
+
   const native = await setup({ native: true });
   const { page } = native;
   await page.locator('#gps-fixture').evaluate(el => { el.style.display = 'none'; });
   await page.locator('#settings-open').click();
+  await page.locator('#settings-pip').waitFor({ state: 'visible' });
+  assert.equal(await page.locator('#settings-pip-automatic').isChecked(), true);
+  await page.locator('#settings-pip-automatic').uncheck();
+  await page.locator('#settings-close').click();
+  await page.locator('#settings-open').click();
+  assert.equal(await page.locator('#settings-pip-automatic').isChecked(), false);
+  await page.locator('#settings-pip-automatic').check();
   await page.locator('#updates-check').click();
   await page.waitForFunction(() => document.getElementById('updates-status').textContent === 'Cette version est à jour.');
   assert.notEqual(await page.locator('#updates-last-check').textContent(), 'Jamais');

@@ -87,12 +87,42 @@ public final class FranceServer {
         return result;
     }
 
+    static Map<String, Object> guidanceRoute(Path path, Graph graph, Weighting time, EncodedValueLookup encoding, Translation french) {
+        if (!path.isFound() || path.getDistance() < 1) throw new IllegalArgumentException("Aucun parcours de guidage disponible.");
+        var result = new ArrayList<Map<String, Object>>();
+        double at = 0, seconds = 0;
+        for (var edge : path.calcEdges()) {
+            var points = edge.fetchWayGeometry(FetchMode.ALL);
+            if (points.size() < 2) throw new IllegalArgumentException("Géométrie routière incomplète.");
+            if (result.isEmpty()) result.add(new HashMap<>(Map.of("lat", points.getLat(0), "lon", points.getLon(0), "at", 0d, "seconds", 0d)));
+            var lengths = new double[points.size() - 1];
+            double total = 0;
+            for (int i = 1; i < points.size(); i++) {
+                lengths[i - 1] = DistanceCalcEarth.DIST_EARTH.calcDist(points.getLat(i - 1), points.getLon(i - 1), points.getLat(i), points.getLon(i));
+                total += lengths[i - 1];
+            }
+            double edgeSeconds = time.calcEdgeMillis(edge, false) / 1000d, covered = 0;
+            var limit = speedLimit(edge, encoding);
+            for (int i = 1; i < points.size(); i++) {
+                covered += lengths[i - 1];
+                double ratio = total > 0 ? covered / total : (double) i / (points.size() - 1);
+                var point = new HashMap<String, Object>(Map.of("lat", points.getLat(i), "lon", points.getLon(i), "at", at + edge.getDistance() * ratio, "seconds", seconds + edgeSeconds * ratio));
+                if (limit != null) point.put("speedLimit", limit);
+                result.add(point);
+            }
+            at += edge.getDistance(); seconds += edgeSeconds;
+        }
+        if (result.size() < 2 || Math.abs(at - path.getDistance()) > 2) throw new IllegalArgumentException("Parcours de guidage incomplet.");
+        if (seconds > 0) for (var point : result) point.put("seconds", (double) point.get("seconds") * (path.getTime() / 1000d) / seconds);
+        return Map.of("points", result, "instructions", navigation(path, graph, time, encoding, french), "length", path.getDistance(), "seconds", path.getTime() / 1000d);
+    }
+
     Map<String, Object> health() {
         var bounds = hopper.getBaseGraph().getBounds();
         return Map.of("status", "ready", "engine", timeLandmarks == null ? "GraphHopper 11.0 · Dijkstra bidirectionnel" : "GraphHopper 11.0 · A* bidirectionnel · " + timeLandmarks.getLandmarkCount() + " landmarks", "nodes", hopper.getBaseGraph().getNodes(),
                 "edges", hopper.getBaseGraph().getEdges(), "bounds", List.of(bounds.minLat, bounds.minLon, bounds.maxLat, bounds.maxLon),
                 "landmarks", Map.of("time", timeLandmarks == null ? 0 : timeLandmarks.getLandmarkCount(), "distance", distanceLandmarks == null ? 0 : distanceLandmarks.getLandmarkCount()),
-                "roadPreferences", RoadPreferences.supported(hopper.getEncodingManager()),
+                "roadPreferences", RoadPreferences.supported(hopper.getEncodingManager()), "guidanceRerouting", true,
                 "dataTimestamp", hopper.getProperties().get("datareader.data.date"));
     }
 
@@ -114,6 +144,9 @@ public final class FranceServer {
             if (active.putIfAbsent(requestId, Thread.currentThread()) != null) throw new IllegalArgumentException("Identifiant de requête déjà utilisé.");
             String criterion = request.path("criterion").asText();
             if (!Set.of("time", "distance").contains(criterion)) throw new IllegalArgumentException("Critère invalide.");
+            JsonNode compact = request.get("guidanceOnly");
+            if (compact != null && !compact.isBoolean()) throw new IllegalArgumentException("Format de guidage invalide.");
+            boolean guidanceOnly = compact != null && compact.booleanValue();
             var preferences = RoadPreferences.parse(request);
             double fromLat = coordinate(request.get("start"), "lat", 41.3, 51.2), fromLon = coordinate(request.get("start"), "lon", -5.3, 9.7);
             double toLat = coordinate(request.get("end"), "lat", 41.3, 51.2), toLon = coordinate(request.get("end"), "lon", -5.3, 9.7);
@@ -140,6 +173,12 @@ public final class FranceServer {
             Path path = algo.calcPath(from.getClosestNode(), to.getClosestNode());
             double computeMs = (System.nanoTime() - began) / 1e6;
             if (algo.exhaustedBudget()) { json(exchange, 422, Map.of("error", "Limite de calcul atteinte avant la preuve d’optimalité. Augmentez les ressources ou rapprochez les points.", "visited", algo.getVisitedNodes(), "computeMs", computeMs)); return; }
+
+            if (guidanceOnly) {
+                if (!path.isFound()) json(exchange, 200, Map.of("found", false));
+                else json(exchange, 200, Map.of("found", true, "route", guidanceRoute(path, queryGraph, queryTime, hopper.getEncodingManager(), hopper.getTranslationMap().getWithFallBack(Locale.FRENCH))));
+                return;
+            }
 
             exchange.getResponseHeaders().set("Content-Type", "application/x-ndjson; charset=utf-8");
             exchange.getResponseHeaders().set("Cache-Control", "no-store");

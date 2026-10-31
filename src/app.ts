@@ -14,7 +14,9 @@ import { requestDeadline } from './request-deadline';
 import { device } from './device';
 import { readSettings, readRoadPreferences, type Theme } from './settings';
 import { deployedVersion, lastUpdateCheck, updateCheckDate } from './updates';
-import { cancelNationalRoute, checkNationalService, decodeNationalMessage, franceBounds, isInFrance, nationalRoute, searchFrance } from './national';
+import { readPlaces, rememberPlace, savePlaces } from './saved-places';
+import { combineLegs, type RouteLeg } from './waypoint';
+import { cancelNationalRoute, checkNationalService, decodeNationalMessage, franceBounds, isInFrance, nationalRoute, routingApi, searchFrance } from './national';
 import type { Criterion, Dataset, ExplorationEvent, Place, RoadGeometry, RoadGraph, SearchResult, WorkerResponse } from './types';
 
 const paths: Record<string, string> = {
@@ -55,14 +57,16 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       <details id="route-editor" open><summary>Modifier le trajet ${icon('route')}</summary><div class="route-form">
       <div class="location-fields">
         <div class="field-wrap start-field"><span class="field-point" aria-hidden="true">A</span><div class="field-body"><label for="start">Départ</label><input id="start" name="start" type="search" spellcheck="false" placeholder="Une adresse, un lieu…" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="start-results" /></div><button class="icon-button pick" data-pick="start" title="Choisir le départ sur la carte" aria-label="Choisir le départ sur la carte">${icon('pin')}</button><div id="start-results" class="suggestions" role="listbox" aria-label="Suggestions de départ" hidden></div></div>
+        <div class="field-wrap via-field"><span class="field-point" aria-hidden="true">•</span><div class="field-body"><label for="via">Étape facultative</label><input id="via" name="via" type="search" spellcheck="false" placeholder="Une adresse, un lieu…" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="via-results" /></div><button class="icon-button pick" data-pick="via" title="Choisir l’étape sur la carte" aria-label="Choisir l’étape sur la carte">${icon('pin')}</button><div id="via-results" class="suggestions" role="listbox" aria-label="Suggestions d’étape" hidden></div></div>
         <div class="field-wrap end-field"><span class="field-point" aria-hidden="true">B</span><div class="field-body"><label for="end">Arrivée</label><input id="end" name="end" type="search" spellcheck="false" placeholder="Une adresse, un lieu…" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="end-results" /></div><button class="icon-button pick" data-pick="end" title="Choisir l’arrivée sur la carte" aria-label="Choisir l’arrivée sur la carte">${icon('pin')}</button><div id="end-results" class="suggestions" role="listbox" aria-label="Suggestions d’arrivée" hidden></div></div>
       </div>
       <div class="location-actions"><button id="geolocate" class="location-button" aria-label="Utiliser ma position comme départ">${icon('locate')} Ma position</button><button id="swap" class="swap-button" aria-label="Permuter le départ et l’arrivée">${icon('swap')} Permuter</button></div>
+      <details class="saved-places"><summary>Destinations enregistrées</summary><p>Choisissez une arrivée puis ajoutez-la aux favoris ou enregistrez-la comme domicile ou travail. Ces lieux et les dernières arrivées restent sur cet appareil.</p><div class="location-actions"><button id="save-home" class="setting-button">Enregistrer comme domicile</button><button id="save-work" class="setting-button">Enregistrer comme travail</button></div><button id="save-favorite" class="setting-button">Ajouter l’arrivée aux favoris</button><div id="saved-places-list"></div><button id="clear-recent" class="setting-button">Effacer les destinations récentes</button></details>
       <fieldset class="criteria"><legend>Critère du trajet</legend><label><input type="radio" name="criterion" value="time" checked><span>${icon('time')} Le plus rapide</span></label><label><input type="radio" name="criterion" value="distance"><span>${icon('route')} Le plus court</span></label></fieldset>
       <div class="launch-row"><button id="launch" class="primary" disabled>${icon('bolt')}<span>Chargement des routes…</span>${icon('arrow')}</button><button id="reset" class="icon-button reset-button" aria-label="Effacer le trajet et utiliser ma position" title="Recommencer">${icon('reset')}</button></div>
       </div></details>
       <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
-      <div id="route-result" class="route-result" role="status" aria-live="polite" hidden><div class="result-heading"><span>${icon('check')} Trajet trouvé</span><span id="result-criterion"></span></div><div id="route-endpoints" class="route-endpoints"></div><div class="metrics"><div><strong id="duration"></strong><span>durée estimée</span></div><div><strong id="distance"></strong><span>distance</span></div></div><p>Estimation sans trafic en direct.</p><button id="navigation-start" class="primary" hidden>${icon('locate')} Démarrer le guidage GPS</button><p id="navigation-availability"></p></div>
+      <div id="route-result" class="route-result" role="status" aria-live="polite" hidden><div class="result-heading"><span>${icon('check')} Trajet trouvé</span><span id="result-criterion"></span></div><div id="route-endpoints" class="route-endpoints"></div><div class="metrics"><div><strong id="duration"></strong><span>durée estimée</span></div><div><strong id="distance"></strong><span>distance</span></div></div><p id="result-explanation"></p><button id="compare-routes" class="setting-button">Comparer avec l’autre critère</button><p id="comparison-status" role="status"></p><button id="choose-alternative" class="setting-button" hidden></button><button id="replay" class="setting-button">Revoir l’exploration</button><button id="navigation-start" class="primary" hidden>${icon('locate')} Démarrer le guidage GPS</button><p id="navigation-availability"></p></div>
       <div class="planner-footer">${icon('car')} En voiture <span>·</span><span id="coverage">Connexion au service France…</span></div>
       </div>
     </section>
@@ -73,9 +77,10 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       <div id="navigation-next" tabindex="0" aria-label="Prochaine instruction"><strong id="navigation-turn-distance">GPS</strong><h2 id="navigation-instruction" role="status" aria-live="polite" aria-atomic="true">Recherche de votre position…</h2></div>
       <div class="navigation-bottom">
         <p id="navigation-status" role="status"></p>
+        <p id="navigation-offline" role="status" hidden>Connexion absente : trajet conservé, recalcul et nouvelles cartes indisponibles.</p>
         <button id="navigation-resume" class="primary" hidden>Reprendre le GPS</button>
         <div class="navigation-metrics"><div><strong id="navigation-time">—</strong><span>durée estimée</span></div><div><strong id="navigation-remaining">—</strong><span>restants</span></div><div><strong id="navigation-speed">—</strong><span>km/h · GPS</span><span id="navigation-limit">Limite : —</span></div></div>
-        <div class="navigation-actions"><button id="navigation-follow" hidden>Suivre ma position</button><button id="navigation-voice" aria-pressed="false">Activer la voix</button><button id="navigation-stop" aria-label="Quitter le guidage">Quitter</button></div>
+        <div class="navigation-actions"><button id="navigation-follow" hidden>Suivre ma position</button><button id="navigation-pip" hidden>Fenêtre flottante</button><button id="navigation-voice" aria-pressed="false">Activer la voix</button><button id="navigation-stop" aria-label="Quitter le guidage">Quitter</button></div>
         <small>Guidage expérimental, sans trafic en direct. La voix et le GPS continuent écran verrouillé. Respectez la signalisation.</small>
         <div class="navigation-attribution">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> · <a href="https://opendatacommons.org/licenses/odbl/1-0/" target="_blank" rel="noopener">ODbL</a></div>
       </div>
@@ -90,6 +95,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       <label for="settings-theme">Apparence</label><p>Choisissez le thème ou suivez celui de l’appareil.</p><select id="settings-theme"><option value="auto">Automatique</option><option value="light">Clair</option><option value="dark">Sombre</option></select>
       <label for="settings-criterion">Trajet préféré</label><p>Ce choix s’applique aux prochains trajets.</p><select id="settings-criterion"><option value="time">Le plus rapide</option><option value="distance">Le plus court</option></select>
       <fieldset class="road-preferences settings-avoidance"><legend>Éviter sur les trajets</legend><label><input id="settings-avoid-motorways" type="checkbox"> Les autoroutes</label><label><input id="settings-avoid-tolls" type="checkbox"> Les péages</label><p>Ces choix sont mémorisés. Selon les données OpenStreetMap, parfois incomplètes. Service France requis, sans secours Paris avec ces options.</p></fieldset>
+      <fieldset id="settings-pip" class="road-preferences settings-avoidance" hidden><legend>Fenêtre flottante</legend><label><input id="settings-pip-automatic" type="checkbox"> Ouvrir automatiquement pendant le guidage</label><p>La fenêtre reste aussi accessible depuis le guidage.</p></fieldset>
       <section class="settings-updates" aria-labelledby="settings-updates-title"><h3 id="settings-updates-title">Mises à jour</h3>
         <button id="updates-check" class="setting-button">Rechercher les mises à jour</button>
         <p>Dernière recherche : <time id="updates-last-check">Jamais</time></p>
@@ -105,7 +111,7 @@ document.addEventListener('keydown', () => document.documentElement.classList.ad
 document.addEventListener('pointerdown', () => document.documentElement.classList.remove('keyboard-input'));
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
-const inputs = { start: $<HTMLInputElement>('start'), end: $<HTMLInputElement>('end') };
+const inputs = { start: $<HTMLInputElement>('start'), via: $<HTMLInputElement>('via'), end: $<HTMLInputElement>('end') };
 const launch = $<HTMLButtonElement>('launch');
 const roadPreferences = () => ({ avoidMotorways: $<HTMLInputElement>('settings-avoid-motorways').checked, avoidTolls: $<HTMLInputElement>('settings-avoid-tolls').checked });
 {
@@ -146,6 +152,16 @@ const roadPreferences = () => ({ avoidMotorways: $<HTMLInputElement>('settings-a
     if (!radio.checked) { radio.checked = true; radio.dispatchEvent(new Event('change', { bubbles: true })); }
   });
   const android = Capacitor.getPlatform() === 'android';
+  if (android) {
+    const automatic = $<HTMLInputElement>('settings-pip-automatic');
+    void device.getPipSettings().then(settings => { automatic.checked = settings.automatic; $('settings-pip').hidden = !settings.supported; }).catch(() => undefined);
+    automatic.addEventListener('change', async () => {
+      automatic.disabled = true;
+      try { await device.setPipAutomatic({ enabled: automatic.checked }); $('settings-error').hidden = true; }
+      catch { automatic.checked = !automatic.checked; $('settings-error').textContent = 'Impossible d’enregistrer ce réglage sur cet appareil.'; $('settings-error').hidden = false; }
+      finally { automatic.disabled = false; }
+    });
+  }
   const updateDate = (value: unknown) => {
     const timestamp = lastUpdateCheck(value), date = $<HTMLTimeElement>('updates-last-check');
     date.textContent = updateCheckDate(timestamp);
@@ -188,7 +204,7 @@ const roadPreferences = () => ({ avoidMotorways: $<HTMLInputElement>('settings-a
     finally { button.disabled = false; button.setAttribute('aria-busy', 'false'); }
   });
 }
-type Endpoint = 'start' | 'end';
+type Endpoint = 'start' | 'via' | 'end';
 type Selection = Place & { node: number; snapDistance: number };
 let data: Dataset;
 let roads: RoadGraph;
@@ -199,7 +215,8 @@ let routeGeometry: RoadGeometry;
 let resumeGuidance = false;
 let worker: Worker | undefined;
 let workerReady = false;
-let selections: Record<Endpoint, Selection | null> = { start: null, end: null };
+let selections: Record<Endpoint, Selection | null> = { start: null, via: null, end: null };
+let waypointPending = false;
 let markers: Partial<Record<Endpoint, L.Marker>> = {};
 let picking: Endpoint | null = null;
 let run = 0;
@@ -214,12 +231,16 @@ let searchIndex: Place[] = [];
 let nationalReady = false;
 let routeAbort: AbortController | undefined;
 let routeId: string | undefined;
+type Alternative = { result: SearchResult; geometry: RoadGeometry; events: ExplorationEvent[]; criterion: Criterion; stride: number };
+let alternative: Alternative | undefined;
+let comparisonAbort: AbortController | undefined;
+let comparisonId: string | undefined;
 let traceStride = 1;
 let nationalPlayback = false;
 let locationRequest = 0;
 let locating = false;
 let locationCircle: L.Circle | undefined;
-const defaults: Record<Endpoint, Place> = {
+const defaults: Record<'start' | 'end', Place> = {
   start: { name: 'Musée du Louvre', lat: 48.8608, lon: 2.3376 },
   end: { name: 'Panthéon', lat: 48.8462, lon: 2.3464 },
 };
@@ -232,11 +253,14 @@ function notice(message: string, kind: 'error' | 'info' = 'info') {
 
 function updateLaunch() {
   $('app').classList.toggle('is-exploring', playing);
-  launch.disabled = !workerReady || !selections.start || !selections.end;
+  launch.disabled = !workerReady || !selections.start || !selections.end || (!!inputs.via.value.trim() && !selections.via);
   launch.innerHTML = playing ? `${icon('stop')}<span>Interrompre l’exploration</span>` : `${icon('bolt')}<span>Explorer le trajet</span>${icon('arrow')}`;
 }
 
 function stop(clear = true) {
+  comparisonAbort?.abort(); comparisonAbort = undefined;
+  if (comparisonId) { void cancelNationalRoute(comparisonId); comparisonId = undefined; }
+  alternative = undefined; $('comparison-status').textContent = ''; $('choose-alternative').hidden = true; $<HTMLButtonElement>('compare-routes').disabled = false;
   cancelLocationRequest();
   setPanelCollapsed(false);
   $('route-panel-toggle').hidden = true;
@@ -262,19 +286,74 @@ function selectPoint(side: Endpoint, place: Place, announce = true) {
   stop();
   const node = nationalReady ? place : snap ? roads.nodes[snap.index] : place;
   selections[side] = { ...place, node: snap?.index ?? -1, snapDistance: snap?.distance ?? 0 };
+  if (side === 'via') waypointPending = true;
+  if (side === 'end') { rememberPlace(savedPlaces, place); persistPlaces(); renderSavedPlaces(); }
   inputs[side].value = place.name;
   if (side === 'start') { locationCircle?.remove(); locationCircle = undefined; $('app').classList.remove('has-gps-start'); }
   placeMarker(side, node.lat, node.lon, place.name);
   closeSuggestions(side);
   updateLaunch();
-  if (announce) notice(snap && !nationalReady ? `Point ${side === 'start' ? 'de départ' : 'd’arrivée'} raccordé à ${roads.edges[(roads.outgoing[snap.index][0] ?? roads.incoming[snap.index][0])].name}, à ${Math.round(snap.distance)} m.` : 'Point choisi. Le raccordement à une route sera vérifié au lancement.');
+  if (announce) notice(snap && !nationalReady ? `Point ${side === 'start' ? 'de départ' : side === 'via' ? 'd’étape' : 'd’arrivée'} raccordé à ${roads.edges[(roads.outgoing[snap.index][0] ?? roads.incoming[snap.index][0])].name}, à ${Math.round(snap.distance)} m.` : 'Point choisi. Le raccordement à une route sera vérifié au lancement.');
   return true;
 }
+
+const savedPlaces = (() => { try { return readPlaces(localStorage); } catch { return { favorites: [], recent: [] }; } })();
+function persistPlaces() {
+  try { savePlaces(localStorage, savedPlaces); }
+  catch { notice('Impossible de mémoriser les destinations sur cet appareil.', 'error'); }
+}
+function renderSavedPlaces() {
+  const list = $('saved-places-list'); list.replaceChildren();
+  for (const [slot, label] of [['home', 'Domicile'], ['work', 'Travail']] as const) {
+    const place = savedPlaces[slot];
+    if (!place) continue;
+    const row = document.createElement('div'); row.className = 'location-actions';
+    const choose = document.createElement('button'); choose.className = 'setting-button'; choose.textContent = `${label} : ${place.name}`; choose.addEventListener('click', () => selectPoint('end', place));
+    const remove = document.createElement('button'); remove.className = 'setting-button'; remove.textContent = `Supprimer ${label.toLowerCase()}`; remove.addEventListener('click', () => { delete savedPlaces[slot]; persistPlaces(); renderSavedPlaces(); });
+    row.append(choose, remove); list.append(row);
+  }
+  if (savedPlaces.favorites.length) {
+    const title = document.createElement('p'); title.textContent = 'Favoris'; list.append(title);
+    for (const place of savedPlaces.favorites) {
+      const row = document.createElement('div'); row.className = 'location-actions';
+      const choose = document.createElement('button'); choose.className = 'setting-button'; choose.textContent = [place.name, place.detail].filter(Boolean).join(' · '); choose.addEventListener('click', () => selectPoint('end', place));
+      const remove = document.createElement('button'); remove.className = 'setting-button'; remove.textContent = 'Supprimer'; remove.setAttribute('aria-label', `Supprimer ${place.name} des favoris`);
+      remove.addEventListener('click', () => { savedPlaces.favorites = savedPlaces.favorites.filter(item => item.lat !== place.lat || item.lon !== place.lon); persistPlaces(); renderSavedPlaces(); });
+      row.append(choose, remove); list.append(row);
+    }
+  }
+  if (savedPlaces.recent.length) {
+    const title = document.createElement('p'); title.textContent = 'Destinations récentes'; list.append(title);
+    for (const place of savedPlaces.recent) {
+      const button = document.createElement('button'); button.className = 'setting-button'; button.textContent = [place.name, place.detail].filter(Boolean).join(' · '); button.addEventListener('click', () => selectPoint('end', place)); list.append(button);
+    }
+  }
+  $('clear-recent').hidden = !savedPlaces.recent.length;
+}
+for (const [id, slot] of [['save-home', 'home'], ['save-work', 'work']] as const) {
+  $(id).addEventListener('click', () => {
+    const place = selections.end;
+    if (!place) { notice('Choisissez une arrivée avant de l’enregistrer.'); return; }
+    savedPlaces[slot] = { name: place.name, lat: place.lat, lon: place.lon, detail: place.detail };
+    persistPlaces(); renderSavedPlaces();
+  });
+}
+$('clear-recent').addEventListener('click', () => { savedPlaces.recent = []; persistPlaces(); renderSavedPlaces(); });
+$('save-favorite').addEventListener('click', () => {
+  const place = selections.end;
+  if (!place) { notice('Choisissez une arrivée avant de l’ajouter aux favoris.'); return; }
+  if (!savedPlaces.favorites.some(item => item.lat === place.lat && item.lon === place.lon)) {
+    if (savedPlaces.favorites.length >= 20) { notice('Supprimez un favori avant d’en ajouter un autre.'); return; }
+    savedPlaces.favorites.push({ name: place.name, lat: place.lat, lon: place.lon, detail: place.detail });
+    persistPlaces(); renderSavedPlaces();
+  }
+});
+renderSavedPlaces();
 
 function placeMarker(side: Endpoint, lat: number, lon: number, name: string) {
   markers[side]?.remove();
   markers[side] = pointMarker(map, lat, lon, side, name, point => {
-    selectPoint(side, { name: side === 'start' ? 'Départ ajusté sur la carte' : 'Arrivée ajustée sur la carte', lat: point.lat, lon: point.lng }, false);
+    selectPoint(side, { name: side === 'start' ? 'Départ ajusté sur la carte' : side === 'via' ? 'Étape ajustée sur la carte' : 'Arrivée ajustée sur la carte', lat: point.lat, lon: point.lng }, false);
     notice('Point ajusté. Lancez une nouvelle exploration pour calculer le trajet.');
   });
 }
@@ -310,7 +389,7 @@ function fitPoints() {
   const bounds = result?.path.length ? L.latLngBounds(result.path.flatMap(id => {
     const edge = routeGeometry.edges[id];
     return edge.geometry?.map(p => L.latLng(p[0], p[1])) ?? [routeGeometry.nodes[edge.from], routeGeometry.nodes[edge.to]].map(p => L.latLng(p.lat, p.lon));
-  })) : L.latLngBounds(markers.start!.getLatLng(), markers.end!.getLatLng());
+  })) : L.latLngBounds([markers.start!.getLatLng(), markers.end!.getLatLng(), ...(markers.via ? [markers.via.getLatLng()] : [])]);
   map.fitBounds(bounds, {
     paddingTopLeft: mobile ? [48, compact ? showingResult ? 70 : playing ? 110 : 126 : playing ? 220 : 170] : [470, 100], paddingBottomRight: mobile ? [85, plannerHeight + 52] : [110, playing ? 220 : 130], maxZoom: 16, animate: !renderer.reducedMotion && !document.documentElement.classList.contains('keyboard-input'),
   });
@@ -349,9 +428,11 @@ function complete() {
   $('duration').textContent = minutes < 1 ? '< 1 min' : minutes < 60 ? `${minutes} min` : `${Math.floor(minutes / 60)} h${minutes % 60 ? ` ${String(minutes % 60).padStart(2, '0')}` : ''}`;
   $('distance').textContent = result.length >= 1000 ? `${(result.length / 1000).toLocaleString('fr-FR', { maximumFractionDigits: result.length >= 1_000_000 ? 0 : result.length >= 100_000 ? 1 : 2 })} km` : `${Math.round(result.length)} m`;
   $('result-criterion').textContent = criterion() === 'time' ? 'Le plus rapide' : 'Le plus court';
-  $('route-endpoints').replaceChildren(...(['start', 'end'] as const).map((side, i) => {
+  $('result-explanation').textContent = criterion() === 'time' ? 'Ce trajet minimise le temps estimé selon les vitesses des routes, sans trafic en direct.' : 'Ce trajet minimise la distance sur les routes accessibles. La durée est estimée sans trafic en direct.';
+  $('replay').hidden = queue.length === 0;
+  $('route-endpoints').replaceChildren(...(['start', ...(selections.via ? ['via' as const] : []), 'end'] as const).map(side => {
     const line = document.createElement('p'), badge = document.createElement('span');
-    badge.className = `endpoint-badge ${side}`; badge.textContent = i ? 'B' : 'A';
+    badge.className = `endpoint-badge ${side}`; badge.textContent = side === 'start' ? 'A' : side === 'via' ? '•' : 'B';
     line.append(badge, document.createTextNode(selections[side]!.name)); return line;
   }));
   const editor = $<HTMLDetailsElement>('route-editor');
@@ -366,7 +447,7 @@ function complete() {
   $('playback-percent').innerHTML = icon('check');
   $('playback-progress').style.transform = 'scaleX(1)';
   $('playback').classList.add('complete');
-  notice(nationalPlayback && traceStride > 1 ? `${result.visited.toLocaleString('fr-FR', { notation: 'compact', maximumFractionDigits: 2 })} états explorés · trace 1/${traceStride} par front.` : '');
+  notice(nationalPlayback && traceStride > 1 ? `${result.visited.toLocaleString('fr-FR', { notation: 'compact', maximumFractionDigits: 2 })} états explorés · ${result.waypointAt ? 'traces échantillonnées' : `trace 1/${traceStride} par front`}.` : '');
   $('playback').hidden = true;
   if (resumeGuidance) { resumeGuidance = false; void guidance?.start(false); }
   else requestAnimationFrame(fitPoints);
@@ -383,14 +464,14 @@ function tick(now: number) {
   const count = Math.min(queue.length - cursor, Math.floor(carry));
   if (count > 0) { renderer.visit(queue.slice(cursor, cursor + count), now); cursor += count; carry -= count; }
   const progress = result !== undefined ? (queue.length ? cursor / queue.length : 1) : 0;
-  $('playback-count').textContent = queue.length || !nationalPlayback ? `${cursor.toLocaleString('fr-FR')} ${nationalPlayback ? 'segments affichés' : 'états explorés'}${traceStride > 1 ? ` · trace 1/${traceStride}` : ' · deux fronts actifs'}` : 'Calcul sur le graphe national…';
+  $('playback-count').textContent = queue.length || !nationalPlayback ? `${cursor.toLocaleString('fr-FR')} ${nationalPlayback ? 'segments affichés' : 'états explorés'}${traceStride > 1 ? result?.waypointAt ? ' · traces échantillonnées' : ` · trace 1/${traceStride}` : ' · deux fronts actifs'}` : 'Calcul sur le graphe national…';
   $('playback-percent').textContent = result !== undefined ? `${Math.round(progress * 100)} %` : '…';
   $('playback-progress').style.transform = `scaleX(${progress})`;
   if (result !== undefined && cursor === queue.length) { complete(); return; }
   playbackFrame = requestAnimationFrame(tick);
 }
 
-function explore() {
+function explore(recalculation = false) {
   if (playing) {
     renderer.interrupt();
     stop(false);
@@ -400,10 +481,12 @@ function explore() {
     return;
   }
   if (!selections.start || !selections.end || !workerReady) return;
+  if (inputs.via.value.trim() && !selections.via) { notice('Choisissez l’étape dans les suggestions ou sur la carte.', 'error'); return; }
+  if (!recalculation) waypointPending = !!selections.via;
   stop();
   notice(''); setPicking(null); closeSuggestions('start'); closeSuggestions('end');
   playing = true; carry = 0;
-  nationalPlayback = nationalReady || selections.start.node === -1 || selections.end.node === -1 || roadPreferences().avoidMotorways || roadPreferences().avoidTolls;
+  nationalPlayback = nationalReady || selections.start.node === -1 || selections.end.node === -1 || waypointPending || roadPreferences().avoidMotorways || roadPreferences().avoidTolls;
   traceStride = 1;
   $('playback').hidden = false;
   $('playback').classList.remove('complete');
@@ -412,9 +495,47 @@ function explore() {
   $('playback-percent').textContent = '';
   $('playback-progress').style.transform = 'scaleX(0)';
   updateLaunch(); fitPoints();
-  if (nationalPlayback) void exploreNational(run, selections.start, selections.end, criterion());
+  if (nationalPlayback && waypointPending && selections.via) void exploreVia(run, selections.start, selections.via, selections.end, criterion());
+  else if (nationalPlayback) void exploreNational(run, selections.start, selections.end, criterion());
   else { routeGeometry = roads; renderer.setGraph(roads); worker!.postMessage({ type: 'route', run, start: selections.start.node, end: selections.end.node, criterion: criterion() }); }
   lastTick = performance.now(); playbackFrame = requestAnimationFrame(tick);
+}
+
+async function fetchLeg(start: Place, end: Place, preference: Criterion, signal: AbortSignal, setId: (id: string) => void) {
+  const geometry: RoadGeometry = { nodes: [], edges: [] }, index = new Map<number, number>(), events: ExplorationEvent[] = [];
+  let found: SearchResult | null | undefined, stride = 1, snapped: { lat: number; lon: number; distance: number }[] | undefined;
+  const id = crypto.randomUUID(); setId(id);
+  for await (const message of nationalRoute(start, end, preference, id, signal, roadPreferences())) {
+    if ('snapped' in message) {
+      if (!Array.isArray(message.snapped) || message.snapped.length !== 2 || !message.snapped.every(isInFrance) || !Number.isInteger(message.traceStride) || message.traceStride < 1) throw new Error('Métadonnées routières invalides.');
+      snapped = message.snapped; stride = message.traceStride; continue;
+    }
+    const decoded = decodeNationalMessage(message, geometry, index);
+    if (decoded.events) events.push(...decoded.events);
+    if ('result' in decoded) found = decoded.result;
+  }
+  if (!found || !snapped) throw new Error('Aucun itinéraire trouvé pour une portion du trajet.');
+  return { geometry, events, result: found, stride, snapped };
+}
+
+async function exploreVia(activeRun: number, start: Place, via: Place, end: Place, preference: Criterion) {
+  if (typeof crypto.randomUUID !== 'function') { stop(); notice('Ouvrez l’application en HTTPS ou sur localhost pour le calcul national.', 'error'); return; }
+  const controller = routeAbort = new AbortController();
+  try {
+    $('playback-count').textContent = 'Calcul vers l’étape…';
+    const first = await fetchLeg(start, via, preference, controller.signal, id => { routeId = id; });
+    if (activeRun !== run) return;
+    $('playback-count').textContent = 'Calcul depuis l’étape…';
+    const second = await fetchLeg(via, end, preference, controller.signal, id => { routeId = id; });
+    if (activeRun !== run) return;
+    const combined = combineLegs(first, second);
+    if (!navigationRoute(combined.geometry, combined.result)) throw new Error('Le trajet avec étape ne permet pas le guidage.');
+    routeGeometry = combined.geometry; renderer.setGraph(routeGeometry); queue.push(...combined.events); result = combined.result; traceStride = Math.max(first.stride, second.stride); nationalReady = true; $('coverage').textContent = 'France métropolitaine · Corse';
+    placeMarker('start', first.snapped[0].lat, first.snapped[0].lon, start.name); placeMarker('via', first.snapped[1].lat, first.snapped[1].lon, via.name); placeMarker('end', second.snapped[1].lat, second.snapped[1].lon, end.name);
+  } catch (error) {
+    if (activeRun !== run || controller.signal.aborted) return;
+    stop(); notice(error instanceof Error ? error.message : 'Calcul avec étape indisponible.', 'error');
+  } finally { if (activeRun === run) { routeId = undefined; routeAbort = undefined; } }
 }
 
 async function exploreNational(activeRun: number, start: Place, end: Place, preference: Criterion) {
@@ -455,7 +576,7 @@ function setPicking(side: Endpoint | null) {
   $('map').classList.toggle('picking', !!side);
   $('app').classList.toggle('is-picking', !!side);
   document.querySelectorAll<HTMLButtonElement>('.pick').forEach(b => b.classList.toggle('selected', b.dataset.pick === side));
-  if (side) $('pick-hint').querySelector('span')!.textContent = `Touchez une route pour placer ${side === 'start' ? 'le départ A' : 'l’arrivée B'}`;
+  if (side) $('pick-hint').querySelector('span')!.textContent = `Touchez une route pour placer ${side === 'start' ? 'le départ A' : side === 'via' ? 'l’étape' : 'l’arrivée B'}`;
 }
 
 function closeSuggestions(side: Endpoint) {
@@ -474,12 +595,15 @@ function setupSearch(side: Endpoint) {
   let sequence = 0;
   let controller: AbortController | undefined;
   const render = (places: Place[]) => {
+    const selected = matches[active];
     matches = places;
-    active = -1;
+    active = selected ? matches.findIndex(place => place.name === selected.name && place.detail === selected.detail && place.lat === selected.lat && place.lon === selected.lon) : -1;
     list.replaceChildren();
+    if (active < 0) input.removeAttribute('aria-activedescendant');
+    else input.setAttribute('aria-activedescendant', `${side}-option-${active}`);
     matches.forEach((place, i) => {
       const option = document.createElement('div');
-      option.role = 'option'; option.id = `${side}-option-${i}`; option.className = 'suggestion'; option.setAttribute('aria-selected', 'false');
+      option.role = 'option'; option.id = `${side}-option-${i}`; option.className = 'suggestion'; option.setAttribute('aria-selected', String(i === active));
       const name = document.createElement('span'); name.textContent = place.name;
       const detail = document.createElement('small'); detail.textContent = place.detail || 'France';
       option.append(name, detail);
@@ -498,18 +622,21 @@ function setupSearch(side: Endpoint) {
     timer = window.setTimeout(async () => {
       const request = controller = new AbortController();
       const timeout = window.setTimeout(() => request.abort(), 6000);
+      let receivedSource = false;
       try {
-        const remote = await searchFrance(text, request.signal);
-        if (current !== sequence || document.activeElement !== input) return;
-        const names = new Set<string>();
-        render([...remote, ...local].filter(p => { const name = normalize(`${p.name} ${p.detail ?? ''}`); if (names.has(name)) return false; names.add(name); return true; }).slice(0, 7));
+        await searchFrance(text, request.signal, remote => {
+          receivedSource = true;
+          if (current !== sequence || document.activeElement !== input) return;
+          const names = new Set<string>();
+          render([...remote, ...local].filter(p => { const name = normalize(`${p.name} ${p.detail ?? ''}`); if (names.has(name)) return false; names.add(name); return true; }).slice(0, 7));
+        });
       } catch {
-        if (current === sequence && document.activeElement === input && !local.length) list.textContent = 'Recherche de lieux indisponible. Choisissez un point sur la carte.';
+        if (!receivedSource && current === sequence && document.activeElement === input && !local.length) list.textContent = 'Recherche de lieux indisponible. Choisissez un point sur la carte.';
       } finally { clearTimeout(timeout); }
     }, 650);
   };
   input.addEventListener('input', () => {
-    stop(); selections[side] = null; markers[side]?.remove(); updateLaunch(); show();
+    stop(); selections[side] = null; if (side === 'via') waypointPending = false; markers[side]?.remove(); updateLaunch(); show();
   });
   input.addEventListener('focus', () => { if (roads) show(); });
   input.addEventListener('blur', () => { sequence++; clearTimeout(timer); controller?.abort(); closeSuggestions(side); });
@@ -567,12 +694,29 @@ async function initialize() {
     renderer = new ExplorationRenderer(map, roads);
     guidance = new GpsGuidance(map, () => { renderer.clear(); showAbout(false); }, () => requestAnimationFrame(fitPoints), fix => {
       if (selectPoint('start', { name: 'Ma position GPS', lat: fix.lat, lon: fix.lon })) {
-        explore(); resumeGuidance = true; notice('Recalcul du trajet depuis votre position…');
+        explore(true); resumeGuidance = true; notice('Recalcul du trajet depuis votre position…');
       }
-    });
+    }, () => {
+      if (!selections.end) return undefined;
+      const api = new URL(routingApi, location.href);
+      if (api.protocol !== 'https:' && api.protocol !== 'http:') return undefined;
+      const via = waypointPending && selections.via && result?.waypointAt ? { lat: selections.via.lat, lon: selections.via.lon, at: result.waypointAt } : undefined;
+      return { api: api.href.replace(/\/$/, ''), end: { lat: selections.end.lat, lon: selections.end.lon }, criterion: criterion(), ...roadPreferences(), ...(via ? { via } : {}) };
+    }, route => {
+      if (result) result.waypointAt = route.waypointAt;
+      const origin = route.points[0];
+      selections.start = { name: 'Départ recalculé', lat: origin.lat, lon: origin.lon, node: -1, snapDistance: 0 };
+      inputs.start.value = selections.start.name;
+      placeMarker('start', origin.lat, origin.lon, selections.start.name);
+      const start = $('route-endpoints').firstElementChild;
+      if (start) { const badge = document.createElement('span'); badge.className = 'endpoint-badge start'; badge.textContent = 'A'; start.replaceChildren(badge, document.createTextNode(selections.start.name)); }
+      $('distance').textContent = route.length >= 1000 ? `${(route.length / 1000).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} km` : `${Math.round(route.length)} m`;
+      const minutes = Math.ceil(route.seconds / 60);
+      $('duration').textContent = minutes < 60 ? `${Math.max(1, minutes)} min` : `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, '0')}`;
+    }, () => { waypointPending = false; });
     $<HTMLButtonElement>('lite').setAttribute('aria-pressed', String(renderer.lite));
     buildSearchIndex();
-    setupSearch('start'); setupSearch('end');
+    setupSearch('start'); setupSearch('via'); setupSearch('end');
     makeWorker();
     const date = new Date(data.metadata.osmTimestamp).toLocaleDateString('fr-FR');
     $('data-info').textContent = `Extrait OpenStreetMap du ${date} : ${roads.edges.length.toLocaleString('fr-FR')} segments orientés, ${roads.restrictions.length} restrictions automobiles. ${roads.excludedWays} voies exclues par prudence ou par leurs conditions d’accès.`;
@@ -604,12 +748,71 @@ async function initialize() {
   }
 }
 
-launch.addEventListener('click', explore);
+launch.addEventListener('click', () => explore());
+$('replay').addEventListener('click', () => {
+  if (playing || !result || !queue.length) return;
+  renderer.clear(); cursor = 0; carry = 0; playing = true;
+  $('route-result').hidden = true; $('playback').hidden = false; $('playback').classList.remove('complete');
+  $('playback-title').textContent = 'Relecture de l’exploration…';
+  $('playback-progress').style.transform = 'scaleX(0)'; updateLaunch();
+  lastTick = performance.now(); playbackFrame = requestAnimationFrame(tick);
+});
+$('compare-routes').addEventListener('click', () => { void compareRoutes(); });
+$('choose-alternative').addEventListener('click', () => {
+  if (!alternative || !result) return;
+  const current: Alternative = { result, geometry: routeGeometry, events: queue, criterion: criterion(), stride: traceStride };
+  result = alternative.result; routeGeometry = alternative.geometry; queue = alternative.events; traceStride = alternative.stride;
+  document.querySelector<HTMLInputElement>(`input[name="criterion"][value="${alternative.criterion}"]`)!.checked = true;
+  alternative = current; cursor = queue.length; renderer.clear(); renderer.setGraph(routeGeometry); complete(); showAlternative();
+});
+function showAlternative() {
+  if (!alternative) return;
+  const minutes = Math.max(1, Math.ceil(alternative.result.seconds / 60));
+  const km = (alternative.result.length / 1000).toLocaleString('fr-FR', { maximumFractionDigits: 1 });
+  $('comparison-status').textContent = `Autre trajet : ${km} km · ${minutes} min estimées sans trafic.`;
+  $('choose-alternative').textContent = alternative.criterion === 'time' ? 'Choisir le plus rapide' : 'Choisir le plus court';
+  $('choose-alternative').hidden = false;
+}
+async function compareRoutes() {
+  if (!result || !selections.start || !selections.end || comparisonAbort) return;
+  if (!nationalPlayback) { $('comparison-status').textContent = 'La comparaison nécessite le service France.'; return; }
+  const activeRun = run, chosen = criterion(), other: Criterion = chosen === 'time' ? 'distance' : 'time';
+  const geometry: RoadGeometry = { nodes: [], edges: [] }, events: ExplorationEvent[] = [], index = new Map<number, number>();
+  const controller = comparisonAbort = new AbortController(), id = comparisonId = crypto.randomUUID();
+  let found: SearchResult | null | undefined, stride = 1;
+  $<HTMLButtonElement>('compare-routes').disabled = true; $('comparison-status').textContent = 'Calcul de l’autre trajet…';
+  try {
+    if (waypointPending && selections.via) {
+      const first = await fetchLeg(selections.start, selections.via, other, controller.signal, value => { comparisonId = value; });
+      const second = await fetchLeg(selections.via, selections.end, other, controller.signal, value => { comparisonId = value; });
+      const combined: RouteLeg = combineLegs(first, second);
+      if (!navigationRoute(combined.geometry, combined.result)) throw new Error('Le trajet avec étape ne permet pas le guidage.');
+      geometry.nodes.push(...combined.geometry.nodes); geometry.edges.push(...combined.geometry.edges); events.push(...combined.events); found = combined.result; stride = Math.max(first.stride, second.stride);
+    } else {
+      for await (const message of nationalRoute(selections.start, selections.end, other, id, controller.signal, roadPreferences())) {
+        if (activeRun !== run) return;
+        if ('snapped' in message) { stride = message.traceStride; continue; }
+        const decoded = decodeNationalMessage(message, geometry, index);
+        if (decoded.events) events.push(...decoded.events);
+        if ('result' in decoded) found = decoded.result;
+      }
+    }
+    if (activeRun !== run) return;
+    if (!found || !result) throw new Error('Aucun autre trajet trouvé.');
+    const path = (roads: RoadGeometry, route: SearchResult) => JSON.stringify(route.path.map(id => roads.edges[id].geometry));
+    if (path(geometry, found) === path(routeGeometry, result)) $('comparison-status').textContent = 'Les deux critères empruntent le même trajet.';
+    else { alternative = { result: found, geometry, events, criterion: other, stride }; showAlternative(); }
+  } catch (error) {
+    if (activeRun === run && !controller.signal.aborted) $('comparison-status').textContent = error instanceof Error ? error.message : 'Comparaison indisponible. Réessayez.';
+  } finally {
+    if (comparisonAbort === controller) { comparisonAbort = undefined; comparisonId = undefined; $<HTMLButtonElement>('compare-routes').disabled = false; }
+  }
+}
 $('retry').addEventListener('click', () => { map?.remove(); void initialize(); });
 $('reset').addEventListener('click', () => {
   if (!roads) return;
   stop(); setPicking(null);
-  for (const side of ['start', 'end'] as const) { selections[side] = null; inputs[side].value = ''; markers[side]?.remove(); }
+  for (const side of ['start', 'via', 'end'] as const) { selections[side] = null; inputs[side].value = ''; markers[side]?.remove(); } waypointPending = false;
   locationCircle?.remove(); locationCircle = undefined; $('app').classList.remove('has-gps-start');
   updateLaunch(); void locate();
 });

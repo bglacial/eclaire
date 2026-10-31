@@ -1,24 +1,29 @@
 // Harnais Vite de recette uniquement : exclu du build livré. Le calcul routier reste réel.
 import { GuidanceProgress, type NavigationRoute } from '../src/navigation';
 import type { NativeGuidanceState } from '../src/native-guidance';
+import { metres } from '../src/graph';
 
 const nativeListeners = new Map<string, (state: NativeGuidanceState) => void>();
 let nativeProgress: GuidanceProgress | undefined;
 let nativeState: NativeGuidanceState = { active: false, status: 'stopped' };
 let updateCheckedAt = 0;
+let pipAutomatic = true;
+let simulateNativeRerouting = false;
 Object.assign(window, {
   CapacitorCustomPlatform: { name: 'android' },
   Capacitor: {
     PluginHeaders: [
-      { name: 'EclaireDevice', methods: ['setKeepScreenOn', 'getVersion', 'getUpdateStatus', 'checkForUpdates'].map(name => ({ name, rtype: 'promise' })) },
+      { name: 'EclaireDevice', methods: ['setKeepScreenOn', 'getVersion', 'getUpdateStatus', 'checkForUpdates', 'getPipSettings', 'setPipAutomatic', 'enterPip'].map(name => ({ name, rtype: 'promise' })) },
       { name: 'EclaireNavigation', methods: ['start', 'stop', 'getState', 'setVoice', 'removeListener'].map(name => ({ name, rtype: 'promise' })).concat([{ name: 'addListener', rtype: 'callback' }]) },
     ],
-    nativePromise: async (_plugin: string, method: string, options: { route?: NavigationRoute; callbackId?: string }) => {
+    nativePromise: async (_plugin: string, method: string, options: { route?: NavigationRoute; callbackId?: string; enabled?: boolean; routing?: unknown }) => {
       if (method === 'getVersion') return { version: 'simulation' };
+      if (method === 'getPipSettings') return { supported: true, automatic: pipAutomatic };
+      if (method === 'setPipAutomatic') { pipAutomatic = Boolean(options.enabled); return {}; }
       if (method === 'getUpdateStatus') return { lastCheckedAt: updateCheckedAt, checking: false };
       if (method === 'checkForUpdates') { updateCheckedAt = Date.now(); return { status: 'current', lastCheckedAt: updateCheckedAt, checking: false }; }
       if (method === 'getState') return nativeState;
-      if (method === 'start') { nativeProgress = new GuidanceProgress(options.route!); nativeState = { active: true, status: 'starting' }; queueMicrotask(emit); }
+      if (method === 'start') { Object.assign(window, { testNativeRouting: options.routing }); nativeProgress = new GuidanceProgress(options.route!); nativeState = { active: true, status: 'starting' }; queueMicrotask(emit); }
       if (method === 'stop') { nativeProgress = undefined; nativeState = { active: false, status: 'stopped' }; }
       if (method === 'removeListener') nativeListeners.delete(options.callbackId!);
       updateCount(); return {};
@@ -58,7 +63,7 @@ function emit() {
   if (!nativeProgress || !nativeState.active) return;
   const p = position(), fix = { lat: p.coords.latitude, lon: p.coords.longitude, accuracy: p.coords.accuracy, timestamp: p.timestamp, speed: p.coords.speed, heading: p.coords.heading };
   const state = nativeProgress.update(fix);
-  nativeState = { active: !denied && state.status !== 'arrived', status: denied ? 'denied' : state.status, fix, match: state.status === 'on-route' || state.status === 'arrived' ? nativeProgress.match : undefined };
+  nativeState = { active: !denied && state.status !== 'arrived', status: denied ? 'denied' : simulateNativeRerouting && state.status === 'off-route' ? 'rerouting' : state.status, fix, match: state.status === 'on-route' || state.status === 'arrived' ? nativeProgress.match : undefined, nativeRerouting: simulateNativeRerouting, routeVersion: 1, message: simulateNativeRerouting && state.status === 'off-route' ? 'Recalcul du trajet en cours…' : undefined };
   for (const callback of nativeListeners.values()) callback(nativeState);
   updateCount();
 }
@@ -97,6 +102,24 @@ button('GPS approximatif', () => { gps.accuracy = 2000; });
 button('Différer la position', () => { delayPosition = true; });
 button('Livrer la position', () => { delayPosition = false; pendingPositions.splice(0).forEach(reply => reply()); });
 button('Hors trajet', () => { gps = { latitude: 48.862, longitude: 2.349, accuracy: 5 }; emit(); });
+button('Activer recalcul natif simulé', () => { simulateNativeRerouting = true; });
+button('Échec recalcul natif simulé', () => {
+  nativeState = { ...nativeState, status: 'reroute-failed', message: 'Recalcul indisponible. Nouvelle tentative automatique.' };
+  for (const callback of nativeListeners.values()) callback(nativeState);
+});
+button('Nouveau trajet natif simulé', () => {
+  if (!nativeProgress) return;
+  const end = nativeProgress.route.points.at(-1)!;
+  const start = { lat: gps.latitude, lon: gps.longitude };
+  const length = metres(start, end), seconds = length / 10;
+  const route: NavigationRoute = { points: [{ ...start, at: 0, seconds: 0 }, { lat: end.lat, lon: end.lon, at: length, seconds }], length, seconds,
+    instructions: [{ at: 0, sign: 0, text: 'Continuez', name: 'Recette' }, { at: length, sign: 4, text: 'Arrivée', name: '' }] };
+  nativeProgress = new GuidanceProgress(route);
+  const fix = { ...start, accuracy: gps.accuracy, timestamp: Date.now(), speed, heading };
+  nativeProgress.update(fix);
+  nativeState = { active: true, status: 'on-route', fix, match: nativeProgress.match, nativeRerouting: true, routeVersion: 2, route };
+  for (const callback of nativeListeners.values()) callback(nativeState);
+});
 button('Arrivée GPS', () => { gps = { latitude: 48.84607934422299, longitude: 2.347058525015233, accuracy: 5 }; emit(); });
 button('Refuser GPS', () => { denied = true; emit(); });
 button('Autoriser GPS', () => { denied = false; });

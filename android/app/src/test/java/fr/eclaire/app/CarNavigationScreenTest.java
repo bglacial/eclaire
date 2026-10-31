@@ -29,15 +29,15 @@ public class CarNavigationScreenTest {
 
         var route = new GuidanceTracker(List.of(new GuidanceTracker.Point(48, 2, 0, 0), new GuidanceTracker.Point(48.01, 2, 1000, 100)),
                 List.of(new GuidanceTracker.Step(0, "Continuez"), new GuidanceTracker.Step(500, "Tournez")));
-        CarGuidance.update(new CarGuidance.Snapshot(route, null, null, "starting", "Recherche de votre position…"));
+        CarGuidance.update(new CarGuidance.Snapshot(route, null, null, "starting", "Recherche de votre position…", false));
         assertTrue(((NavigationTemplate) screen.onGetTemplate()).getNavigationInfo() instanceof MessageInfo);
         var fix = new GuidanceTracker.Fix(48.005, 2, 5, 1000, 5.0, 0.0);
         var progress = new GuidanceTracker.State("on-route", 300, 30, 0, 1, 200);
-        CarGuidance.update(new CarGuidance.Snapshot(route, fix, progress, "on-route", "Tournez"));
+        CarGuidance.update(new CarGuidance.Snapshot(route, fix, progress, "on-route", "Tournez", false));
         var template = (NavigationTemplate) screen.onGetTemplate();
         assertTrue(template.getNavigationInfo() instanceof RoutingInfo);
         assertEquals(700.0, template.getDestinationTravelEstimate().getRemainingDistance().getDisplayDistance(), 0.01);
-        CarGuidance.update(new CarGuidance.Snapshot(route, null, null, "uncertain", "Signal GPS perdu."));
+        CarGuidance.update(new CarGuidance.Snapshot(route, null, null, "uncertain", "Signal GPS perdu.", false));
         assertTrue(((NavigationTemplate) screen.onGetTemplate()).getNavigationInfo() instanceof MessageInfo);
         assertTrue(navigation.getTripsSent().get(navigation.getTripsSent().size() - 1).isLoading());
         navigation.getNavigationManagerCallback().onStopNavigation();

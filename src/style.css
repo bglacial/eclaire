@@ -84,6 +84,7 @@ h1 { margin: 0; font-size: 36px; line-height: 1.08; font-weight: 700; letter-spa
 .field-wrap:focus-within { outline: 2px solid var(--accent); outline-offset: 0; }
 .field-point, .endpoint-badge { display: inline-grid; place-items: center; width: 24px; height: 24px; flex-shrink: 0; border-radius: 50%; color: var(--cyan); background: oklch(0.93 0.035 210); font-size: 13px; font-weight: 700; }
 .end-field .field-point, .endpoint-badge.end { color: var(--amber); background: oklch(0.94 0.04 70); }
+.via-field .field-point, .endpoint-badge.via { color: var(--accent); background: var(--raised); }
 .field-body { flex: 1; min-width: 0; }
 .field-body label { display: block; font-size: 13px; line-height: 1.25; color: var(--muted); margin-bottom: 2px; }
 .field-body input { display: block; width: 100%; border: 0; border-radius: 0; outline: 0; color: var(--ink); background: transparent; font-size: 16px; padding: 0; height: 25px; text-overflow: ellipsis; }
@@ -93,6 +94,7 @@ input[type=search]::-webkit-search-cancel-button { display: none; }
 .pick { background: transparent; }
 .pick.selected { color: var(--ground); background: var(--accent); }
 .location-actions { display: flex; align-items: center; gap: 12px; margin-top: 6px; }
+.saved-places .location-actions .setting-button { min-width: 0; overflow-wrap: anywhere; }
 .location-button, .swap-button { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 4px; font-size: 14px; background: transparent; color: var(--muted); border-radius: 6px; }
 .location-button { flex: 1; justify-content: flex-start; }
 .location-button[aria-busy=true] { color: var(--accent); }
@@ -177,6 +179,7 @@ input[type=search]::-webkit-search-cancel-button { display: none; }
 .point-marker { position: relative; width: 44px; height: 44px; display: grid; place-items: center; }
 .pin-core { display: grid; place-items: center; width: 34px; height: 34px; background: oklch(0.93 0.035 210); border: 2px solid var(--cyan); border-radius: 50%; color: var(--cyan); font-size: 14px; font-weight: 700; }
 .point-marker.end .pin-core { background: oklch(0.94 0.04 70); border-color: var(--amber); color: var(--amber); }
+.point-marker.via .pin-core { background: var(--surface); border-color: var(--accent); color: var(--accent); }
 .pin-label { position: absolute; width: max-content; max-width: 180px; background: var(--surface); border: 1px solid var(--line); padding: 7px 10px; top: -5px; left: 50%; transform: translate(-50%, -100%); color: var(--ink); border-radius: 4px; font-size: 13px; line-height: 1.35; text-align: center; overflow-wrap: anywhere; }
 .pick-hint { position: absolute; top: 24px; left: 420px; right: 90px; width: fit-content; max-width: calc(100% - 510px); margin: auto; background: var(--accent); color: oklch(0.99 0.005 270); z-index: 490; display: flex; align-items: center; gap: 12px; padding: 4px 4px 4px 16px; border-radius: 6px; font-size: 14px; line-height: 1.5; }
 .pick-hint button { color: inherit; background: transparent; }
