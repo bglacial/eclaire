@@ -2,18 +2,22 @@
 
 ## Direction
 
-Une personne prépare son trajet sur son téléphone en journée ou sur son ordinateur à la lumière du bureau : carte claire, commandes opaques et lecture nette. Inspiration de nriault.fr : assurance du cobalt, accent citron ponctuel, typographie franche. La carte garde ses propres codes, sans copier le portfolio.
+Direction approuvée « Le chemin prend vie », appliquée depuis l’alpha.13. En préparation de jour, une carte claire et des commandes opaques restent lisibles sur téléphone ou ordinateur. Dans un habitacle sombre, les mêmes commandes passent sur des fonds encre ; la route garde un fort contraste.
 
 ## Palette et typographie
 
-Neutres clairs teintés, en OKLCH. Cobalt pour les actions et sélections, citron pour le symbole de marque uniquement. Cyan et ambre pour les fronts sur une carte peu saturée ; route finale cobalt avec contour clair. Police système pour les libellés et les données, échelle fixe. Chiffres tabulaires pour les métriques.
+Neutres teintés en OKLCH. Menthe `oklch(.91 .15 139)` pour l’action principale, orange `oklch(.62 .22 40)` pour le trajet et la direction, encre `oklch(.22 .014 155)` pour la lecture. La nuit : fond `.19 .014 155`, surface `.25 .014 155`, texte `.95 .012 145`, route `.76 .17 52`. Cyan et ambre gardent leur rôle dans les recherches bidirectionnelles. Le tracé final et le guidage emploient le même jeton de couleur, mis à jour avec le thème.
+
+Public Sans, hébergée dans l’application, sert les libellés et les données à une échelle fixe. Big Shoulders 800 est réservée à la marque. Les licences SIL OFL sont livrées avec les polices. Chiffres tabulaires pour les métriques, cibles de commande de 48 px et arrondis de 10 à 20 px.
 
 ## Composition
 
-Barre de marque compacte, panneau de préparation à gauche sur ordinateur, carte dominante. Sur téléphone, commandes en bas et outils de carte en haut. Résultat compact avec les deux adresses, durée et distance. Aucun panneau imbriqué décoratif. Attribution OSM toujours accessible.
+Carte sur toute la surface, marque et paramètres flottants en haut. Préparation dans un panneau bas sur téléphone et un ruban horizontal sur ordinateur. Départ et arrivée restent visibles ; étape facultative, critère et favoris sont regroupés sous Options du trajet. Le résultat met l’arrivée, la durée et la distance au premier plan.
 
-En guidage sur téléphone, la carte occupe toute la hauteur disponible et la barre de marque disparaît. En portrait, l'instruction reste en haut et les données du trajet et les actions en bas ; en paysage, elles se répartissent sur les côtés. Les avertissements GPS restent visibles lorsqu'ils sont utiles. Le véhicule se place dans la carte dégagée pour laisser voir la route à venir. Les panneaux respectent les zones système et l'encoche.
+L’espace Étapes et lieux remplace visuellement le panneau courant sans arrêter la session de guidage. Deux vues permettent de modifier les étapes ou de comparer les lieux et leurs détours. Les changements de trajet restent soumis au calcul et à une confirmation ; l’annulation conserve le trajet actif.
+
+En guidage portrait, instruction et résumé sont regroupés en bas. Le paysage répartit instruction et commandes sur les côtés pour dégager le centre. Le cadrage mesure les panneaux effectivement affichés et respecte les zones système. Attribution OSM toujours accessible. Carte PiP et Android Auto : route orange, véhicule menthe ; le PiP conserve ses composants natifs.
 
 ## Mouvement
 
-Conserver le moteur Canvas de l'éclair avec une lecture de la trace d'environ deux secondes et une confirmation finale de 650 ms. Le calcul serveur garde sa durée propre ; les recalculs GPS lisent la trace en 200 ms au plus. Les transitions d'interface durent 200 ms avec --ease-out: cubic-bezier(0.23, 1, 0.32, 1). Seulement opacité et transformation. Aucun mouvement au clavier ni aux commandes de zoom répétées. En mode réduit, garder un retour d'opacité, supprimer les déplacements et le zoom animé. Pas de bibliothèque supplémentaire.
+Conserver le moteur Canvas avec une lecture de trace d’environ deux secondes et une confirmation finale de 650 ms. Le calcul conserve sa durée propre ; recalculs GPS en 200 ms au plus. Transitions d’interface : 200 ms, `cubic-bezier(.23,1,.32,1)`, opacité et déplacement de 8 px. Pression : 160 ms, échelle .97. Aucun déplacement au clavier ; en mouvement réduit, conserver seulement les retours d’opacité. Pas de bibliothèque ajoutée ni de chorégraphie publicitaire au chargement du produit.

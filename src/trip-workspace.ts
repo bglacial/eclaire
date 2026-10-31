@@ -28,17 +28,20 @@ export class TripWorkspace {
     this.root.setAttribute('aria-labelledby', 'trip-workspace-title');
     this.root.innerHTML = `<div class="trip-workspace-header"><h2 id="trip-workspace-title" tabindex="-1">Votre trajet en cours</h2><button id="trip-close" type="button">Retour à la carte</button></div>
       <p id="trip-intro">Les changements s’appliquent après confirmation.</p>
-      <h3>Étapes restantes</h3><ol id="trip-stops"></ol>
+      <div class="trip-views" aria-label="Contenu du trajet"><button id="trip-view-stops" type="button" aria-pressed="true" aria-controls="trip-stops-panel">Étapes</button><button id="trip-view-places" type="button" aria-pressed="false" aria-controls="trip-places-panel">Lieux sur la route</button></div>
+      <div id="trip-stops-panel"><h3>Étapes restantes</h3><ol id="trip-stops"></ol>
       <form id="trip-add-form"><label for="trip-add-search">Ajouter une adresse ou un lieu</label><input id="trip-add-search" type="search" autocomplete="off" placeholder="Une adresse, un établissement…" aria-controls="trip-suggestions"><ul id="trip-suggestions" aria-label="Lieux proposés"></ul></form>
       <p id="trip-status" role="status" aria-live="polite"></p>
-      <div class="trip-workspace-actions"><button id="trip-apply" type="button" class="primary">Appliquer les étapes</button><button id="trip-refresh" type="button">Reprendre le trajet actuel</button><button id="trip-cancel-request" type="button" hidden>Annuler le calcul</button></div>
-      <h3>Le long du parcours</h3><p id="trip-area">Recherche dans les 50 prochains kilomètres, à moins de 1 km du tracé.</p>
+      <div class="trip-workspace-actions"><button id="trip-apply" type="button" class="primary">Appliquer les étapes</button><button id="trip-refresh" type="button">Reprendre le trajet actuel</button></div></div>
+      <div id="trip-places-panel" hidden><h3>Le détour avant la pause.</h3><p id="trip-area">Recherche dans les 50 prochains kilomètres, à moins de 1 km du tracé.</p>
       <div class="trip-categories"><button type="button" data-category="fuel">Stations-service</button><button type="button" data-category="parking">Parkings</button><button type="button" data-category="restaurant">Restaurants</button></div>
       <p id="trip-places-status" role="status" aria-live="polite"></p><ul id="trip-places"></ul><button id="trip-search-next" type="button" hidden>Chercher 50 km plus loin</button>
-      <p class="trip-source">Lieux © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>, via Photon. Jusqu’à six lieux proches du tracé sont évalués par zone, sans exhaustivité. Détours routiers estimés sur les portions d’accès et de retour au parcours, sans trafic. Vérifiez les horaires et les accès.</p>`;
+      <p class="trip-source">Lieux © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>, via Photon. Jusqu’à six lieux proches du tracé sont évalués par zone, sans exhaustivité. Détours routiers estimés sur les portions d’accès et de retour au parcours, sans trafic. Vérifiez les horaires et les accès.</p></div><button id="trip-cancel-request" type="button" hidden>Annuler le calcul</button>`;
     document.querySelector('main')!.append(this.root);
     this.root.addEventListener('keydown', event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); this.close(); } });
     window.addEventListener('eclaire-back', event => { if (!this.root.hidden) { event.preventDefault(); event.stopImmediatePropagation(); this.close(); } }, { capture: true });
+    this.el('trip-view-stops').addEventListener('click', () => this.section(false));
+    this.el('trip-view-places').addEventListener('click', () => this.section(true));
     this.el('trip-close').addEventListener('click', () => this.close());
     this.el('trip-refresh').addEventListener('click', () => { void this.open(); });
     this.el('trip-cancel-request').addEventListener('click', () => { if (!this.committing) { this.pending?.abort(); this.el('trip-status').textContent = 'Calcul annulé, trajet actuel conservé.'; } });
@@ -49,6 +52,12 @@ export class TripWorkspace {
     this.el('trip-search-next').addEventListener('click', () => { void this.find(this.category, true); });
   }
 
+  private section(places: boolean) {
+    this.el('trip-stops-panel').hidden = places;
+    this.el('trip-places-panel').hidden = !places;
+    this.el('trip-view-stops').setAttribute('aria-pressed', String(!places));
+    this.el('trip-view-places').setAttribute('aria-pressed', String(places));
+  }
   private el<T extends HTMLElement = HTMLElement>(id: string) { return this.root.querySelector<T>(`#${id}`)!; }
   private button(text: string, action: () => void, label = text) {
     const button = document.createElement('button'); button.type = 'button'; button.textContent = text; button.setAttribute('aria-label', label); button.addEventListener('click', action); return button;
@@ -84,13 +93,13 @@ export class TripWorkspace {
     if (this.draft.length >= 8) { this.el('trip-status').textContent = 'Huit étapes maximum. Retirez un arrêt pour en ajouter un.'; return; }
     if (this.draft.some(stop => stop.lat === place.lat && stop.lon === place.lon)) { this.el('trip-status').textContent = 'Ce lieu figure déjà dans les étapes.'; return; }
     this.search?.abort(); clearTimeout(this.timer);
-    this.draft.splice(index, 0, { ...place }); this.el<HTMLInputElement>('trip-add-search').value = ''; this.el('trip-suggestions').replaceChildren(); this.changed(index);
+    this.draft.splice(index, 0, { ...place }); this.el<HTMLInputElement>('trip-add-search').value = ''; this.el('trip-suggestions').replaceChildren(); this.section(false); this.changed(index);
   }
 
   async open() {
     const opener = this.root.hidden ? document.activeElement as HTMLElement : this.returnFocus;
     this.close(true); this.returnFocus = opener;
-    const generation = ++this.generation; this.root.hidden = false; this.busy = true; this.dirty = false;
+    const generation = ++this.generation; this.section(false); this.root.hidden = false; this.busy = true; this.dirty = false;
     this.el('trip-status').textContent = 'Lecture du trajet actuel…'; this.controls(); this.el('trip-workspace-title').focus();
     try {
       const snapshot = await this.read(); if (generation !== this.generation) return;
@@ -140,7 +149,7 @@ export class TripWorkspace {
 
   private async find(category: PoiCategory, next = false) {
     if (this.busy || this.dirty || !this.snapshot) return;
-    const controller = this.pending = new AbortController(); this.busy = true; this.controls(); this.category = category; this.el('trip-places').replaceChildren();
+    const controller = this.pending = new AbortController(); this.busy = true; this.controls(); this.category = category; this.root.querySelectorAll<HTMLButtonElement>('[data-category]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.category === category))); this.el('trip-places').replaceChildren();
     try {
       const snapshot = await this.read(); if (controller.signal.aborted) return;
       if (snapshot.tripId !== this.snapshot.tripId) throw new Error('Un autre trajet est actif. Reprenez le trajet actuel avant de chercher.');

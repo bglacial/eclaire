@@ -31,7 +31,7 @@ public class CarMapInstrumentedTest {
             try {
                 var plane = image.getPlanes()[0]; var pixels = plane.getBuffer();
                 int offset = 240 * plane.getRowStride() + 350 * plane.getPixelStride();
-                assertEquals(0, pixels.get(offset) & 255); assertEquals(113, pixels.get(offset + 1) & 255); assertEquals(200, pixels.get(offset + 2) & 255);
+                assertEquals(233, pixels.get(offset) & 255); assertEquals(76, pixels.get(offset + 1) & 255); assertEquals(12, pixels.get(offset + 2) & 255);
             } finally { image.close(); instrumentation.runOnMainSync(() -> map.get().close()); }
         }
     }
@@ -53,7 +53,7 @@ public class CarMapInstrumentedTest {
             try {
                 var plane = image.getPlanes()[0]; var pixels = plane.getBuffer();
                 int offset = 240 * plane.getRowStride() + 330 * plane.getPixelStride();
-                assertEquals(0, pixels.get(offset) & 255); assertEquals(113, pixels.get(offset + 1) & 255); assertEquals(200, pixels.get(offset + 2) & 255);
+                assertEquals(233, pixels.get(offset) & 255); assertEquals(76, pixels.get(offset + 1) & 255); assertEquals(12, pixels.get(offset + 2) & 255);
             } finally { image.close(); instrumentation.runOnMainSync(() -> map.get().close()); }
         }
     }
@@ -78,13 +78,13 @@ public class CarMapInstrumentedTest {
                 var plane = image.getPlanes()[0];
                 int offset = 240 * plane.getRowStride() + 400 * plane.getPixelStride();
                 var pixels = plane.getBuffer();
-                assertEquals(0, pixels.get(offset) & 255);
-                assertEquals(90, pixels.get(offset + 1) & 255);
-                assertEquals(190, pixels.get(offset + 2) & 255);
+                assertEquals(172, pixels.get(offset) & 255);
+                assertEquals(249, pixels.get(offset + 1) & 255);
+                assertEquals(151, pixels.get(offset + 2) & 255);
                 int routeOffset = 190 * plane.getRowStride() + 400 * plane.getPixelStride();
-                assertEquals(0, pixels.get(routeOffset) & 255);
-                assertEquals(113, pixels.get(routeOffset + 1) & 255);
-                assertEquals(200, pixels.get(routeOffset + 2) & 255);
+                assertEquals(233, pixels.get(routeOffset) & 255);
+                assertEquals(76, pixels.get(routeOffset + 1) & 255);
+                assertEquals(12, pixels.get(routeOffset + 2) & 255);
             } finally {
                 image.close();
                 instrumentation.runOnMainSync(() -> map.get().close());

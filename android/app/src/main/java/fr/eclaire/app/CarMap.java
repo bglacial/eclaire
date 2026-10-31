@@ -86,7 +86,7 @@ final class CarMap implements SurfaceCallback {
         Canvas canvas = null;
         try {
             canvas = surface.lockCanvas(null);
-            canvas.drawColor(Color.rgb(235, 239, 238));
+            canvas.drawColor(Color.rgb(242, 247, 242));
             if (state == null || lastFix == null) return;
             canvas.scale(density, density);
             Rect area = visible.isEmpty() ? new Rect(0, 0, width, height) : visible;
@@ -129,13 +129,13 @@ final class CarMap implements SurfaceCallback {
                 float px = (float) (x(point.lon(), zoom) - ox), py = (float) (y(point.lat(), zoom) - oy);
                 if (!started) { path.moveTo(px, py); started = true; } else path.lineTo(px, py);
             }
-            paint.setColor(Color.rgb(0, 113, 200)); paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(7); paint.setStrokeJoin(Paint.Join.ROUND);
+            paint.setColor(Color.rgb(233, 76, 12)); paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(7); paint.setStrokeJoin(Paint.Join.ROUND);
             canvas.drawPath(path, paint); paint.setStyle(Paint.Style.FILL);
             canvas.restore();
             if (position != null) {
                 Path marker = new Path(); marker.moveTo(cx, cy - 14); marker.lineTo(cx + 10, cy + 10); marker.lineTo(cx, cy + 6); marker.lineTo(cx - 10, cy + 10); marker.close();
-                paint.setColor(Color.WHITE); paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(3); canvas.drawPath(marker, paint);
-                paint.setStyle(Paint.Style.FILL); paint.setColor(position.estimated() ? Color.rgb(190, 100, 0) : Color.rgb(0, 90, 190)); canvas.drawPath(marker, paint);
+                paint.setColor(Color.rgb(22, 29, 24)); paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(3); canvas.drawPath(marker, paint);
+                paint.setStyle(Paint.Style.FILL); paint.setColor(position.estimated() ? Color.rgb(255, 164, 99) : Color.rgb(172, 249, 151)); canvas.drawPath(marker, paint);
             }
             paint.setColor(Color.DKGRAY); paint.setTextSize(16); canvas.drawText("© OpenStreetMap contributors", area.left / density + 8, area.bottom / density - 8, paint);
         } catch (IllegalArgumentException | IllegalStateException ignored) {

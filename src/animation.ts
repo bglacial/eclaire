@@ -31,6 +31,9 @@ export class ExplorationRenderer {
     const pane = map.getPane('exploration') || map.createPane('exploration');
     pane.style.zIndex = '450'; pane.style.pointerEvents = 'none'; pane.append(this.canvas);
     this.ctx = this.canvas.getContext('2d')!;
+    const theme = new MutationObserver(() => this.wake());
+    theme.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    map.on('unload', () => theme.disconnect());
     map.on('movestart', () => { this.moving = true; });
     map.on('moveend zoomend resize', () => { this.moving = false; this.project(); });
     matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', e => { this.reduced = e.matches; this.wake(); });
@@ -154,8 +157,9 @@ export class ExplorationRenderer {
         }
       }
       const reveal = phase.reveal;
-      ctx.globalAlpha = 1; ctx.strokeStyle = 'oklch(0.99 0.005 270)'; ctx.lineWidth = 8; ctx.beginPath(); this.trace(ctx, line, 0, reveal); ctx.stroke();
-      ctx.strokeStyle = 'oklch(0.48 0.24 270)'; ctx.lineWidth = this.lite ? 3 : 3.5; ctx.shadowColor = 'oklch(0.65 0.2 270)'; ctx.shadowBlur = this.lite ? 0 : 10;
+      const theme = getComputedStyle(document.documentElement);
+      ctx.globalAlpha = 1; ctx.strokeStyle = theme.getPropertyValue('--surface').trim(); ctx.lineWidth = 8; ctx.beginPath(); this.trace(ctx, line, 0, reveal); ctx.stroke();
+      ctx.strokeStyle = theme.getPropertyValue('--route').trim(); ctx.lineWidth = this.lite ? 3 : 3.5; ctx.shadowColor = theme.getPropertyValue('--route').trim(); ctx.shadowBlur = this.lite ? 0 : 10;
       ctx.beginPath(); this.trace(ctx, line, 0, reveal); ctx.stroke(); ctx.shadowBlur = 0;
       if (animate && reveal > 0 && reveal < 1) this.glow(pointAlong(line, reveal), '#effff8', 1, 3);
       if (animate && phase.shock > 0 && phase.shock < 1) {

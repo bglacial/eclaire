@@ -5,6 +5,7 @@ import { Geolocation } from '@capacitor/geolocation';
 import { Capacitor, SystemBars, SystemBarsStyle } from '@capacitor/core';
 import { buildRoadGraph, nearestNode } from './graph';
 import { createMap, pointMarker } from './map';
+import { mapPadding } from './map-viewport';
 import { ExplorationRenderer } from './animation';
 import { playbackRate } from './animation-timing';
 import { GpsGuidance } from './guidance';
@@ -46,7 +47,7 @@ const icon = (name: string) => `<svg viewBox="0 0 24 24" fill="none" stroke="cur
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <a class="skip-link" href="#start">Préparer un trajet</a>
   <header class="topbar">
-    <a class="brand" href="./" aria-label="Éclaire, accueil" translate="no"><span class="brand-symbol">${icon('bolt')}</span>éclaire<span class="brand-dot">.</span></a>
+    <a class="brand" href="./" aria-label="Éclaire, accueil" translate="no">éclaire<span class="brand-symbol" aria-hidden="true">↗</span></a>
     <span class="tagline">Deux points. Un chemin qui s’éclaire.</span>
     <div class="header-right"><span class="edition">France <span>métropolitaine & Corse</span></span><button class="help-button" id="settings-open" aria-label="Paramètres" hidden>${icon('settings')}<span>Paramètres</span></button><button class="help-button" id="help" aria-label="Aide et fonctionnement" aria-haspopup="dialog" aria-expanded="false" aria-controls="about">${icon('info')}<span>Aide</span></button></div>
   </header>
@@ -55,21 +56,22 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <section class="planner" aria-labelledby="planner-title">
       <button id="route-panel-toggle" class="setting-button" aria-expanded="true" aria-controls="planner-content" hidden>Réduire le panneau trajet</button>
       <div id="planner-content">
-      <div class="planner-intro"><span class="eyebrow">${icon('car')} À vous la route</span><h1 id="planner-title">Votre prochain<br><span>trajet.</span></h1><p>Choisissez deux points.<br>Regardez le chemin prendre vie.</p></div>
-      <div class="exploring-heading"><span class="eyebrow">${icon('bolt')} Exploration</span><h2>Les routes font le lien.</h2><p>Deux fronts, un itinéraire à trouver.</p></div>
+      <div class="planner-intro"><p>Un départ, une envie.</p><h1 id="planner-title">Où va-t-on ?</h1></div>
+      <div class="exploring-heading"><h2>La route prend vie.</h2><p>Deux recherches, depuis le départ et l’arrivée.</p></div>
       <details id="route-editor" open><summary>Modifier le trajet ${icon('route')}</summary><div class="route-form">
       <div class="location-fields">
         <div class="field-wrap start-field"><span class="field-point" aria-hidden="true">A</span><div class="field-body"><label for="start">Départ</label><input id="start" name="start" type="search" spellcheck="false" placeholder="Une adresse, un lieu…" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="start-results" /></div><button class="icon-button pick" data-pick="start" title="Choisir le départ sur la carte" aria-label="Choisir le départ sur la carte">${icon('pin')}</button><div id="start-results" class="suggestions" role="listbox" aria-label="Suggestions de départ" hidden></div></div>
-        <div class="field-wrap via-field"><span class="field-point" aria-hidden="true">•</span><div class="field-body"><label for="via">Étape facultative</label><input id="via" name="via" type="search" spellcheck="false" placeholder="Une adresse, un lieu…" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="via-results" /></div><button class="icon-button pick" data-pick="via" title="Choisir l’étape sur la carte" aria-label="Choisir l’étape sur la carte">${icon('pin')}</button><div id="via-results" class="suggestions" role="listbox" aria-label="Suggestions d’étape" hidden></div></div>
+
         <div class="field-wrap end-field"><span class="field-point" aria-hidden="true">B</span><div class="field-body"><label for="end">Arrivée</label><input id="end" name="end" type="search" spellcheck="false" placeholder="Une adresse, un lieu…" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="end-results" /></div><button class="icon-button pick" data-pick="end" title="Choisir l’arrivée sur la carte" aria-label="Choisir l’arrivée sur la carte">${icon('pin')}</button><div id="end-results" class="suggestions" role="listbox" aria-label="Suggestions d’arrivée" hidden></div></div>
       </div>
       <div class="location-actions"><button id="geolocate" class="location-button" aria-label="Utiliser ma position comme départ">${icon('locate')} Ma position</button><button id="swap" class="swap-button" aria-label="Permuter le départ et l’arrivée">${icon('swap')} Permuter</button></div>
+      <details class="planner-options"><summary>Options du trajet</summary><div class="options-content"><div class="field-wrap via-field"><span class="field-point" aria-hidden="true">•</span><div class="field-body"><label for="via">Étape facultative</label><input id="via" name="via" type="search" spellcheck="false" placeholder="Une adresse, un lieu…" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="via-results" /></div><button class="icon-button pick" data-pick="via" title="Choisir l’étape sur la carte" aria-label="Choisir l’étape sur la carte">${icon('pin')}</button><div id="via-results" class="suggestions" role="listbox" aria-label="Suggestions d’étape" hidden></div></div>
       <details class="saved-places"><summary>Destinations enregistrées</summary><p>Choisissez une arrivée puis ajoutez-la aux favoris ou enregistrez-la comme domicile ou travail. Ces lieux et les dernières arrivées restent sur cet appareil.</p><div class="location-actions"><button id="save-home" class="setting-button">Enregistrer comme domicile</button><button id="save-work" class="setting-button">Enregistrer comme travail</button></div><button id="save-favorite" class="setting-button">Ajouter l’arrivée aux favoris</button><div id="saved-places-list"></div><button id="clear-recent" class="setting-button">Effacer les destinations récentes</button></details>
-      <fieldset class="criteria"><legend>Critère du trajet</legend><label><input type="radio" name="criterion" value="time" checked><span>${icon('time')} Le plus rapide</span></label><label><input type="radio" name="criterion" value="distance"><span>${icon('route')} Le plus court</span></label></fieldset>
+      <fieldset class="criteria"><legend>Critère du trajet</legend><label><input type="radio" name="criterion" value="time" checked><span>${icon('time')} Le plus rapide</span></label><label><input type="radio" name="criterion" value="distance"><span>${icon('route')} Le plus court</span></label></fieldset></div></details>
       <div class="launch-row"><button id="launch" class="primary" disabled>${icon('bolt')}<span>Chargement des routes…</span>${icon('arrow')}</button><button id="reset" class="icon-button reset-button" aria-label="Effacer le trajet et utiliser ma position" title="Recommencer">${icon('reset')}</button></div>
       </div></details>
       <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
-      <div id="route-result" class="route-result" role="status" aria-live="polite" hidden><div class="result-heading"><span>${icon('check')} Trajet trouvé</span><span id="result-criterion"></span></div><div id="route-endpoints" class="route-endpoints"></div><div class="metrics"><div><strong id="duration"></strong><span>durée estimée</span></div><div><strong id="distance"></strong><span>distance</span></div></div><p id="result-explanation"></p><button id="compare-routes" class="setting-button">Comparer avec l’autre critère</button><p id="comparison-status" role="status"></p><button id="choose-alternative" class="setting-button" hidden></button><button id="replay" class="setting-button">Revoir l’exploration</button><button id="navigation-start" class="primary" hidden>${icon('locate')} Démarrer le guidage GPS</button><p id="navigation-availability"></p></div>
+      <div id="route-result" class="route-result" role="status" aria-live="polite" hidden><div class="result-heading"><span>${icon('check')} Trajet trouvé</span><span id="result-criterion"></span></div><h2 id="result-title"></h2><details class="result-itinerary"><summary>Voir les points du trajet</summary><div id="route-endpoints" class="route-endpoints"></div></details><div class="metrics"><div><strong id="duration"></strong><span>durée estimée</span></div><div><strong id="distance"></strong><span>distance</span></div></div><p id="result-explanation"></p><button id="compare-routes" class="setting-button">Comparer avec l’autre critère</button><p id="comparison-status" role="status"></p><button id="choose-alternative" class="setting-button" hidden></button><button id="replay" class="setting-button">Revoir l’exploration</button><button id="navigation-start" class="primary" hidden>${icon('locate')} Démarrer le guidage GPS</button><p id="navigation-availability"></p></div>
       <div class="planner-footer">${icon('car')} En voiture <span>·</span><span id="coverage">Connexion au service France…</span></div>
       </div>
     </section>
@@ -260,7 +262,7 @@ function notice(message: string, kind: 'error' | 'info' = 'info') {
 function updateLaunch() {
   $('app').classList.toggle('is-exploring', playing);
   launch.disabled = !workerReady || !selections.start || !selections.end || (!!inputs.via.value.trim() && !selections.via);
-  launch.innerHTML = playing ? `${icon('stop')}<span>Interrompre l’exploration</span>` : `${icon('bolt')}<span>Explorer le trajet</span>${icon('arrow')}`;
+  launch.innerHTML = playing ? `${icon('stop')}<span>Interrompre l’exploration</span>` : `${icon('bolt')}<span>Éclairer la route</span>${icon('arrow')}`;
 }
 
 function stop(clear = true) {
@@ -368,11 +370,9 @@ function placeMarker(side: Endpoint, lat: number, lon: number, name: string) {
 function focusPoint(point: { lat: number; lon: number }, zoom = map.getZoom()) {
   map.invalidateSize({ pan: false, animate: false });
   const bounds = $('map').getBoundingClientRect();
-  const panel = document.querySelector('.planner')!.getBoundingClientRect();
-  const mobile = matchMedia('(max-width: 720px)').matches;
-  const x = mobile ? bounds.width / 2 : (panel.right - bounds.left + bounds.width) / 2;
-  const chromeBottom = mobile ? Math.max(0, ...Array.from(document.querySelectorAll('.map-tools, .map-legend'), el => { const rect = el.getBoundingClientRect(); return rect.height ? rect.bottom - bounds.top : 0; })) : 0;
-  const y = mobile ? (chromeBottom + Math.max(chromeBottom + 40, panel.top - bounds.top)) / 2 : bounds.height / 2;
+  const padding = mapPadding();
+  const x = (padding.topLeft[0] + bounds.width - padding.bottomRight[0]) / 2;
+  const y = (padding.topLeft[1] + Math.max(padding.topLeft[1] + 40, bounds.height - padding.bottomRight[1])) / 2;
   const center = map.project([point.lat, point.lon], zoom).add([bounds.width / 2 - x, bounds.height / 2 - y]);
   map.setView(map.unproject(center, zoom), zoom, { animate: false });
 }
@@ -389,16 +389,13 @@ function fitPoints() {
   const a = selections.start, b = selections.end;
   if (!a || !b) return;
   map.invalidateSize({ pan: false, animate: false });
-  const mobile = matchMedia('(max-width: 720px)').matches;
-  const compact = mobile && matchMedia('(max-height: 700px)').matches;
-  const showingResult = !$<HTMLDetailsElement>('route-editor').open && !$('route-result').hidden;
-  const plannerHeight = document.querySelector('.planner')!.getBoundingClientRect().height;
+  const padding = mapPadding();
   const bounds = result?.path.length ? L.latLngBounds(result.path.flatMap(id => {
     const edge = routeGeometry.edges[id];
     return edge.geometry?.map(p => L.latLng(p[0], p[1])) ?? [routeGeometry.nodes[edge.from], routeGeometry.nodes[edge.to]].map(p => L.latLng(p.lat, p.lon));
   })) : L.latLngBounds([markers.start!.getLatLng(), markers.end!.getLatLng(), ...(markers.via ? [markers.via.getLatLng()] : [])]);
   map.fitBounds(bounds, {
-    paddingTopLeft: mobile ? [48, compact ? showingResult ? 70 : playing ? 110 : 126 : playing ? 220 : 170] : [470, 100], paddingBottomRight: mobile ? [85, plannerHeight + 52] : [110, playing ? 220 : 130], maxZoom: 16, animate: !renderer.reducedMotion && !document.documentElement.classList.contains('keyboard-input'),
+    paddingTopLeft: padding.topLeft, paddingBottomRight: padding.bottomRight, maxZoom: 16, animate: !renderer.reducedMotion && !document.documentElement.classList.contains('keyboard-input'),
   });
 }
 
@@ -435,6 +432,7 @@ function complete(updateGuidance = true) {
     catch { guidance?.setRoute(null); }
   }
   const minutes = Math.ceil(result.seconds / 60);
+  $('result-title').textContent = selections.end?.name ?? 'Votre trajet';
   $('duration').textContent = minutes < 1 ? '< 1 min' : minutes < 60 ? `${minutes} min` : `${Math.floor(minutes / 60)} h${minutes % 60 ? ` ${String(minutes % 60).padStart(2, '0')}` : ''}`;
   $('distance').textContent = result.length >= 1000 ? `${(result.length / 1000).toLocaleString('fr-FR', { maximumFractionDigits: result.length >= 1_000_000 ? 0 : result.length >= 100_000 ? 1 : 2 })} km` : `${Math.round(result.length)} m`;
   $('result-criterion').textContent = criterion() === 'time' ? 'Le plus rapide' : 'Le plus court';
@@ -921,7 +919,8 @@ $('fit').addEventListener('click', () => { if (roads) fitPoints(); });
 $('france').addEventListener('click', () => {
   if (!map) return;
   map.invalidateSize({ pan: false });
-  map.fitBounds([[franceBounds[0], franceBounds[1]], [franceBounds[2], franceBounds[3]]], { paddingTopLeft: matchMedia('(max-width: 720px)').matches ? [20, 55] : [410, 50], paddingBottomRight: matchMedia('(max-width: 720px)').matches ? [40, document.querySelector('.planner')!.getBoundingClientRect().height + 35] : [70, 100], animate: !renderer.reducedMotion && !document.documentElement.classList.contains('keyboard-input') });
+  const padding = mapPadding();
+  map.fitBounds([[franceBounds[0], franceBounds[1]], [franceBounds[2], franceBounds[3]]], { paddingTopLeft: padding.topLeft, paddingBottomRight: padding.bottomRight, animate: !renderer.reducedMotion && !document.documentElement.classList.contains('keyboard-input') });
 });
 $('zoom-in').addEventListener('click', () => map?.zoomIn(1, { animate: false }));
 $('zoom-out').addEventListener('click', () => map?.zoomOut(1, { animate: false }));
@@ -935,12 +934,14 @@ function showAbout(show: boolean) {
 $('help').addEventListener('click', () => showAbout(!$<HTMLDialogElement>('about').open));
 $('about').addEventListener('close', () => { $('help').setAttribute('aria-expanded', 'false'); });
 document.querySelector('#route-editor > summary')!.addEventListener('click', () => requestAnimationFrame(fitPoints));
+document.querySelectorAll('.planner details').forEach(details => details.addEventListener('toggle', () => requestAnimationFrame(fitPoints)));
 $('close-about').addEventListener('click', () => showAbout(false));
 function setPanelCollapsed(collapsed: boolean) {
   document.querySelector('.planner')!.classList.toggle('is-collapsed', collapsed);
   $('planner-content').hidden = collapsed;
   $('route-panel-toggle').setAttribute('aria-expanded', String(!collapsed));
   $('route-panel-toggle').textContent = collapsed ? 'Afficher le trajet' : 'Réduire le panneau trajet';
+  requestAnimationFrame(fitPoints);
 }
 $('route-panel-toggle').addEventListener('click', () => setPanelCollapsed(!$('planner-content').hidden));
 

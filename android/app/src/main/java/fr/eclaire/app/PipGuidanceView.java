@@ -32,8 +32,8 @@ final class PipGuidanceView extends FrameLayout implements TextureView.SurfaceTe
         canvas.setSurfaceTextureListener(this);
         addView(canvas, new LayoutParams(-1, -1));
         instruction = new TextView(context);
-        instruction.setTextColor(Color.WHITE);
-        instruction.setBackgroundColor(Color.rgb(24, 46, 57));
+        instruction.setTextColor(Color.rgb(235, 245, 235));
+        instruction.setBackgroundColor(Color.rgb(28, 38, 31));
         instruction.setTextSize(15);
         instruction.setMaxLines(2);
         instruction.setEllipsize(TextUtils.TruncateAt.END);

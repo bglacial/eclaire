@@ -1,4 +1,5 @@
 import L from 'leaflet';
+import { mapPadding } from './map-viewport';
 import { Capacitor, type PluginListenerHandle } from '@capacitor/core';
 import { Geolocation } from '@capacitor/geolocation';
 import { GuidanceProgress, RecentSpeed, routePosition, predictedRouteAt, guidanceDistance, usableFix, isNavigationRoute, type GpsFix, type NavigationRoute } from './navigation';
@@ -60,6 +61,13 @@ export class GpsGuidance {
   }
 
   constructor(private map: L.Map, private onEnter: () => void, private onExit: () => void, private onRecalculate: (fix: GpsFix) => void, private routingConfig: () => NativeRoutingConfig | undefined, private onRouteChanged: (route: NavigationRoute) => void, private onWaypointReached: (count: number) => void = () => {}) {
+    const theme = new MutationObserver(() => {
+      const style = getComputedStyle(document.documentElement);
+      this.line?.setStyle({ color: style.getPropertyValue('--route').trim() });
+      this.approachPoint?.setStyle({ color: style.getPropertyValue('--surface').trim(), fillColor: style.getPropertyValue('--route').trim() });
+    });
+    theme.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    map.on('unload', () => theme.disconnect());
     element('navigation-start').addEventListener('click', () => { void this.start(); });
     element('navigation-stop').addEventListener('click', () => this.stop());
     element('navigation-resume').addEventListener('click', () => { void this.start(); });
@@ -105,7 +113,7 @@ export class GpsGuidance {
     this.reachedCount = 0;
     this.progress ??= new GuidanceProgress(this.route);
     this.onEnter();
-    if (!this.line) this.line = L.polyline(this.route.points.map(p => [p.lat, p.lon]), { renderer: this.renderer, color: getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(), weight: 6, opacity: 0.95, interactive: false }).addTo(this.map);
+    if (!this.line) this.line = L.polyline(this.route.points.map(p => [p.lat, p.lon]), { renderer: this.renderer, color: getComputedStyle(document.documentElement).getPropertyValue('--route').trim(), weight: 6, opacity: 0.95, interactive: false }).addTo(this.map);
     element('app').classList.add('is-guiding'); element('navigation').hidden = false;
     this.map.invalidateSize({ pan: false, animate: false });
     element('navigation-resume').hidden = true;
@@ -250,13 +258,13 @@ export class GpsGuidance {
     this.fix = fix; this.lastGoodAt = Date.now(); this.speeds.add(fix);
     text('navigation-speed', fix.speed != null && Number.isFinite(fix.speed) && fix.speed >= 0 && fix.speed <= 100 ? String(Math.round(fix.speed * 3.6)) : '—');
     const point = L.latLng(fix.lat, fix.lon);
-    if (!this.marker) this.marker = L.marker(point, { icon: L.divIcon({ className: 'vehicle-marker', iconSize: [40, 50], iconAnchor: [20, 25], html: '<svg class="vehicle-image" viewBox="0 0 40 50" aria-hidden="true"><path d="M20 2 L26 11 L30 13 L33 25 L32 43 Q32 47 28 48 H12 Q8 47 8 43 L7 25 L10 13 L14 11 Z" fill="#196d83" stroke="white" stroke-width="2.5"/><path d="M12 19 L14 13 H26 L28 19 Z M12 34 H28 L27 40 H13 Z" fill="#c6edf3"/><path d="M12 23 H28 V31 H12 Z" fill="#2589a0"/></svg>' }), interactive: false, keyboard: false }).addTo(this.map);
+    if (!this.marker) this.marker = L.marker(point, { icon: L.divIcon({ className: 'vehicle-marker', iconSize: [40, 50], iconAnchor: [20, 25], html: '<svg class="vehicle-image" viewBox="0 0 40 50" aria-hidden="true"><circle class="vehicle-disc" cx="20" cy="25" r="18"/><path class="vehicle-direction" d="M20 12 30 35 20 29 10 35Z"/></svg>' }), interactive: false, keyboard: false }).addTo(this.map);
     if (!this.accuracy) this.accuracy = L.circle(point, { renderer: this.renderer, radius: fix.accuracy, color: 'oklch(0.57 0.11 210)', weight: 1, fillOpacity: 0.08, interactive: false }).addTo(this.map);
     else this.accuracy.setLatLng(point).setRadius(fix.accuracy);
     if (state.status === 'approach') {
       cancelAnimationFrame(this.frame); this.frame = 0; this.displayAt = undefined; this.marker.setLatLng(point);
       const nearest = routePosition(this.route!, state.match.at), target = L.latLng(nearest.lat, nearest.lon);
-      if (!this.approachPoint) this.approachPoint = L.circleMarker(target, { renderer: this.renderer, radius: 7, color: 'white', weight: 3, fillColor: '#3437c4', fillOpacity: 1, interactive: false }).addTo(this.map);
+      if (!this.approachPoint) this.approachPoint = L.circleMarker(target, { renderer: this.renderer, radius: 7, color: getComputedStyle(document.documentElement).getPropertyValue('--surface').trim(), weight: 3, fillColor: getComputedStyle(document.documentElement).getPropertyValue('--route').trim(), fillOpacity: 1, interactive: false }).addTo(this.map);
       else this.approachPoint.setLatLng(target);
       text('navigation-instruction', 'Rejoignez le point routier'); text('navigation-turn-distance', `À ${guidanceDistance(state.match.distance)}`);
       text('navigation-remaining', '—'); text('navigation-time', '—'); text('navigation-limit', 'Limite : —'); element('navigation-speed').classList.remove('over-limit');
@@ -264,14 +272,8 @@ export class GpsGuidance {
       this.followGpsHeading(fix);
       if (this.follow) {
         this.map.invalidateSize({ pan: false, animate: false });
-        const landscape = matchMedia('(orientation: landscape) and (max-height: 500px)').matches;
-        const mobile = matchMedia('(max-width: 720px)').matches && !landscape;
-        const bounds = this.map.getContainer().getBoundingClientRect();
-        const left = landscape ? element('navigation-next').getBoundingClientRect().right - bounds.left : 40;
-        const right = landscape ? bounds.right - document.querySelector('.navigation-bottom')!.getBoundingClientRect().left : 40;
-        const top = mobile ? element('navigation-next').getBoundingClientRect().bottom - bounds.top : 40;
-        const bottom = mobile ? bounds.bottom - document.querySelector('.navigation-bottom')!.getBoundingClientRect().top : 40;
-        this.map.fitBounds(L.latLngBounds([point, target]), { paddingTopLeft: [Math.max(40, left + 20), Math.max(40, top + 20)], paddingBottomRight: [Math.max(40, right + 20), Math.max(40, bottom + 20)], maxZoom: 17, animate: false });
+        const padding = mapPadding();
+        this.map.fitBounds(L.latLngBounds([point, target]), { paddingTopLeft: padding.topLeft, paddingBottomRight: padding.bottomRight, maxZoom: 17, animate: false });
         this.firstCenter = true; this.lastCenter = undefined;
       }
       return;
@@ -334,15 +336,13 @@ export class GpsGuidance {
     if (this.firstCenter) this.map.invalidateSize({ pan: false, animate: false });
     const zoom = this.firstCenter ? 17 : this.map.getZoom(); this.firstCenter = false;
     const projected = this.map.project(position, zoom);
-    // Garder davantage de route visible devant le véhicule entre les deux panneaux.
-    if (matchMedia('(max-width: 720px)').matches && !matchMedia('(orientation: landscape) and (max-height: 500px)').matches) {
-      const bounds = this.map.getContainer().getBoundingClientRect();
-      const top = element('navigation-next').getBoundingClientRect().bottom - bounds.top;
-      const bottom = document.querySelector('.navigation-bottom')!.getBoundingClientRect().top - bounds.top;
-      const targetY = top + Math.max(0, bottom - top) * 0.68;
-      const offset = this.map.getSize().y / 2 - targetY, radians = this.map.getBearing() * Math.PI / 180;
-      projected.x += Math.sin(radians) * offset; projected.y += Math.cos(radians) * offset;
-    }
+    const padding = mapPadding(), size = this.map.getSize();
+    const targetX = (padding.topLeft[0] + size.x - padding.bottomRight[0]) / 2;
+    const targetY = padding.topLeft[1] + Math.max(40, size.y - padding.topLeft[1] - padding.bottomRight[1]) * 0.68;
+    const x = size.x / 2 - targetX, y = size.y / 2 - targetY;
+    const radians = this.map.getBearing() * Math.PI / 180;
+    projected.x += Math.cos(radians) * x + Math.sin(radians) * y;
+    projected.y += -Math.sin(radians) * x + Math.cos(radians) * y;
     if (this.lastCenter && Math.hypot(projected.x - this.lastCenter.x, projected.y - this.lastCenter.y) < 0.5) return;
     this.lastCenter = { x: projected.x, y: projected.y };
     this.map.setView(this.map.unproject(projected, zoom), zoom, { animate: false });

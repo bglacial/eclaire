@@ -66,7 +66,7 @@ public class PipGuidanceInstrumentedTest {
                     var view = (TextureView) find(activity.getWindow().getDecorView()).getChildAt(0);
                     var image = view.isAvailable() ? view.getBitmap() : null;
                     if (image != null) {
-                        drawn.set(image.getPixel(image.getWidth() / 2, image.getHeight() / 2) == Color.rgb(0, 90, 190));
+                        drawn.set(image.getPixel(image.getWidth() / 2, image.getHeight() / 2) == Color.rgb(172, 249, 151));
                         image.recycle();
                     }
                 });

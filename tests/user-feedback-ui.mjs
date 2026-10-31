@@ -48,6 +48,7 @@ async function setup({ native = false, gps = 'normal', width = 390, height = 844
   return { page, context, requests, errors, response: () => lastResponse };
 }
 async function choose(page, side, query) {
+  if (side === 'via' && !await page.locator('.planner-options').getAttribute('open').then(value => value !== null)) await page.locator('.planner-options > summary').click();
   await page.locator(`#${side}`).fill(query);
   await page.locator(`#${side}-results [role=option]`).first().click();
 }
@@ -79,10 +80,12 @@ try {
   check('Paramètres Web : version, évitements, date, version disponible et erreur réseau explicite');
   assert.equal(await web.page.locator('#road-preferences, #avoid-motorways, #avoid-tolls').count(), 0);
   await choose(web.page, 'end', 'Panthéon');
+  if (await web.page.locator('.planner-options').getAttribute('open') === null) await web.page.locator('.planner-options > summary').click();
   await web.page.locator('.saved-places summary').click();
   await web.page.locator('#save-home').click();
   await web.page.locator('#save-favorite').click();
   assert.match(await web.page.locator('#saved-places-list').textContent(), /Domicile : Panthéon/);
+  if (await web.page.locator('.planner-options').getAttribute('open') === null) await web.page.locator('.planner-options > summary').click();
   await web.page.locator('.saved-places summary').click();
   const began = Date.now(); await calculate(web.page);
   assert.ok(Date.now() - began < 4500, 'La lecture de la trace ne doit plus durer dix secondes');
@@ -131,6 +134,7 @@ try {
   assert.equal(await web.page.locator('#settings-avoid-tolls').isChecked(), true);
   assert.notEqual(await web.page.locator('#updates-last-check').textContent(), 'Jamais');
   await web.page.locator('#settings-close').click();
+  if (await web.page.locator('.planner-options').getAttribute('open') === null) await web.page.locator('.planner-options > summary').click();
   await web.page.locator('.saved-places summary').click();
   assert.match(await web.page.locator('#saved-places-list').textContent(), /Domicile : Panthéon/);
   assert.match(await web.page.locator('#saved-places-list').textContent(), /Favoris/);
@@ -193,7 +197,8 @@ try {
   await editing.page.waitForFunction(() => document.getElementById('trip-status').textContent.includes('Panne de recette'));
   assert.equal(await editing.page.evaluate(() => window.testNativeStarts.length), 1);
   assert.equal(await editing.page.evaluate(() => window.testNativeStops), stopsBeforeEdit);
-  assert.equal(await editing.page.locator('#navigation').isVisible(), true);
+  assert.equal(await editing.page.locator('#navigation').isVisible(), false);
+  assert.equal(await editing.page.locator('#trip-workspace').isVisible(), true);
   await editing.page.unroute('**/api/route', failEdit);
   let startedRequest, releaseRequest;
   const requestStarted = new Promise(resolve => { startedRequest = resolve; });
@@ -224,6 +229,7 @@ try {
     { geometry: { coordinates: [2.349, 48.8535] }, properties: { osm_type: 'N', osm_id: 1, osm_key: 'amenity', osm_value: 'fuel', name: 'Station plus loin' } },
     { geometry: { coordinates: [2.3466, 48.8535] }, properties: { osm_type: 'N', osm_id: 2, osm_key: 'amenity', osm_value: 'fuel', name: 'Station sur le trajet', street: 'Rue de recette' } },
   ] } }));
+  await editing.page.locator('#trip-view-places').click();
   await editing.page.getByRole('button', { name: 'Stations-service', exact: true }).click();
   await editing.page.waitForFunction(() => document.getElementById('trip-places-status').textContent.includes('Lieux classés'));
   assert.equal(await editing.page.locator('#trip-places li').count(), 2);
