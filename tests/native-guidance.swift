@@ -61,6 +61,9 @@ import Foundation
         let shifted = GuidanceRoute(points: decoded.points.map { GuidancePoint(lat: $0.lat + 0.001, lon: $0.lon + 0.001, at: $0.at, seconds: $0.seconds, speedLimit: $0.speedLimit) }, instructions: decoded.instructions, length: decoded.length, seconds: decoded.seconds)
         let combined = try NativeRouting.combine(decoded, shifted)
         assert(combined.points.count == 5 && combined.length == 372 && combined.waypointAt == 186 && combined.instructions[2].sign == 0 && combined.instructions.last?.sign == 4)
+        let third = GuidanceRoute(points: decoded.points.map { GuidancePoint(lat: $0.lat + 0.002, lon: $0.lon + 0.002, at: $0.at, seconds: $0.seconds, speedLimit: $0.speedLimit) }, instructions: decoded.instructions, length: decoded.length, seconds: decoded.seconds)
+        let triple = try NativeRouting.combine(combined, third)
+        assert(triple.waypointAts == [186, 372] && triple.waypointAt == 186 && triple.length == 558)
         do { _ = try NativeRouting.decode(Data((first + "\n" + last).utf8), contentType: "application/x-ndjson"); assertionFailure("Truncated stream accepted") } catch {}
         let config = NativeRouting.Config(api: "https://example.org/api", end: .init(lat: 48.001, lon: 2.001), criterion: "distance", avoidMotorways: true, avoidTolls: false)
         let request = try NativeRouting.request(config: config, fix: fix(48, 100_000), id: "test")
@@ -69,6 +72,11 @@ import Foundation
         var withWaypoint = config; withWaypoint.via = .init(lat: 48.0005, lon: 2, at: 55)
         let restored = try JSONDecoder().decode(NativeRouting.Config.self, from: JSONEncoder().encode(withWaypoint))
         assert(restored.via?.at == 55); try restored.validate()
+        withWaypoint.vias = [.init(lat: 48.0005, lon: 2, at: 55), .init(lat: 48.0008, lon: 2, at: 88)]
+        let multiple = try JSONDecoder().decode(NativeRouting.Config.self, from: JSONEncoder().encode(withWaypoint))
+        assert(multiple.stops.count == 2 && multiple.stops.last?.at == 88)
+        try withWaypoint.validate(); withWaypoint.removeNext()
+        assert(withWaypoint.stops.count == 1 && withWaypoint.stops.first?.at == 88)
         if let path = ProcessInfo.processInfo.environment["ECLAIRE_TEST_IOS_ROUTE"] {
             let real = try NativeRouting.decode(Data(contentsOf: URL(fileURLWithPath: path)), contentType: "application/json")
             assert(real.points.count > 1 && real.instructions.last?.sign == 4)

@@ -1,9 +1,17 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { appendNationalEdges, decodeNationalMessage, isInFrance, nationalRoute, searchFrance } from '../src/national';
+import { appendNationalEdges, decodeNationalMessage, isInFrance, nationalRoute, routingEndpoint, searchFrance } from '../src/national';
 import type { RoadGeometry } from '../src/types';
 
 const road = { key: 10, geometry: [[48.85, 2.34], [48.85, 2.341], [48.851, 2.341]] as [number, number][], length: 180, seconds: 30, name: 'Rue test' };
+
+test('le service natif vise le serveur public, tandis que le site garde son API relative', () => {
+  assert.equal(routingEndpoint(undefined, false), '/api');
+  assert.equal(routingEndpoint(undefined, true), 'https://eclaire.nriault.fr/api');
+  assert.equal(routingEndpoint('/api/', true), 'https://eclaire.nriault.fr/api');
+  assert.equal(routingEndpoint('https://example.org/api/', true), 'https://example.org/api');
+  assert.equal(routingEndpoint('/custom-api', false), '/custom-api');
+});
 
 test('le protocole conserve les coudes et distingue les orientations', () => {
   const roads: RoadGeometry = { nodes: [], edges: [] }, index = new Map<number, number>();

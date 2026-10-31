@@ -21,6 +21,24 @@
   font-synthesis: none;
   -webkit-font-smoothing: antialiased;
 }
+.trip-workspace { position: fixed; z-index: 1600; top: calc(12px + var(--safe-top)); right: calc(12px + var(--safe-right)); width: min(480px, calc(100% - 24px - var(--safe-left) - var(--safe-right))); max-height: calc(100vh - 24px - var(--safe-top) - var(--safe-bottom)); max-height: calc(100dvh - 24px - var(--safe-top) - var(--safe-bottom)); overflow: auto; overflow-wrap: anywhere; overscroll-behavior: contain; padding: 20px; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 16px; }
+.trip-workspace-header { display: flex; gap: 12px; align-items: start; justify-content: space-between; }
+.trip-workspace h2 { font-size: 1.4rem; margin: 0 0 16px; }
+.trip-workspace h3 { font-size: 1.1rem; margin: 24px 0 12px; }
+.trip-workspace p { line-height: 1.5; }
+.trip-workspace button { min-height: 44px; padding: 10px 12px; border-radius: 8px; background: var(--raised); }
+.trip-workspace button.primary { background: var(--accent); color: var(--surface); }
+.trip-workspace input { width: 100%; min-height: 48px; margin-top: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--ground); color: var(--ink); }
+.trip-workspace label { font-weight: 600; }
+.trip-workspace-actions, .trip-categories { display: flex; flex-wrap: wrap; gap: 8px; }
+#trip-stops { padding-left: 24px; }
+#trip-stops li { margin: 12px 0; }
+#trip-stops li span { display: block; font-weight: 600; overflow-wrap: anywhere; margin-bottom: 8px; }
+#trip-stops li button { margin: 0 4px 4px 0; }
+#trip-suggestions, #trip-places { list-style: none; padding: 0; }
+#trip-suggestions li button { width: 100%; text-align: left; margin-top: 8px; }
+#trip-places li { padding: 16px 0; }
+.trip-source { font-size: 0.875rem; color: var(--muted); }
 :root[data-theme=dark] {
   color-scheme: dark;
   --ground: oklch(0.19 0.014 270);

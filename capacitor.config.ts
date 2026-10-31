@@ -5,7 +5,7 @@ const config: CapacitorConfig = {
   appName: 'Éclaire',
   webDir: 'dist',
   backgroundColor: '#f7f8fc',
-  appendUserAgent: ' Eclaire/1.1.0-alpha.4',
+  appendUserAgent: ' Eclaire (https://github.com/bglacial/eclaire)',
   android: { backgroundColor: '#f7f8fc' },
   plugins: { SystemBars: { initialViewportFitValueHint: 'cover', style: 'LIGHT' } },
 };

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { GuidanceProgress, RecentSpeed, isNavigationRoute, matchRoute, navigationRoute, predictedRouteAt, routePosition, usableFix, type GpsFix } from '../src/navigation';
+import { GuidanceProgress, RecentSpeed, acceptsRouteUpdate, isNavigationRoute, matchRoute, navigationRoute, predictedRouteAt, routePosition, usableFix, type GpsFix } from '../src/navigation';
 import type { RoadGeometry, SearchResult } from '../src/types';
 
 const lat = 48.85, lon = 2.35, north = 100 / 111195, east = 100 / (111195 * Math.cos(lat * Math.PI / 180));
@@ -181,4 +181,13 @@ test('une vitesse GPS invalide ne supprime pas la limite de continuité du rappr
   const gps = { ...fix(30, 102_000), speed: NaN };
   const match = matchRoute(route, gps, { at: 20, seconds: 2, distance: 0 }, 2000);
   assert.ok(Math.abs(match.at - 30) < 0.1);
+});
+
+test('un changement de trajet accepte un raccordement éloigné stable et refuse une position obsolète', () => {
+  const route = navigationRoute(roads, result)!;
+  const outside = { ...fix(20), lon: lon - east * 5 };
+  assert.equal(acceptsRouteUpdate(route, outside, outside, 100_000), true);
+  assert.equal(acceptsRouteUpdate(route, outside, { ...outside, lat: outside.lat + north }, 100_000), false);
+  assert.equal(acceptsRouteUpdate(route, outside, fix(120), 100_000), true);
+  assert.equal(acceptsRouteUpdate(route, outside, outside, 120_000), false);
 });

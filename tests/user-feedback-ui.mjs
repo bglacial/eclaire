@@ -20,6 +20,7 @@ async function setup({ native = false, gps = 'normal', width = 390, height = 844
   await page.route('https://photon.komoot.io/**', route => route.fulfill({ json: { features: [] } }));
   await page.route('https://recherche-entreprises.api.gouv.fr/**', route => route.fulfill({ json: { results: [{ nom_complet: 'LECLUSE', matching_etablissements: [{ liste_enseignes: ['LECLUSE AUTOMOBILES VOLKSWAGEN LE MANS'], adresse: '20 BOULEVARD RENE CASSIN 72000 LE MANS', latitude: '47.979982079', longitude: '0.198400238', etat_administratif: 'A' }] }] } }));
   await page.route('**/api/health', route => route.fulfill({ json: health }));
+  await page.route('**/api/route/*', route => route.fulfill({ json: { cancelled: true } }));
   await page.route('**/api/route', route => {
     const body = route.request().postDataJSON(); requests.push(body);
     const geometry = body.criterion === 'distance' ? [[body.start.lat, body.start.lon], [(body.start.lat + body.end.lat) / 2 + 0.001, (body.start.lon + body.end.lon) / 2], [body.end.lat, body.end.lon]] : [[body.start.lat, body.start.lon], [body.end.lat, body.end.lon]];
@@ -165,6 +166,91 @@ try {
   assert.ok(Math.abs(nativeConfig.via.lat - viaNative.requests[0].end.lat) < 1e-7);
   assert.deepEqual(viaNative.errors, []); await viaNative.context.close();
   check('L’étape et sa position sur le trajet sont transmises au guidage natif');
+
+  const editing = await setup({ native: true });
+  await editing.page.locator('#gps-fixture').evaluate(el => { el.style.display = 'none'; });
+  await editing.page.route('https://photon.komoot.io/**', route => {
+    const name = new URL(route.request().url()).searchParams.get('q');
+    const lat = name?.includes('premier') ? 48.855 : 48.852;
+    return route.fulfill({ json: { features: [{ geometry: { coordinates: [2.3466, lat] }, properties: { name, city: 'Paris' } }] } });
+  });
+  await choose(editing.page, 'end', 'Panthéon'); await calculate(editing.page);
+  await editing.page.locator('#navigation-start').click();
+  await editing.page.waitForFunction(() => window.testNativeStarts.length === 1);
+  await editing.page.locator('#navigation-voice').click();
+  const stopsBeforeEdit = await editing.page.evaluate(() => window.testNativeStops);
+  await editing.page.locator('#navigation-edit-stops').click();
+  await editing.page.locator('#trip-add-search').fill('premier arrêt');
+  await editing.page.locator('#trip-suggestions button').first().click();
+  await editing.page.locator('#trip-add-search').fill('second arrêt');
+  await editing.page.locator('#trip-suggestions button').first().click();
+  await editing.page.getByRole('button', { name: 'Monter second arrêt', exact: true }).click();
+  assert.match(await editing.page.locator('#trip-stops li').first().textContent(), /second arrêt/);
+  await editing.page.getByRole('button', { name: 'Descendre second arrêt', exact: true }).click();
+  const failEdit = route => route.fulfill({ status: 503, json: { error: 'Panne de recette' } });
+  await editing.page.route('**/api/route', failEdit);
+  await editing.page.locator('#trip-apply').click();
+  await editing.page.waitForFunction(() => document.getElementById('trip-status').textContent.includes('Panne de recette'));
+  assert.equal(await editing.page.evaluate(() => window.testNativeStarts.length), 1);
+  assert.equal(await editing.page.evaluate(() => window.testNativeStops), stopsBeforeEdit);
+  assert.equal(await editing.page.locator('#navigation').isVisible(), true);
+  await editing.page.unroute('**/api/route', failEdit);
+  let startedRequest, releaseRequest;
+  const requestStarted = new Promise(resolve => { startedRequest = resolve; });
+  const requestHeld = new Promise(resolve => { releaseRequest = resolve; });
+  const holdEdit = async route => { startedRequest(); await requestHeld; await route.abort().catch(() => {}); };
+  await editing.page.route('**/api/route', holdEdit);
+  await editing.page.locator('#trip-apply').click(); await requestStarted;
+  await editing.page.locator('#trip-cancel-request').click(); releaseRequest();
+  await editing.page.waitForFunction(() => !document.getElementById('trip-apply').disabled);
+  assert.equal(await editing.page.evaluate(() => window.testNativeStarts.length), 1);
+  assert.equal(await editing.page.evaluate(() => window.testNativeStops), stopsBeforeEdit);
+  await editing.page.unroute('**/api/route', holdEdit);
+  await editing.page.locator('#trip-apply').click();
+  await editing.page.locator('#trip-workspace').waitFor({ state: 'hidden' });
+  const replacement = await editing.page.evaluate(() => window.testNativeStarts.at(-1));
+  assert.equal(replacement.routing.vias.length, 2); assert.equal(replacement.voice, true);
+  assert.equal(replacement.routing.vias[0].lat, 48.855); assert.equal(replacement.routing.vias[1].lat, 48.852);
+  assert.equal(await editing.page.evaluate(() => window.testNativeStops), stopsBeforeEdit);
+  check('Édition en guidage : ajout, réordre, panne conservant le trajet, remplacement natif et voix préservée');
+
+  await editing.page.locator('#navigation-edit-stops').click();
+  await editing.page.getByRole('button', { name: 'Retirer premier arrêt', exact: true }).click();
+  await editing.page.locator('#trip-close').click();
+  assert.equal(await editing.page.evaluate(() => window.testNativeStarts.length), 2);
+  await editing.page.locator('#navigation-edit-stops').click();
+  assert.equal(await editing.page.locator('#trip-stops li').count(), 2);
+  await editing.page.route('https://photon.komoot.io/reverse*', route => route.fulfill({ json: { features: [
+    { geometry: { coordinates: [2.349, 48.8535] }, properties: { osm_type: 'N', osm_id: 1, osm_key: 'amenity', osm_value: 'fuel', name: 'Station plus loin' } },
+    { geometry: { coordinates: [2.3466, 48.8535] }, properties: { osm_type: 'N', osm_id: 2, osm_key: 'amenity', osm_value: 'fuel', name: 'Station sur le trajet', street: 'Rue de recette' } },
+  ] } }));
+  await editing.page.getByRole('button', { name: 'Stations-service', exact: true }).click();
+  await editing.page.waitForFunction(() => document.getElementById('trip-places-status').textContent.includes('Lieux classés'));
+  assert.equal(await editing.page.locator('#trip-places li').count(), 2);
+  assert.equal(await editing.page.locator('#trip-places li strong').first().textContent(), 'Station sur le trajet');
+  await editing.page.getByRole('button', { name: 'Ajouter Station sur le trajet aux étapes', exact: true }).click();
+  await editing.page.locator('#trip-apply').click(); await editing.page.locator('#trip-workspace').waitFor({ state: 'hidden' });
+  const withPoi = await editing.page.evaluate(() => window.testNativeStarts.at(-1));
+  assert.deepEqual(withPoi.routing.vias.map(via => via.lat), [48.855, 48.8535, 48.852]);
+  await editing.page.evaluate(() => {
+    const route = window.testNativeStarts.at(-1).route, at = route.waypointAts[0];
+    const point = route.points.find(point => Math.abs(point.at - at) < 0.1);
+    window.testPublishGuidance({ active: true, status: 'on-route', waypointsReached: 1, routeVersion: 1, fix: { lat: point.lat, lon: point.lon, accuracy: 5, timestamp: Date.now() + 10 }, match: { at, seconds: point.seconds, distance: 0 } });
+  });
+  await editing.page.locator('#navigation-edit-stops').click();
+  assert.equal(await editing.page.locator('#trip-stops li').count(), 2);
+  assert.match(await editing.page.locator('#trip-stops li').first().textContent(), /Station sur le trajet/);
+  await editing.page.screenshot({ path: '/private/tmp/eclaire-trip-editor.png' });
+  await editing.page.getByRole('button', { name: 'Retirer second arrêt', exact: true }).click();
+  await editing.page.evaluate(() => {
+    const route = window.testNativeStarts.at(-1).route, at = route.waypointAts[1];
+    const point = route.points.find(point => Math.abs(point.at - at) < 0.1);
+    window.testPublishGuidance({ active: true, status: 'on-route', waypointsReached: 2, routeVersion: 1, fix: { lat: point.lat, lon: point.lon, accuracy: 5, timestamp: Date.now() + 20 }, match: { at, seconds: point.seconds, distance: 0 } });
+  });
+  await editing.page.locator('#trip-apply').click(); await editing.page.locator('#trip-workspace').waitFor({ state: 'hidden' });
+  assert.equal(await editing.page.evaluate(() => window.testNativeStarts.at(-1).routing.vias), undefined);
+  assert.deepEqual(editing.errors, []); await editing.context.close();
+  check('Recherche le long du parcours : détours routiers classés, insertion au bon rang et retrait d’une seule étape atteinte');
 
   const denied = await setup({ gps: 'denied' });
   await denied.page.waitForFunction(() => document.getElementById('notice').textContent.includes('refusée'));

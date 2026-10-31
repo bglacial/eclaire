@@ -14,14 +14,27 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.List;
+import java.util.ArrayList;
 import java.util.UUID;
 
 /** One cancellable route request; accepts both the compact and the previous NDJSON protocol. */
 final class NativeRouting {
-    record Config(String api, double lat, double lon, String criterion, boolean avoidMotorways, boolean avoidTolls, Double viaLat, Double viaLon, Double viaAt) {
-        Config(String api, double lat, double lon, String criterion, boolean avoidMotorways, boolean avoidTolls) { this(api, lat, lon, criterion, avoidMotorways, avoidTolls, null, null, null); }
-        Config withoutVia() { return new Config(api, lat, lon, criterion, avoidMotorways, avoidTolls); }
-        Config withViaAt(double at) { return new Config(api, lat, lon, criterion, avoidMotorways, avoidTolls, viaLat, viaLon, at); }
+    record Via(double lat, double lon, double at) {}
+    record Config(String api, double lat, double lon, String criterion, boolean avoidMotorways, boolean avoidTolls, List<Via> vias) {
+        Config { vias = List.copyOf(vias); }
+        Config(String api, double lat, double lon, String criterion, boolean avoidMotorways, boolean avoidTolls) { this(api, lat, lon, criterion, avoidMotorways, avoidTolls, List.of()); }
+        Config(String api, double lat, double lon, String criterion, boolean avoidMotorways, boolean avoidTolls, Double viaLat, Double viaLon, Double viaAt) { this(api, lat, lon, criterion, avoidMotorways, avoidTolls, viaLat == null ? List.of() : List.of(new Via(viaLat, viaLon, viaAt))); }
+        Double viaLat() { return vias.isEmpty() ? null : vias.get(0).lat(); }
+        Double viaLon() { return vias.isEmpty() ? null : vias.get(0).lon(); }
+        Double viaAt() { return vias.isEmpty() ? null : vias.get(0).at(); }
+        Config withoutVia() { return new Config(api, lat, lon, criterion, avoidMotorways, avoidTolls, vias.subList(Math.min(1, vias.size()), vias.size())); }
+        Config withViaAts(JSONObject route) {
+            var ats = route.optJSONArray("waypointAts"); var updated = new ArrayList<Via>();
+            if (ats != null && ats.length() != vias.size()) throw new IllegalArgumentException("Étapes routières incohérentes.");
+            for (int i = 0; i < vias.size(); i++) { var via = vias.get(i); updated.add(new Via(via.lat(), via.lon(), ats == null ? route.optDouble("waypointAt") : ats.optDouble(i))); }
+            return new Config(api, lat, lon, criterion, avoidMotorways, avoidTolls, updated);
+        }
         static Config fromJson(JSONObject data) throws JSONException {
             String api = data.getString("api").replaceAll("/$", ""), criterion = data.getString("criterion");
             URI uri = URI.create(api);
@@ -30,12 +43,17 @@ final class NativeRouting {
             double lat = end.getDouble("lat"), lon = end.getDouble("lon");
             if (!Double.isFinite(lat) || lat < 41.3 || lat > 51.2 || !Double.isFinite(lon) || lon < -5.3 || lon > 9.7) throw new IllegalArgumentException("Destination invalide.");
             if (!(data.opt("avoidMotorways") instanceof Boolean) || !(data.opt("avoidTolls") instanceof Boolean)) throw new IllegalArgumentException("Préférences routières invalides.");
-            Double viaLat = null, viaLon = null, viaAt = null;
-            if (data.has("via") && !data.isNull("via")) {
-                var via = data.getJSONObject("via"); viaLat = via.getDouble("lat"); viaLon = via.getDouble("lon"); viaAt = via.getDouble("at");
-                if (!Double.isFinite(viaLat) || viaLat < 41.3 || viaLat > 51.2 || !Double.isFinite(viaLon) || viaLon < -5.3 || viaLon > 9.7 || !Double.isFinite(viaAt) || viaAt <= 0) throw new IllegalArgumentException("Étape invalide.");
+            var wire = data.optJSONArray("vias");
+            if (data.has("vias") && wire == null) throw new IllegalArgumentException("Étapes invalides.");
+            if (wire == null) { wire = new JSONArray(); if (data.has("via") && !data.isNull("via")) wire.put(data.getJSONObject("via")); }
+            if (wire.length() > 8) throw new IllegalArgumentException("Huit étapes maximum.");
+            var vias = new ArrayList<Via>(); double previous = 0;
+            for (int i = 0; i < wire.length(); i++) {
+                var via = wire.getJSONObject(i); double viaLat = via.getDouble("lat"), viaLon = via.getDouble("lon"), viaAt = via.getDouble("at");
+                if (!Double.isFinite(viaLat) || viaLat < 41.3 || viaLat > 51.2 || !Double.isFinite(viaLon) || viaLon < -5.3 || viaLon > 9.7 || !Double.isFinite(viaAt) || viaAt <= previous) throw new IllegalArgumentException("Étape invalide.");
+                vias.add(new Via(viaLat, viaLon, viaAt)); previous = viaAt;
             }
-            return new Config(api, lat, lon, criterion, data.getBoolean("avoidMotorways"), data.getBoolean("avoidTolls"), viaLat, viaLon, viaAt);
+            return new Config(api, lat, lon, criterion, data.getBoolean("avoidMotorways"), data.getBoolean("avoidTolls"), vias);
         }
     }
     record Result(JSONObject route, GuidanceTracker tracker) {}
@@ -48,13 +66,13 @@ final class NativeRouting {
     NativeRouting(Config config) { this.config = config; }
 
     Result calculate(GuidanceTracker.Fix fix) throws IOException, JSONException {
-        if (config.viaLat() == null) {
-            JSONObject route = leg(fix.lat(), fix.lon(), config.lat(), config.lon());
-            return new Result(route, GuidanceTracker.fromJson(route));
+        JSONObject route = null; double lat = fix.lat(), lon = fix.lon();
+        var targets = new ArrayList<>(config.vias()); targets.add(new Via(config.lat(), config.lon(), 0));
+        for (var target : targets) {
+            var next = leg(lat, lon, target.lat(), target.lon());
+            route = route == null ? next : combine(route, next); lat = target.lat(); lon = target.lon();
         }
-        JSONObject first = leg(fix.lat(), fix.lon(), config.viaLat(), config.viaLon());
-        JSONObject second = leg(config.viaLat(), config.viaLon(), config.lat(), config.lon());
-        JSONObject route = combine(first, second);
+        config.withViaAts(route);
         return new Result(route, GuidanceTracker.fromJson(route));
     }
 
@@ -105,7 +123,13 @@ final class NativeRouting {
         for (int i = 0; i < stepsA.length() - 1; i++) instructions.put(stepsA.getJSONObject(i));
         instructions.put(new JSONObject().put("at", length).put("sign", 0).put("text", "Vous arrivez à l’étape").put("name", ""));
         for (int i = 1; i < stepsB.length(); i++) { var step = new JSONObject(stepsB.getJSONObject(i).toString()); step.put("at", step.getDouble("at") + length); instructions.put(step); }
-        var route = new JSONObject().put("points", points).put("instructions", instructions).put("length", length + second.getDouble("length")).put("seconds", seconds + second.getDouble("seconds")).put("waypointAt", length);
+        var ats = new JSONArray(); var aAts = first.optJSONArray("waypointAts"); var bAts = second.optJSONArray("waypointAts");
+        if (aAts != null) for (int i = 0; i < aAts.length(); i++) ats.put(aAts.getDouble(i));
+        else if (first.has("waypointAt")) ats.put(first.getDouble("waypointAt"));
+        ats.put(length);
+        if (bAts != null) for (int i = 0; i < bAts.length(); i++) ats.put(length + bAts.getDouble(i));
+        else if (second.has("waypointAt")) ats.put(length + second.getDouble("waypointAt"));
+        var route = new JSONObject().put("points", points).put("instructions", instructions).put("length", length + second.getDouble("length")).put("seconds", seconds + second.getDouble("seconds")).put("waypointAt", ats.getDouble(0)).put("waypointAts", ats);
         GuidanceTracker.fromJson(route); return route;
     }
 

@@ -8,14 +8,17 @@ import { createMap, pointMarker } from './map';
 import { ExplorationRenderer } from './animation';
 import { playbackRate } from './animation-timing';
 import { GpsGuidance } from './guidance';
-import { navigationRoute } from './navigation';
+import { navigationRoute, acceptsRouteUpdate, isNavigationRoute, type NavigationRoute } from './navigation';
 import { locationError, preciseLocationPermission, selectionPosition } from './location';
 import { requestDeadline } from './request-deadline';
 import { device } from './device';
-import { readSettings, readRoadPreferences, type Theme } from './settings';
+import { readSettings, readRoadPreferences, type Theme, type RoadPreferences } from './settings';
+import type { NativeRoutingConfig } from './native-guidance';
+import { TripWorkspace, type TripSnapshot } from './trip-workspace';
+import { detourAnchors } from './along-route';
 import { deployedVersion, lastUpdateCheck, updateCheckDate } from './updates';
 import { readPlaces, rememberPlace, savePlaces } from './saved-places';
-import { combineLegs, type RouteLeg } from './waypoint';
+import { combineLegs, removeReachedStops, type RouteLeg } from './waypoint';
 import { cancelNationalRoute, checkNationalService, decodeNationalMessage, franceBounds, isInFrance, nationalRoute, routingApi, searchFrance } from './national';
 import type { Criterion, Dataset, ExplorationEvent, Place, RoadGeometry, RoadGraph, SearchResult, WorkerResponse } from './types';
 
@@ -86,7 +89,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       </div>
     </section>
     <div class="map-legend"><span><i class="cyan"></i>Départ A</span><span><i class="amber"></i>Arrivée B</span><span><i class="final"></i>Trajet</span></div>
-    <dialog id="about" class="about" aria-labelledby="about-title"><button id="close-about" class="icon-button" aria-label="Fermer l’aide">${icon('close')}</button><h2 id="about-title">Comment ça marche</h2><p>Un front cyan part de A, un front ambre part de B. Chaque branche suit une route réellement explorée.</p><p>La première rencontre ne suffit pas. Le trajet apparaît quand le calcul confirme qu’aucun meilleur chemin n’existe dans le réseau chargé.</p><dl><div><dt>Le plus court</dt><dd>Minimise la longueur des routes.</dd></div><div><dt>Le plus rapide</dt><dd>Minimise le temps estimé selon les vitesses OSM, sans trafic en direct.</dd></div></dl><button id="lite" class="setting-button" aria-pressed="false">${icon('layers')} Mode léger</button><p>Réduit les halos et le nombre de fronts pour les appareils modestes. La réduction des animations suit aussi votre préférence système.</p><details><summary>Données et limites</summary><p>Le service France utilise une recherche bidirectionnelle exacte. Les grandes traces sont échantillonnées pour préserver le téléphone ; le calcul et le trajet final restent complets. Sans service, seule la démo Paris utilise le calcul embarqué.</p><p id="data-info"></p><p>Les points sont raccordés à une route accessible à 2 km maximum. Les accès privés et de desserte sont exclus. Certaines restrictions OSM ne sont pas prises en charge. Vérifiez l’accès final et respectez la signalisation.</p><p>Le guidage GPS expérimental est réservé à l’application mobile sur téléphone. Le GPS continue écran verrouillé jusqu’à l’arrivée ou à Quitter. Aucun trafic en direct n’est intégré.</p><a href="/data/provenance.json" target="_blank" rel="noopener">Provenance de la démo Paris</a></details><details><summary>Position et confidentialité</summary><p>Le GPS reste sur l’appareil pendant le suivi. Le calcul d’un trajet depuis votre position transmet ce point au service routier configuré, ainsi que les recalculs. L’IGN, Photon (Komoot / OpenStreetMap) et l’Annuaire des entreprises reçoivent le texte recherché. Le fournisseur des tuiles reçoit les zones consultées. Aucun historique GPS n’est enregistré par l’application.</p></details></dialog>
+    <dialog id="about" class="about" aria-labelledby="about-title"><button id="close-about" class="icon-button" aria-label="Fermer l’aide">${icon('close')}</button><h2 id="about-title">Comment ça marche</h2><p>Un front cyan part de A, un front ambre part de B. Chaque branche suit une route réellement explorée.</p><p>La première rencontre ne suffit pas. Le trajet apparaît quand le calcul confirme qu’aucun meilleur chemin n’existe dans le réseau chargé.</p><dl><div><dt>Le plus court</dt><dd>Minimise la longueur des routes.</dd></div><div><dt>Le plus rapide</dt><dd>Minimise le temps estimé selon les vitesses OSM, sans trafic en direct.</dd></div></dl><button id="lite" class="setting-button" aria-pressed="false">${icon('layers')} Mode léger</button><p>Réduit les halos et le nombre de fronts pour les appareils modestes. La réduction des animations suit aussi votre préférence système.</p><details><summary>Données et limites</summary><p>Le service France utilise une recherche bidirectionnelle exacte. Les grandes traces sont échantillonnées pour préserver le téléphone ; le calcul et le trajet final restent complets. Sans service, seule la démo Paris utilise le calcul embarqué.</p><p id="data-info"></p><p>Les points sont raccordés à une route accessible à 2 km maximum. Les accès privés et de desserte sont exclus. Certaines restrictions OSM ne sont pas prises en charge. Vérifiez l’accès final et respectez la signalisation.</p><p>Le guidage GPS expérimental est réservé à l’application mobile sur téléphone. Le GPS continue écran verrouillé jusqu’à l’arrivée ou à Quitter. Aucun trafic en direct n’est intégré.</p><a href="/data/provenance.json" target="_blank" rel="noopener">Provenance de la démo Paris</a></details><details><summary>Position et confidentialité</summary><p>Le GPS reste sur l’appareil pendant le suivi. Le calcul d’un trajet depuis votre position transmet ce point au service routier configuré, ainsi que les recalculs. L’IGN, Photon (Komoot / OpenStreetMap) et l’Annuaire des entreprises reçoivent le texte recherché. Pour les lieux le long du parcours, Photon reçoit un à trois points de la zone recherchée, sans nom ni compte utilisateur. Le fournisseur des tuiles reçoit les zones consultées. Aucun historique GPS n’est enregistré par l’application.</p></details></dialog>
     <div id="loading" class="loading" role="status"><span class="loading-bolt">${icon('bolt')}</span><strong>Chargement de la carte</strong><p>Chargement des données OpenStreetMap…</p><button id="retry" class="primary" hidden>Réessayer</button></div>
   </main>
   <section id="settings-page" class="settings-page" aria-labelledby="settings-title" hidden>
@@ -217,6 +220,9 @@ let worker: Worker | undefined;
 let workerReady = false;
 let selections: Record<Endpoint, Selection | null> = { start: null, via: null, end: null };
 let waypointPending = false;
+let tripStops: Place[] = [];
+let tripRevision = 0;
+let workspace: TripWorkspace | undefined;
 let markers: Partial<Record<Endpoint, L.Marker>> = {};
 let picking: Endpoint | null = null;
 let run = 0;
@@ -258,6 +264,7 @@ function updateLaunch() {
 }
 
 function stop(clear = true) {
+  tripRevision++; workspace?.close(true);
   comparisonAbort?.abort(); comparisonAbort = undefined;
   if (comparisonId) { void cancelNationalRoute(comparisonId); comparisonId = undefined; }
   alternative = undefined; $('comparison-status').textContent = ''; $('choose-alternative').hidden = true; $<HTMLButtonElement>('compare-routes').disabled = false;
@@ -413,7 +420,8 @@ function makeWorker() {
   worker.postMessage({ type: 'init', roads });
 }
 
-function complete() {
+function complete(updateGuidance = true) {
+  if (updateGuidance) tripRevision++;
   playing = false;
   updateLaunch();
   if (!result) {
@@ -421,19 +429,21 @@ function complete() {
     notice(roadPreferences().avoidMotorways || roadPreferences().avoidTolls ? 'Aucun itinéraire trouvé avec les évitements choisis. Modifiez les points ou désactivez une option.' : 'Aucun itinéraire automobile dans le réseau chargé. Les accès, sens uniques ou coupures peuvent empêcher le trajet. Essayez d’autres points.', 'error');
     return;
   }
-  renderer.finish(result);
-  try { guidance?.setRoute(navigationRoute(routeGeometry, result)); }
-  catch { guidance?.setRoute(null); }
+  if (!guidance?.active) renderer.finish(result);
+  if (updateGuidance) {
+    try { guidance?.setRoute(navigationRoute(routeGeometry, result)); }
+    catch { guidance?.setRoute(null); }
+  }
   const minutes = Math.ceil(result.seconds / 60);
   $('duration').textContent = minutes < 1 ? '< 1 min' : minutes < 60 ? `${minutes} min` : `${Math.floor(minutes / 60)} h${minutes % 60 ? ` ${String(minutes % 60).padStart(2, '0')}` : ''}`;
   $('distance').textContent = result.length >= 1000 ? `${(result.length / 1000).toLocaleString('fr-FR', { maximumFractionDigits: result.length >= 1_000_000 ? 0 : result.length >= 100_000 ? 1 : 2 })} km` : `${Math.round(result.length)} m`;
   $('result-criterion').textContent = criterion() === 'time' ? 'Le plus rapide' : 'Le plus court';
   $('result-explanation').textContent = criterion() === 'time' ? 'Ce trajet minimise le temps estimé selon les vitesses des routes, sans trafic en direct.' : 'Ce trajet minimise la distance sur les routes accessibles. La durée est estimée sans trafic en direct.';
   $('replay').hidden = queue.length === 0;
-  $('route-endpoints').replaceChildren(...(['start', ...(selections.via ? ['via' as const] : []), 'end'] as const).map(side => {
+  $('route-endpoints').replaceChildren(...[{ place: selections.start!, side: 'start' }, ...tripStops.map(place => ({ place, side: 'via' })), { place: selections.end!, side: 'end' }].map(({place, side}) => {
     const line = document.createElement('p'), badge = document.createElement('span');
     badge.className = `endpoint-badge ${side}`; badge.textContent = side === 'start' ? 'A' : side === 'via' ? '•' : 'B';
-    line.append(badge, document.createTextNode(selections[side]!.name)); return line;
+    line.append(badge, document.createTextNode(place.name)); return line;
   }));
   const editor = $<HTMLDetailsElement>('route-editor');
   const restoreFocus = editor.contains(document.activeElement);
@@ -450,7 +460,7 @@ function complete() {
   notice(nationalPlayback && traceStride > 1 ? `${result.visited.toLocaleString('fr-FR', { notation: 'compact', maximumFractionDigits: 2 })} états explorés · ${result.waypointAt ? 'traces échantillonnées' : `trace 1/${traceStride} par front`}.` : '');
   $('playback').hidden = true;
   if (resumeGuidance) { resumeGuidance = false; void guidance?.start(false); }
-  else requestAnimationFrame(fitPoints);
+  else if (!guidance?.active) requestAnimationFrame(fitPoints);
 }
 
 const criterion = () => document.querySelector<HTMLInputElement>('input[name="criterion"]:checked')!.value as Criterion;
@@ -482,7 +492,8 @@ function explore(recalculation = false) {
   }
   if (!selections.start || !selections.end || !workerReady) return;
   if (inputs.via.value.trim() && !selections.via) { notice('Choisissez l’étape dans les suggestions ou sur la carte.', 'error'); return; }
-  if (!recalculation) waypointPending = !!selections.via;
+  if (!recalculation) tripStops = selections.via ? [selections.via, ...tripStops.slice(1)] : [];
+  waypointPending = tripStops.length > 0;
   stop();
   notice(''); setPicking(null); closeSuggestions('start'); closeSuggestions('end');
   playing = true; carry = 0;
@@ -495,17 +506,17 @@ function explore(recalculation = false) {
   $('playback-percent').textContent = '';
   $('playback-progress').style.transform = 'scaleX(0)';
   updateLaunch(); fitPoints();
-  if (nationalPlayback && waypointPending && selections.via) void exploreVia(run, selections.start, selections.via, selections.end, criterion());
+  if (nationalPlayback && waypointPending) void exploreVia(run, selections.start, tripStops, selections.end, criterion());
   else if (nationalPlayback) void exploreNational(run, selections.start, selections.end, criterion());
   else { routeGeometry = roads; renderer.setGraph(roads); worker!.postMessage({ type: 'route', run, start: selections.start.node, end: selections.end.node, criterion: criterion() }); }
   lastTick = performance.now(); playbackFrame = requestAnimationFrame(tick);
 }
 
-async function fetchLeg(start: Place, end: Place, preference: Criterion, signal: AbortSignal, setId: (id: string) => void) {
+async function fetchLeg(start: Place, end: Place, preference: Criterion, signal: AbortSignal, setId: (id: string) => void, preferences = roadPreferences()) {
   const geometry: RoadGeometry = { nodes: [], edges: [] }, index = new Map<number, number>(), events: ExplorationEvent[] = [];
   let found: SearchResult | null | undefined, stride = 1, snapped: { lat: number; lon: number; distance: number }[] | undefined;
   const id = crypto.randomUUID(); setId(id);
-  for await (const message of nationalRoute(start, end, preference, id, signal, roadPreferences())) {
+  for await (const message of nationalRoute(start, end, preference, id, signal, preferences)) {
     if ('snapped' in message) {
       if (!Array.isArray(message.snapped) || message.snapped.length !== 2 || !message.snapped.every(isInFrance) || !Number.isInteger(message.traceStride) || message.traceStride < 1) throw new Error('Métadonnées routières invalides.');
       snapped = message.snapped; stride = message.traceStride; continue;
@@ -518,20 +529,99 @@ async function fetchLeg(start: Place, end: Place, preference: Criterion, signal:
   return { geometry, events, result: found, stride, snapped };
 }
 
-async function exploreVia(activeRun: number, start: Place, via: Place, end: Place, preference: Criterion) {
+async function fetchJourney(start: Place, stops: Place[], end: Place, preference: Criterion, signal: AbortSignal, setId: (id: string) => void, preferences = roadPreferences()) {
+  if (stops.length > 8) throw new Error('Huit étapes maximum.');
+  let combined: RouteLeg | undefined, from = start, stride = 1;
+  for (const to of [...stops, end]) {
+    if (signal.aborted) throw new DOMException('Calcul annulé.', 'AbortError');
+    const leg = await fetchLeg(from, to, preference, signal, setId, preferences);
+    if (leg.result.length < 1) throw new Error('Deux étapes se raccordent au même point routier. Retirez ou déplacez l’un des arrêts.');
+    combined = combined ? combineLegs(combined, leg) : leg; from = to; stride = Math.max(stride, leg.stride);
+  }
+  const route = combined && navigationRoute(combined.geometry, combined.result);
+  if (!combined || !route || !isNavigationRoute(route)) throw new Error('Le trajet ne permet pas le guidage.');
+  return { ...combined, stride };
+}
+
+function routingFor(route: NavigationRoute, stops: Place[], end: Place, chosen: Criterion, preferences: RoadPreferences): NativeRoutingConfig {
+  const api = new URL(routingApi, location.href);
+  if (!['http:', 'https:'].includes(api.protocol)) throw new Error('Service routier invalide.');
+  const ats = route.waypointAts ?? (route.waypointAt !== undefined ? [route.waypointAt] : []);
+  if (ats.length < stops.length) throw new Error('Les étapes du trajet sont incomplètes. Recalculez le trajet.');
+  const remaining = stops.length ? ats.slice(-stops.length) : [];
+  const vias = stops.map((place, i) => ({ lat: place.lat, lon: place.lon, at: remaining[i] }));
+  return { api: api.href.replace(/\/$/, ''), end: { lat: end.lat, lon: end.lon }, criterion: chosen, ...preferences, ...(vias.length ? { via: vias[0], vias } : {}) };
+}
+
+async function tripSnapshot(): Promise<TripSnapshot> {
+  if (!result || !selections.end || !selections.start) throw new Error('Calculez d’abord un trajet.');
+  const position = guidance?.active ? await guidance.position() : undefined;
+  const route = guidance?.plannedRoute ?? navigationRoute(routeGeometry, result);
+  if (!route) throw new Error('Cette fonction nécessite un trajet du service France avec ses manœuvres.');
+  return { tripId: run, revision: tripRevision, start: position ? { ...position.fix, name: 'Ma position GPS' } : { ...route.points[0], name: selections.start.name }, end: { ...selections.end }, stops: tripStops.map(place => ({ ...place })), route, at: position?.at ?? 0, criterion: criterion(), preferences: roadPreferences(), guiding: !!guidance?.active };
+}
+
+async function workspaceJourney(snapshot: TripSnapshot, start: Place, stops: Place[], end: Place, signal: AbortSignal) {
+  let id: string | undefined;
+  const cancel = () => { if (id) void cancelNationalRoute(id); };
+  signal.addEventListener('abort', cancel, { once: true });
+  try { return await fetchJourney(start, stops, end, snapshot.criterion, signal, value => { id = value; }, snapshot.preferences); }
+  finally { signal.removeEventListener('abort', cancel); }
+}
+
+function setupTripWorkspace() {
+  workspace?.close(true); document.getElementById('trip-workspace')?.remove();
+  workspace = new TripWorkspace(tripSnapshot, async (stops, signal, original, committing) => {
+    const snapshot = await tripSnapshot();
+    if (snapshot.tripId !== original.tripId || snapshot.guiding !== original.guiding) throw new Error('Un autre trajet est actif. Reprenez le trajet actuel avant de confirmer vos étapes.');
+    stops = removeReachedStops(original.stops, snapshot.stops, stops);
+    const check = () => {
+      if (signal.aborted) throw new DOMException('Modification annulée.', 'AbortError');
+      if (tripRevision !== snapshot.revision || snapshot.guiding !== !!guidance?.active) throw new Error('Le trajet a évolué pendant le calcul. Réessayez : vos changements sont conservés.');
+    };
+    check();
+    const combined = await workspaceJourney(snapshot, snapshot.start, stops, snapshot.end, signal);
+    const route = navigationRoute(combined.geometry, combined.result)!;
+    check();
+    if (snapshot.guiding) {
+      const current = await guidance!.position(); check();
+      if (!acceptsRouteUpdate(route, snapshot.start, current.fix)) throw new Error('Votre position a changé pendant le calcul. Réessayez depuis la position actuelle ; le trajet reste conservé.');
+      committing();
+      await guidance!.replaceRoute(route, routingFor(route, stops, snapshot.end, snapshot.criterion, snapshot.preferences));
+      if (tripRevision !== snapshot.revision) return;
+    } else committing();
+    tripStops = stops; waypointPending = stops.length > 0;
+    selections.start = { ...snapshot.start, node: -1, snapDistance: 0 }; inputs.start.value = snapshot.start.name;
+    selections.via = stops[0] ? { ...stops[0], node: -1, snapDistance: 0 } : null; inputs.via.value = stops[0]?.name ?? '';
+    if (stops[0]) placeMarker('via', stops[0].lat, stops[0].lon, stops[0].name); else { markers.via?.remove(); markers.via = undefined; }
+    placeMarker('start', route.points[0].lat, route.points[0].lon, snapshot.start.name);
+    comparisonAbort?.abort(); alternative = undefined; $('comparison-status').textContent = ''; $('choose-alternative').hidden = true;
+    routeGeometry = combined.geometry; queue = combined.events; result = combined.result; traceStride = combined.stride; nationalPlayback = true;
+    renderer.setGraph(routeGeometry); tripRevision++; run++; complete(!snapshot.guiding);
+    notice('Trajet mis à jour avec les étapes confirmées.');
+  }, async (snapshot, place, signal) => {
+    const anchors = detourAnchors(snapshot.route, place.at, snapshot.at);
+    const leg = await workspaceJourney(snapshot, { ...anchors.start, name: 'Parcours' }, [place], { ...anchors.end, name: 'Retour au parcours' }, signal);
+    return { seconds: Math.max(0, leg.result.seconds - (anchors.end.seconds - anchors.start.seconds)), metres: Math.max(0, leg.result.length - (anchors.end.at - anchors.start.at)) };
+  });
+  for (const [id, parent, label] of [['route-edit-stops', 'route-result', 'Étapes et lieux sur le parcours'], ['navigation-edit-stops', 'navigation-actions', 'Étapes et lieux']] as const) {
+    if (document.getElementById(id)) continue;
+    const button = document.createElement('button'); button.id = id; button.className = 'setting-button'; button.textContent = label;
+    button.addEventListener('click', () => { void workspace?.open(); });
+    const target = document.getElementById(parent) ?? document.querySelector(`.${parent}`)!; target.append(button);
+  }
+}
+
+async function exploreVia(activeRun: number, start: Place, vias: Place[], end: Place, preference: Criterion) {
   if (typeof crypto.randomUUID !== 'function') { stop(); notice('Ouvrez l’application en HTTPS ou sur localhost pour le calcul national.', 'error'); return; }
   const controller = routeAbort = new AbortController();
   try {
     $('playback-count').textContent = 'Calcul vers l’étape…';
-    const first = await fetchLeg(start, via, preference, controller.signal, id => { routeId = id; });
+    const combined = await fetchJourney(start, vias, end, preference, controller.signal, id => { routeId = id; });
     if (activeRun !== run) return;
-    $('playback-count').textContent = 'Calcul depuis l’étape…';
-    const second = await fetchLeg(via, end, preference, controller.signal, id => { routeId = id; });
-    if (activeRun !== run) return;
-    const combined = combineLegs(first, second);
-    if (!navigationRoute(combined.geometry, combined.result)) throw new Error('Le trajet avec étape ne permet pas le guidage.');
-    routeGeometry = combined.geometry; renderer.setGraph(routeGeometry); queue.push(...combined.events); result = combined.result; traceStride = Math.max(first.stride, second.stride); nationalReady = true; $('coverage').textContent = 'France métropolitaine · Corse';
-    placeMarker('start', first.snapped[0].lat, first.snapped[0].lon, start.name); placeMarker('via', first.snapped[1].lat, first.snapped[1].lon, via.name); placeMarker('end', second.snapped[1].lat, second.snapped[1].lon, end.name);
+    routeGeometry = combined.geometry; renderer.setGraph(routeGeometry); queue.push(...combined.events); result = combined.result; traceStride = combined.stride; nationalReady = true; $('coverage').textContent = 'France métropolitaine · Corse';
+    const route = navigationRoute(routeGeometry, result)!;
+    placeMarker('start', route.points[0].lat, route.points[0].lon, start.name); placeMarker('end', route.points.at(-1)!.lat, route.points.at(-1)!.lon, end.name);
   } catch (error) {
     if (activeRun !== run || controller.signal.aborted) return;
     stop(); notice(error instanceof Error ? error.message : 'Calcul avec étape indisponible.', 'error');
@@ -697,13 +787,11 @@ async function initialize() {
         explore(true); resumeGuidance = true; notice('Recalcul du trajet depuis votre position…');
       }
     }, () => {
-      if (!selections.end) return undefined;
-      const api = new URL(routingApi, location.href);
-      if (api.protocol !== 'https:' && api.protocol !== 'http:') return undefined;
-      const via = waypointPending && selections.via && result?.waypointAt ? { lat: selections.via.lat, lon: selections.via.lon, at: result.waypointAt } : undefined;
-      return { api: api.href.replace(/\/$/, ''), end: { lat: selections.end.lat, lon: selections.end.lon }, criterion: criterion(), ...roadPreferences(), ...(via ? { via } : {}) };
+      const route = guidance?.plannedRoute;
+      return route && selections.end ? routingFor(route, tripStops, selections.end, criterion(), roadPreferences()) : undefined;
     }, route => {
-      if (result) result.waypointAt = route.waypointAt;
+      tripRevision++;
+      if (result) { result.waypointAt = route.waypointAt; result.waypointAts = route.waypointAts; }
       const origin = route.points[0];
       selections.start = { name: 'Départ recalculé', lat: origin.lat, lon: origin.lon, node: -1, snapDistance: 0 };
       inputs.start.value = selections.start.name;
@@ -713,7 +801,12 @@ async function initialize() {
       $('distance').textContent = route.length >= 1000 ? `${(route.length / 1000).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} km` : `${Math.round(route.length)} m`;
       const minutes = Math.ceil(route.seconds / 60);
       $('duration').textContent = minutes < 60 ? `${Math.max(1, minutes)} min` : `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, '0')}`;
-    }, () => { waypointPending = false; });
+    }, count => {
+      tripStops.splice(0, count); waypointPending = tripStops.length > 0; tripRevision++;
+      selections.via = tripStops[0] ? { ...tripStops[0], node: -1, snapDistance: 0 } : null; inputs.via.value = selections.via?.name ?? '';
+      if (!selections.via) { markers.via?.remove(); markers.via = undefined; }
+    });
+    setupTripWorkspace();
     $<HTMLButtonElement>('lite').setAttribute('aria-pressed', String(renderer.lite));
     buildSearchIndex();
     setupSearch('start'); setupSearch('via'); setupSearch('end');
@@ -782,12 +875,10 @@ async function compareRoutes() {
   let found: SearchResult | null | undefined, stride = 1;
   $<HTMLButtonElement>('compare-routes').disabled = true; $('comparison-status').textContent = 'Calcul de l’autre trajet…';
   try {
-    if (waypointPending && selections.via) {
-      const first = await fetchLeg(selections.start, selections.via, other, controller.signal, value => { comparisonId = value; });
-      const second = await fetchLeg(selections.via, selections.end, other, controller.signal, value => { comparisonId = value; });
-      const combined: RouteLeg = combineLegs(first, second);
+    if (waypointPending) {
+      const combined = await fetchJourney(selections.start, tripStops, selections.end, other, controller.signal, value => { comparisonId = value; });
       if (!navigationRoute(combined.geometry, combined.result)) throw new Error('Le trajet avec étape ne permet pas le guidage.');
-      geometry.nodes.push(...combined.geometry.nodes); geometry.edges.push(...combined.geometry.edges); events.push(...combined.events); found = combined.result; stride = Math.max(first.stride, second.stride);
+      geometry.nodes.push(...combined.geometry.nodes); geometry.edges.push(...combined.geometry.edges); events.push(...combined.events); found = combined.result; stride = combined.stride;
     } else {
       for await (const message of nationalRoute(selections.start, selections.end, other, id, controller.signal, roadPreferences())) {
         if (activeRun !== run) return;
@@ -812,7 +903,7 @@ $('retry').addEventListener('click', () => { map?.remove(); void initialize(); }
 $('reset').addEventListener('click', () => {
   if (!roads) return;
   stop(); setPicking(null);
-  for (const side of ['start', 'via', 'end'] as const) { selections[side] = null; inputs[side].value = ''; markers[side]?.remove(); } waypointPending = false;
+  for (const side of ['start', 'via', 'end'] as const) { selections[side] = null; inputs[side].value = ''; markers[side]?.remove(); } waypointPending = false; tripStops = [];
   locationCircle?.remove(); locationCircle = undefined; $('app').classList.remove('has-gps-start');
   updateLaunch(); void locate();
 });

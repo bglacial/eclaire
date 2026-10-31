@@ -1,8 +1,14 @@
 import type { Criterion, ExplorationEvent, NavigationInstruction, Place, RoadGeometry, SearchResult } from './types';
 import { requestDeadline } from './request-deadline';
 import type { RoadPreferences } from './settings';
+import { Capacitor } from '@capacitor/core';
 
-export const routingApi = import.meta.env?.VITE_ROUTING_API_URL?.replace(/\/$/, '') || '/api';
+export function routingEndpoint(configured: string | undefined, native: boolean) {
+  const base = configured?.trim().replace(/\/$/, '');
+  if (!native) return base || '/api';
+  return base ? new URL(base, 'https://eclaire.nriault.fr').href.replace(/\/$/, '') : 'https://eclaire.nriault.fr/api';
+}
+export const routingApi = routingEndpoint(import.meta.env?.VITE_ROUTING_API_URL, Capacitor.isNativePlatform());
 export const franceBounds = [41.3, -5.3, 51.2, 9.7] as const;
 export const isInFrance = (p: Pick<Place, 'lat' | 'lon'>) => Number.isFinite(p.lat) && Number.isFinite(p.lon) && p.lat >= franceBounds[0] && p.lat <= franceBounds[2] && p.lon >= franceBounds[1] && p.lon <= franceBounds[3];
 

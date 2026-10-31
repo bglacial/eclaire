@@ -3,8 +3,8 @@ import type { GpsFix, NavigationRoute, RouteMatch } from './navigation';
 import type { Criterion } from './types';
 import type { RoadPreferences } from './settings';
 
-export interface NativeRoutingConfig extends RoadPreferences { api: string; end: { lat: number; lon: number }; criterion: Criterion; via?: { lat: number; lon: number; at: number } }
-export interface NativeGuidanceState { active: boolean; status: string; voice?: boolean; message?: string; nativeRerouting?: boolean; waypointReached?: boolean; routeVersion?: number; route?: NavigationRoute; fix?: GpsFix; match?: RouteMatch }
+export interface NativeRoutingConfig extends RoadPreferences { api: string; end: { lat: number; lon: number }; criterion: Criterion; via?: { lat: number; lon: number; at: number }; vias?: { lat: number; lon: number; at: number }[] }
+export interface NativeGuidanceState { active: boolean; status: string; voice?: boolean; message?: string; nativeRerouting?: boolean; waypointReached?: boolean; waypointsReached?: number; routeVersion?: number; route?: NavigationRoute; fix?: GpsFix; match?: RouteMatch }
 export const nativeGuidance = registerPlugin<{
   start(options: { route: NavigationRoute; voice: boolean; routing?: NativeRoutingConfig }): Promise<void>;
   stop(): Promise<void>;

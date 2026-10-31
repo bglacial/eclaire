@@ -32,6 +32,7 @@ final class EclaireNavigation: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDel
     private var routeVersion = 1
     private var routeWire: JSObject?
     private var waypointReached = false
+    private var waypointsReached = 0
 
     override func load() {
         locations.delegate = self
@@ -54,10 +55,10 @@ final class EclaireNavigation: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDel
                 let tracker = try GuidanceTracker(route: route)
                 let routing = try call.getObject("routing").map { try JSONDecoder().decode(NativeRouting.Config.self, from: JSONSerialization.data(withJSONObject: $0)) }
                 try routing?.validate()
-                if let via = routing?.via, via.at >= route.points.last!.at { throw NativeRouting.RoutingError.invalid }
+                if routing?.stops.contains(where: { $0.at >= route.points.last!.at }) == true { throw NativeRouting.RoutingError.invalid }
                 self.finish()
                 self.tracker = tracker; self.voice = call.getBool("voice") ?? false; self.spoken.removeAll(); self.active = true
-                self.routing = routing; self.routeVersion = 1; self.routeWire = nil; self.latestFix = nil; self.offRouteCount = 0; self.retryAfter = .distantPast; self.waypointReached = false
+                self.routing = routing; self.routeVersion = 1; self.routeWire = nil; self.latestFix = nil; self.offRouteCount = 0; self.retryAfter = .distantPast; self.waypointReached = false; self.waypointsReached = 0
                 self.latest = ["active": true, "status": "starting", "voice": self.voice, "nativeRerouting": routing != nil, "routeVersion": 1]; self.lastGoodAt = Date()
                 self.locations.allowsBackgroundLocationUpdates = true
                 self.locations.startUpdatingLocation()
@@ -85,8 +86,8 @@ final class EclaireNavigation: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDel
         if let heading = fix.heading { coordinates["heading"] = heading }
         var event: JSObject = ["active": state.status != "arrived", "status": state.status, "fix": coordinates]
         if state.status == "on-route" || state.status == "arrived" {
-            if let via = routing?.via, tracker?.reachedWaypoint(fix, state: state, at: via.at) == true {
-                routing?.via = nil; waypointReached = true
+            if let via = routing?.stops.first, tracker?.reachedWaypoint(fix, state: state, at: via.at) == true {
+                routing?.removeNext(); waypointReached = true; waypointsReached += 1
             }
             offRouteCount = 0; retryAfter = .distantPast
             if routeTask != nil { cancelRoute() }
@@ -121,16 +122,16 @@ final class EclaireNavigation: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDel
         else if Date().timeIntervalSince(lastGoodAt) > 3 { speech.stopSpeaking(at: .immediate); releaseAudio(); publish(["active": true, "status": "uncertain"]) }
     }
     private func publish(_ state: JSObject) {
-        var event = state; event["voice"] = voice; event["nativeRerouting"] = routing != nil; event["routeVersion"] = routeVersion; event["waypointReached"] = waypointReached
+        var event = state; event["voice"] = voice; event["nativeRerouting"] = routing != nil; event["routeVersion"] = routeVersion; event["waypointReached"] = waypointReached; event["waypointsReached"] = waypointsReached
         latest = event; notifyListeners("location", data: event)
     }
     private func startReroute(_ fix: GuidanceFix) {
         guard let routing else { return }
         generation += 1
-        let target = routing.via.map { NativeRouting.Endpoint(lat: $0.lat, lon: $0.lon) } ?? routing.end
+        let target = routing.stops.first.map { NativeRouting.Endpoint(lat: $0.lat, lon: $0.lon) } ?? routing.end
         requestLeg(fix, target: target, first: nil, original: fix, current: generation)
     }
-    private func requestLeg(_ fix: GuidanceFix, target: NativeRouting.Endpoint, first: GuidanceRoute?, original: GuidanceFix, current: Int) {
+    private func requestLeg(_ fix: GuidanceFix, target: NativeRouting.Endpoint, first: GuidanceRoute?, original: GuidanceFix, current: Int, index: Int = 0) {
         guard let routing else { return }
         let id = UUID().uuidString
         do {
@@ -145,12 +146,15 @@ final class EclaireNavigation: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDel
                 DispatchQueue.main.async {
                     guard let self, self.active, self.generation == current else { return }
                     self.routeTask = nil; self.requestId = nil
-                    if case let .success(route) = result, first == nil, let via = self.routing?.via, let end = self.routing?.end {
-                        let origin = GuidanceFix(lat: via.lat, lon: via.lon, accuracy: fix.accuracy, timestamp: fix.timestamp, speed: nil, heading: nil)
-                        self.requestLeg(origin, target: end, first: route, original: original, current: current)
-                    } else if case let .success(route) = result, let first {
-                        self.finishReroute(current, original: original, Result { try NativeRouting.combine(first, route) })
-                    } else { self.finishReroute(current, original: original, result) }
+                    do {
+                        let route = try result.get()
+                        let combined = try first.map { try NativeRouting.combine($0, route) } ?? route
+                        let targets = routing.stops.map { NativeRouting.Endpoint(lat: $0.lat, lon: $0.lon) } + [routing.end]
+                        if index + 1 < targets.count {
+                            let origin = GuidanceFix(lat: target.lat, lon: target.lon, accuracy: fix.accuracy, timestamp: fix.timestamp, speed: nil, heading: nil)
+                            self.requestLeg(origin, target: targets[index + 1], first: combined, original: original, current: current, index: index + 1)
+                        } else { self.finishReroute(current, original: original, .success(combined)) }
+                    } catch { self.finishReroute(current, original: original, .failure(error)) }
                 }
             }
             routeTask = task; task.start()
@@ -162,9 +166,9 @@ final class EclaireNavigation: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDel
         if case let .success(route) = result, let fix = latestFix, var candidate = try? GuidanceTracker(route: route) {
             let state = candidate.update(fix, now: Date().timeIntervalSince1970 * 1000)
             let approach = state.status == "approach"
-            if GuidanceTracker.acceptsReroute(state, original: original, latest: fix), let wire = try? JSValueEncoder().encodeJSObject(route) {
+            if GuidanceTracker.acceptsReroute(state, original: original, latest: fix), (route.waypointAts ?? route.waypointAt.map { [$0] } ?? []).count == (routing?.stops.count ?? 0), let wire = try? JSValueEncoder().encodeJSObject(route) {
                 tracker = candidate; routeWire = wire
-                if let at = route.waypointAt, let via = routing?.via { routing?.via = .init(lat: via.lat, lon: via.lon, at: at) }
+                routing?.updateStops(route)
                 routeVersion += 1; offRouteCount = 0; retryAfter = .distantPast; spoken.removeAll()
                 var coordinates: JSObject = ["lat": fix.lat, "lon": fix.lon, "accuracy": fix.accuracy, "timestamp": fix.timestamp]
                 if let speed = fix.speed { coordinates["speed"] = speed }; if let heading = fix.heading { coordinates["heading"] = heading }

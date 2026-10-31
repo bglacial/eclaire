@@ -48,17 +48,22 @@ public class NativeRerouteServiceTest {
         var app = RuntimeEnvironment.getApplication();
         Shadows.shadowOf(app).grantPermissions(Manifest.permission.ACCESS_FINE_LOCATION);
         Shadows.shadowOf((LocationManager) app.getSystemService(Context.LOCATION_SERVICE)).setProviderEnabled(LocationManager.GPS_PROVIDER, true);
-        var route = new GuidanceTracker(Arrays.asList(new GuidanceTracker.Point(48, 2, 0, 0), new GuidanceTracker.Point(48.001, 2, 111, 10), new GuidanceTracker.Point(48.002, 2, 222, 20)),
+        var route = new GuidanceTracker(Arrays.asList(new GuidanceTracker.Point(48, 2, 0, 0), new GuidanceTracker.Point(48.001, 2, 111, 10), new GuidanceTracker.Point(48.0015, 2, 166.5, 15), new GuidanceTracker.Point(48.002, 2, 222, 20)),
                 Arrays.asList(new GuidanceTracker.Step(0, "Continuez"), new GuidanceTracker.Step(111, "Étape"), new GuidanceTracker.Step(222, "Arrivée", 4)));
         var controller = Robolectric.buildService(NavigationService.class).create(); var service = controller.get();
         try {
-            var config = new NativeRouting.Config("https://example.org/api", 48.002, 2, "time", false, false, 48.001, 2d, 111d);
+            var config = new NativeRouting.Config("https://example.org/api", 48.002, 2, "time", false, false, java.util.List.of(new NativeRouting.Via(48.001, 2, 111), new NativeRouting.Via(48.0015, 2, 166.5)));
             service.start(route, false, event -> {}, new JSONObject(), config);
             long now = System.currentTimeMillis();
             service.onLocationChanged(fix(48.0005, 2, now - 3000));
             assertFalse(service.state().optBoolean("waypointReached"));
             service.onLocationChanged(fix(48.001, 2, now - 1000));
             assertTrue(service.state().optBoolean("waypointReached"));
+            assertEquals(1, service.state().getInt("waypointsReached"));
+            service.onLocationChanged(fix(48.001, 2, now));
+            assertEquals(1, service.state().getInt("waypointsReached"));
+            service.onLocationChanged(fix(48.0015, 2, now + 1000));
+            assertEquals(2, service.state().getInt("waypointsReached"));
         } finally { controller.destroy(); }
     }
 

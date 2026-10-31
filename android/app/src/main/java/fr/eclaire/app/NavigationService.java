@@ -31,6 +31,7 @@ public final class NavigationService extends Service implements LocationListener
     private AudioManager audio;
     private final AudioManager.OnAudioFocusChangeListener focus = change -> { if (change < 0 && speech != null) silence(); };
     private boolean voice, speechReady, active, waypointReached;
+    private int waypointsReached;
     private GuidanceTracker tracker;
     private Consumer<JSObject> listener;
     private JSObject latest = new JSObject();
@@ -74,7 +75,7 @@ public final class NavigationService extends Service implements LocationListener
     void start(GuidanceTracker route, boolean enabled, Consumer<JSObject> events, JSONObject wire, NativeRouting.Config config) {
         cancelRoute(); handler.removeCallbacks(checkSignal); locations.removeUpdates(this); silence(); spoken.clear(); message = "Recherche de votre position…";
         tracker = route; voice = enabled; listener = events; active = true; lastGoodAt = System.currentTimeMillis();
-        routeWire = wire; routing = config; routeVersion = 1; offRouteCount = 0; retryAfter = 0; latestFix = null; waypointReached = false;
+        routeWire = wire; routing = config; routeVersion = 1; offRouteCount = 0; retryAfter = 0; latestFix = null; waypointReached = false; waypointsReached = 0;
         latest = new JSObject().put("active", true).put("status", "starting").put("voice", voice).put("nativeRerouting", routing != null).put("routeVersion", routeVersion);
         try {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED)
@@ -133,7 +134,7 @@ public final class NavigationService extends Service implements LocationListener
             if (routing != null && routing.viaAt() != null && progress.at() >= routing.viaAt() - 10 && progress.distance() <= 35) {
                 var waypoint = tracker.points.stream().min(java.util.Comparator.comparingDouble(point -> Math.abs(point.at() - routing.viaAt()))).orElse(null);
                 if (waypoint != null && Math.hypot((fix.lat() - waypoint.lat()) * 111195, (fix.lon() - waypoint.lon()) * 111195 * Math.cos(fix.lat() * Math.PI / 180)) <= 30) {
-                    routing = routing.withoutVia(); waypointReached = true;
+                    routing = routing.withoutVia(); waypointReached = true; waypointsReached++;
                 }
             }
             offRouteCount = 0; retryAfter = 0;
@@ -184,7 +185,7 @@ public final class NavigationService extends Service implements LocationListener
             boolean approach = "approach".equals(progress.status());
             if (GuidanceTracker.acceptsReroute(progress, origin, fix)) {
                 tracker = result.tracker(); routeWire = result.route();
-                if (routing != null && routing.viaAt() != null) routing = routing.withViaAt(routeWire.optDouble("waypointAt", routing.viaAt()));
+                if (routing != null && routing.viaAt() != null) routing = routing.withViaAts(routeWire);
                 routeVersion++; offRouteCount = 0; retryAfter = 0; spoken.clear();
                 message = approach ? "Rejoignez le point routier par une voie accessible." : (progress.toTurn() < 20 ? "Maintenant, " : "Dans " + distance(progress.toTurn()) + ", ") + tracker.steps.get(progress.nextIndex()).text();
                 publish(approach ? "approach" : "on-route", true, fix, approach ? null : progress, true); updateNotification();
@@ -210,7 +211,7 @@ public final class NavigationService extends Service implements LocationListener
         publish(status, running, fix, progress, false);
     }
     private void publish(String status, boolean running, GuidanceTracker.Fix fix, GuidanceTracker.State progress, boolean includeRoute) {
-        var event = new JSObject().put("active", running).put("status", status).put("voice", voice).put("message", message).put("nativeRerouting", routing != null).put("routeVersion", routeVersion).put("waypointReached", waypointReached);
+        var event = new JSObject().put("active", running).put("status", status).put("voice", voice).put("message", message).put("nativeRerouting", routing != null).put("routeVersion", routeVersion).put("waypointReached", waypointReached).put("waypointsReached", waypointsReached);
         if (fix != null) event.put("fix", new JSObject().put("lat", fix.lat()).put("lon", fix.lon()).put("accuracy", fix.accuracy()).put("timestamp", fix.timestamp()).put("speed", fix.speed()).put("heading", fix.heading()));
         if (progress != null) event.put("match", new JSObject().put("at", progress.at()).put("seconds", progress.seconds()).put("distance", progress.distance()));
         if (includeRoute && routeWire != null) event.put("route", routeWire);

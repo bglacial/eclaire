@@ -3,12 +3,13 @@ import type { NavigationInstruction, RoadGeometry, SearchResult } from './types'
 
 export interface GpsFix { lat: number; lon: number; accuracy: number; timestamp: number; speed?: number | null; heading?: number | null }
 interface RoutePoint { lat: number; lon: number; at: number; seconds: number; speedLimit?: number }
-export interface NavigationRoute { points: RoutePoint[]; instructions: NavigationInstruction[]; length: number; seconds: number; waypointAt?: number }
+export interface NavigationRoute { points: RoutePoint[]; instructions: NavigationInstruction[]; length: number; seconds: number; waypointAt?: number; waypointAts?: number[] }
 export interface RouteMatch { at: number; seconds: number; distance: number }
 
 export function isNavigationRoute(value: unknown): value is NavigationRoute {
   if (!value || typeof value !== 'object') return false;
   const route = value as NavigationRoute;
+  if (route.waypointAts !== undefined && (!Array.isArray(route.waypointAts) || route.waypointAts.length > 8 || route.waypointAts.some((at, i, all) => !Number.isFinite(at) || at <= (all[i - 1] ?? 0) || at >= route.length))) return false;
   if (!Number.isFinite(route.length) || route.length < 1 || !Number.isFinite(route.seconds) || route.seconds < 0 || (route.waypointAt !== undefined && (!Number.isFinite(route.waypointAt) || route.waypointAt <= 0 || route.waypointAt >= route.length)) || !Array.isArray(route.points) || route.points.length < 2 || route.points.length > 1_000_000 || !Array.isArray(route.instructions) || !route.instructions.length || route.instructions.length > 50_000) return false;
   let at = -1, seconds = -1;
   for (const point of route.points) {
@@ -73,7 +74,7 @@ export function navigationRoute(roads: RoadGeometry, result: SearchResult): Navi
   if (Math.abs(at - result.length) > 2) throw new Error('Distance du guidage incohérente.');
   // Les temps des arêtes excluent certains coûts de virage ; conserver la durée totale du moteur.
   if (seconds) for (const p of points) p.seconds *= result.seconds / seconds;
-  return { points, instructions: result.instructions, length: result.length, seconds: result.seconds, ...(result.waypointAt !== undefined ? { waypointAt: result.waypointAt } : {}) };
+  return { points, instructions: result.instructions, length: result.length, seconds: result.seconds, ...(result.waypointAt !== undefined ? { waypointAt: result.waypointAt } : {}), ...(result.waypointAts ? { waypointAts: result.waypointAts } : {}) };
 }
 
 export function usableFix(fix: GpsFix, now = Date.now()) {
@@ -113,6 +114,12 @@ export function matchRoute(route: NavigationRoute, fix: GpsFix, previous?: Route
     if (score < bestScore) { bestScore = score; best = { at, distance, seconds: a.seconds + (b.seconds - a.seconds) * t }; }
   }
   return best;
+}
+
+export function acceptsRouteUpdate(route: NavigationRoute, origin: { lat: number; lon: number; accuracy?: number }, latest: GpsFix, now = Date.now()) {
+  if (!usableFix(latest, now)) return false;
+  const distance = matchRoute(route, latest).distance;
+  return distance <= 75 || (distance <= 2000 && metres(origin, latest) <= Math.max(50, (origin.accuracy ?? 0) + latest.accuracy));
 }
 
 export class GuidanceProgress {

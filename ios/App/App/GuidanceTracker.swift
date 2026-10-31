@@ -12,9 +12,9 @@ struct GuidanceStep: Codable {
     init(at: Double, text: String, sign: Int? = nil, name: String? = nil) { self.at = at; self.text = text; self.sign = sign; self.name = name }
 }
 struct GuidanceRoute: Codable {
-    let points: [GuidancePoint]; let instructions: [GuidanceStep]; let length, seconds, waypointAt: Double?
-    init(points: [GuidancePoint], instructions: [GuidanceStep], length: Double? = nil, seconds: Double? = nil, waypointAt: Double? = nil) {
-        self.points = points; self.instructions = instructions; self.length = length; self.seconds = seconds; self.waypointAt = waypointAt
+    let points: [GuidancePoint]; let instructions: [GuidanceStep]; let length, seconds, waypointAt: Double?; let waypointAts: [Double]?
+    init(points: [GuidancePoint], instructions: [GuidanceStep], length: Double? = nil, seconds: Double? = nil, waypointAt: Double? = nil, waypointAts: [Double]? = nil) {
+        self.points = points; self.instructions = instructions; self.length = length; self.seconds = seconds; self.waypointAt = waypointAt; self.waypointAts = waypointAts
     }
 }
 struct GuidanceFix { let lat, lon, accuracy, timestamp: Double; let speed, heading: Double? }
@@ -120,13 +120,24 @@ enum NativeRouting {
     struct Endpoint: Codable { let lat, lon: Double }
     struct Waypoint: Codable { let lat, lon, at: Double }
     struct Config: Codable {
-        let api: String; let end: Endpoint; let criterion: String; let avoidMotorways, avoidTolls: Bool; var via: Waypoint? = nil
+        let api: String; let end: Endpoint; let criterion: String; let avoidMotorways, avoidTolls: Bool; var via: Waypoint? = nil; var vias: [Waypoint]? = nil
+        var stops: [Waypoint] { vias ?? via.map { [$0] } ?? [] }
+        mutating func removeNext() { vias = Array(stops.dropFirst()); via = nil }
+        mutating func updateStops(_ route: GuidanceRoute) {
+            let ats = route.waypointAts ?? route.waypointAt.map { [$0] } ?? []
+            vias = zip(stops, ats).map { Waypoint(lat: $0.0.lat, lon: $0.0.lon, at: $0.1) }; via = nil
+        }
         func validate() throws {
             guard let parts = URLComponents(string: api), ["https", "http"].contains(parts.scheme ?? ""), parts.host != nil,
                   parts.user == nil, parts.password == nil, parts.query == nil, parts.fragment == nil,
                   ["time", "distance"].contains(criterion), end.lat.isFinite, (41.3...51.2).contains(end.lat),
                   end.lon.isFinite, (-5.3...9.7).contains(end.lon) else { throw RoutingError.invalid }
-            if let via, !via.lat.isFinite || !(41.3...51.2).contains(via.lat) || !via.lon.isFinite || !(-5.3...9.7).contains(via.lon) || !via.at.isFinite || via.at <= 0 { throw RoutingError.invalid }
+            guard stops.count <= 8 else { throw RoutingError.invalid }
+            var previous = 0.0
+            for via in stops {
+                if !via.lat.isFinite || !(41.3...51.2).contains(via.lat) || !via.lon.isFinite || !(-5.3...9.7).contains(via.lon) || !via.at.isFinite || via.at <= previous { throw RoutingError.invalid }
+                previous = via.at
+            }
         }
         func leg(to end: Endpoint) -> Config { Config(api: api, end: end, criterion: criterion, avoidMotorways: avoidMotorways, avoidTolls: avoidTolls) }
     }
@@ -202,12 +213,18 @@ enum NativeRouting {
         guard distance(a.lat, a.lon, b.lat, b.lon) <= 2 else { throw RoutingError.invalid }
         let points = first.points + second.points.dropFirst().map { GuidancePoint(lat: $0.lat, lon: $0.lon, at: length + $0.at, seconds: seconds + $0.seconds, speedLimit: $0.speedLimit) }
         let instructions = Array(first.instructions.dropLast()) + [GuidanceStep(at: length, text: "Vous arrivez à l’étape", sign: 0, name: "")] + second.instructions.dropFirst().map { GuidanceStep(at: length + $0.at, text: $0.text, sign: $0.sign, name: $0.name) }
-        let route = GuidanceRoute(points: points, instructions: instructions, length: length + second.length!, seconds: seconds + second.seconds!, waypointAt: length)
+        let ats = (first.waypointAts ?? first.waypointAt.map { [$0] } ?? []) + [length] + (second.waypointAts ?? second.waypointAt.map { [$0] } ?? []).map { length + $0 }
+        let route = GuidanceRoute(points: points, instructions: instructions, length: length + second.length!, seconds: seconds + second.seconds!, waypointAt: ats.first, waypointAts: ats)
         try validate(route); return route
     }
 
     private static func validate(_ route: GuidanceRoute) throws {
         _ = try GuidanceTracker(route: route)
+        if let ats = route.waypointAts {
+            guard ats.count <= 8 else { throw RoutingError.invalid }
+            var previous = 0.0
+            for at in ats { guard at.isFinite, at > previous, at < (route.length ?? 0) else { throw RoutingError.invalid }; previous = at }
+        }
         guard let length = route.length, length.isFinite, length >= 1, let seconds = route.seconds, seconds.isFinite, seconds >= 0,
               route.waypointAt.map({ $0.isFinite && $0 > 0 && $0 < length }) ?? true,
               route.points[0].at == 0, route.points[0].seconds == 0,

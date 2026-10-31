@@ -47,6 +47,11 @@ final class GuidanceTracker {
         var tracker = new GuidanceTracker(geometry, instructions);
         double length = data.getDouble("length"), seconds = data.getDouble("seconds");
         if (data.has("waypointAt")) { double at = data.getDouble("waypointAt"); if (!Double.isFinite(at) || at <= 0 || at >= length) throw new IllegalArgumentException("Étape hors du trajet."); }
+        if (data.has("waypointAts")) {
+            var ats = data.getJSONArray("waypointAts"); double previous = 0;
+            if (ats.length() > 8) throw new IllegalArgumentException("Trop d’étapes.");
+            for (int i = 0; i < ats.length(); i++) { double at = ats.getDouble(i); if (!Double.isFinite(at) || at <= previous || at >= length) throw new IllegalArgumentException("Étapes hors du trajet."); previous = at; }
+        }
         if (!Double.isFinite(length) || length < 1 || !Double.isFinite(seconds) || seconds < 0 || Math.abs(geometry.get(0).at()) > 1e-6 || Math.abs(geometry.get(0).seconds()) > 1e-6 || Math.abs(geometry.get(geometry.size() - 1).at() - length) > 2 || Math.abs(geometry.get(geometry.size() - 1).seconds() - seconds) > 2 || Math.abs(instructions.get(0).at()) > 1e-6 || instructions.get(instructions.size() - 1).sign() != 4 || Math.abs(instructions.get(instructions.size() - 1).at() - length) > 1)
             throw new IllegalArgumentException("Parcours de guidage incohérent.");
         return tracker;

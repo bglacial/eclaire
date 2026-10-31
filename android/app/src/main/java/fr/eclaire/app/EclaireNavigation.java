@@ -42,7 +42,7 @@ public class EclaireNavigation extends Plugin {
             routeWire = data;
             var config = call.getObject("routing");
             routing = config == null ? null : NativeRouting.Config.fromJson(config);
-            if (routing != null && routing.viaAt() != null && routing.viaAt() >= route.points.get(route.points.size() - 1).at()) throw new IllegalArgumentException("Étape hors du trajet.");
+            if (routing != null && routing.vias().stream().anyMatch(via -> via.at() >= route.points.get(route.points.size() - 1).at())) throw new IllegalArgumentException("Étape hors du trajet.");
         } catch (JSONException | IllegalArgumentException error) { call.reject("Parcours de guidage invalide."); return; }
         if (Build.VERSION.SDK_INT >= 33 && getPermissionState("notifications") != PermissionState.GRANTED) { requestPermissionForAlias("notifications", call, "notificationsResult"); return; }
         begin(call);

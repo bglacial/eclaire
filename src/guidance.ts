@@ -37,6 +37,8 @@ export class GpsGuidance {
   private nativeRerouting = false;
   private routeVersion = 1;
   private requestingRoute = false;
+  private replacingRoute = false;
+  private reachedCount = 0;
   private firstCenter = true;
   private speeds = new RecentSpeed();
   private frame = 0;
@@ -49,8 +51,15 @@ export class GpsGuidance {
   private keepScreenOn = screenUpdates(enabled => device.setKeepScreenOn({ enabled }));
 
   get active() { return this.session; }
+  get plannedRoute() { return this.route; }
+  async position() {
+    const state = await nativeGuidance.getState();
+    this.receiveNative(state);
+    if (!this.watching || !state.active || !state.fix || !usableFix(state.fix)) throw new Error('Attendez une position GPS précise avant de modifier le trajet.');
+    return { fix: state.fix, at: this.progress?.match?.at ?? 0 };
+  }
 
-  constructor(private map: L.Map, private onEnter: () => void, private onExit: () => void, private onRecalculate: (fix: GpsFix) => void, private routingConfig: () => NativeRoutingConfig | undefined, private onRouteChanged: (route: NavigationRoute) => void, private onWaypointReached: () => void = () => {}) {
+  constructor(private map: L.Map, private onEnter: () => void, private onExit: () => void, private onRecalculate: (fix: GpsFix) => void, private routingConfig: () => NativeRoutingConfig | undefined, private onRouteChanged: (route: NavigationRoute) => void, private onWaypointReached: (count: number) => void = () => {}) {
     element('navigation-start').addEventListener('click', () => { void this.start(); });
     element('navigation-stop').addEventListener('click', () => this.stop());
     element('navigation-resume').addEventListener('click', () => { void this.start(); });
@@ -93,6 +102,7 @@ export class GpsGuidance {
     const route = this.route;
     const generation = ++this.generation;
     this.session = true; this.starting = true; this.follow = true; this.firstCenter = true; this.lastCenter = undefined; this.speeds = new RecentSpeed(); this.displayAt = undefined; this.offRouteCount = 0; this.nativeRerouting = false; this.routeVersion = 1; this.requestingRoute = false;
+    this.reachedCount = 0;
     this.progress ??= new GuidanceProgress(this.route);
     this.onEnter();
     if (!this.line) this.line = L.polyline(this.route.points.map(p => [p.lat, p.lon]), { renderer: this.renderer, color: getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(), weight: 6, opacity: 0.95, interactive: false }).addTo(this.map);
@@ -135,6 +145,23 @@ export class GpsGuidance {
     }
   }
 
+  async replaceRoute(route: NavigationRoute, routing: NativeRoutingConfig) {
+    if (!isNavigationRoute(route) || !this.watching || document.hidden) throw new Error('Gardez le guidage ouvert pour appliquer le trajet.');
+    const generation = this.generation;
+    this.replacingRoute = true;
+    try {
+      await this.command(async () => {
+        if (generation !== this.generation) throw new DOMException('Guidage arrêté.', 'AbortError');
+        await nativeGuidance.start({ route, routing, voice: this.voice });
+      });
+      if (generation !== this.generation) throw new DOMException('Guidage arrêté.', 'AbortError');
+      this.route = route; this.progress = new GuidanceProgress(route); this.routeVersion = 1; this.reachedCount = 0;
+      this.fix = undefined; this.displayAt = undefined; this.offRouteCount = 0; this.speeds = new RecentSpeed();
+      this.line?.setLatLngs(route.points.map(point => [point.lat, point.lon]));
+    } finally { this.replacingRoute = false; }
+    void nativeGuidance.getState().then(state => { if (generation === this.generation) this.receiveNative(state); }).catch(() => undefined);
+  }
+
   stop(restore = true) {
     this.release(); this.session = false; this.progress = undefined; this.fix = undefined; this.speeds = new RecentSpeed(); this.displayAt = undefined;
     this.map.stopHeadingUp(); this.map.setBearing(0);
@@ -168,7 +195,9 @@ export class GpsGuidance {
   }
 
   private receiveNative(state: NativeGuidanceState) {
-    if (state.waypointReached) this.onWaypointReached();
+    if (this.replacingRoute) return;
+    const reached = state.waypointsReached ?? (state.waypointReached ? 1 : 0);
+    if (Number.isSafeInteger(reached) && reached > this.reachedCount && reached <= 8) { this.onWaypointReached(reached - this.reachedCount); this.reachedCount = reached; }
     if (typeof state.voice === 'boolean' && state.voice !== this.voice) {
       this.voice = state.voice;
       element('navigation-voice').setAttribute('aria-pressed', String(this.voice));

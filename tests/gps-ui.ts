@@ -10,6 +10,9 @@ let updateCheckedAt = 0;
 let pipAutomatic = true;
 let simulateNativeRerouting = false;
 Object.assign(window, {
+  testNativeStarts: [] as unknown[],
+  testNativeStops: 0,
+  testPublishGuidance: (state: NativeGuidanceState) => { if (state.fix) gps = { latitude: state.fix.lat, longitude: state.fix.lon, accuracy: state.fix.accuracy }; nativeState = state; for (const callback of nativeListeners.values()) callback(state); },
   CapacitorCustomPlatform: { name: 'android' },
   Capacitor: {
     PluginHeaders: [
@@ -23,8 +26,8 @@ Object.assign(window, {
       if (method === 'getUpdateStatus') return { lastCheckedAt: updateCheckedAt, checking: false };
       if (method === 'checkForUpdates') { updateCheckedAt = Date.now(); return { status: 'current', lastCheckedAt: updateCheckedAt, checking: false }; }
       if (method === 'getState') return nativeState;
-      if (method === 'start') { Object.assign(window, { testNativeRouting: options.routing }); nativeProgress = new GuidanceProgress(options.route!); nativeState = { active: true, status: 'starting' }; queueMicrotask(emit); }
-      if (method === 'stop') { nativeProgress = undefined; nativeState = { active: false, status: 'stopped' }; }
+      if (method === 'start') { const test = window as unknown as { testNativeStarts: unknown[] }; test.testNativeStarts.push(options); Object.assign(window, { testNativeRouting: options.routing }); nativeProgress = new GuidanceProgress(options.route!); nativeState = { active: true, status: 'starting' }; queueMicrotask(emit); }
+      if (method === 'stop') { const test = window as unknown as { testNativeStops: number }; test.testNativeStops++; nativeProgress = undefined; nativeState = { active: false, status: 'stopped' }; }
       if (method === 'removeListener') nativeListeners.delete(options.callbackId!);
       updateCount(); return {};
     },

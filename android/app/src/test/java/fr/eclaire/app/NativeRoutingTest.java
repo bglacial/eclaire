@@ -57,7 +57,7 @@ public class NativeRoutingTest {
         try (var server = new java.net.ServerSocket(0, 2, java.net.InetAddress.getByName("127.0.0.1"))) {
             var worker = new Thread(() -> {
                 try {
-                    for (int i = 0; i < 2; i++) try (var socket = server.accept()) {
+                    for (int i = 0; i < 3; i++) try (var socket = server.accept()) {
                         var input = socket.getInputStream(); var headers = new java.io.ByteArrayOutputStream(); int previous = 0, current;
                         while ((current = input.read()) != -1) { headers.write(current); if ((previous & 0xffffff) == 0x0d0a0d && current == 0x0a) break; previous = (previous << 8) | current; }
                         int size = 0; for (String line : headers.toString("UTF-8").split("\r\n")) if (line.toLowerCase(java.util.Locale.ROOT).startsWith("content-length:")) size = Integer.parseInt(line.substring(line.indexOf(':') + 1).trim());
@@ -72,13 +72,20 @@ public class NativeRoutingTest {
                 } catch (Exception error) { failure.set(error); }
             });
             worker.start();
-            var config = new NativeRouting.Config("http://127.0.0.1:" + server.getLocalPort() + "/api", 48.002, 2, "distance", true, false, 48.001, 2d, 111d);
+            var wireConfig = new JSONObject().put("api", "http://127.0.0.1:" + server.getLocalPort() + "/api").put("end", new JSONObject().put("lat", 48.003).put("lon", 2)).put("criterion", "distance").put("avoidMotorways", true).put("avoidTolls", false)
+                    .put("vias", new org.json.JSONArray().put(new JSONObject().put("lat", 48.001).put("lon", 2).put("at", 111)).put(new JSONObject().put("lat", 48.002).put("lon", 2).put("at", 222)));
+            var config = NativeRouting.Config.fromJson(wireConfig);
             var route = new NativeRouting(config).calculate(new GuidanceTracker.Fix(48, 2, 5, System.currentTimeMillis(), 0d, null)).route();
             worker.join(5000); assertNull(failure.get()); assertFalse(worker.isAlive());
-            assertEquals(2, received.size()); assertEquals(48.001, received.get(0).getJSONObject("end").getDouble("lat"), .000001);
+            assertEquals(3, received.size()); assertEquals(48.001, received.get(0).getJSONObject("end").getDouble("lat"), .000001);
             assertEquals(48.001, received.get(1).getJSONObject("start").getDouble("lat"), .000001); assertEquals(48.002, received.get(1).getJSONObject("end").getDouble("lat"), .000001);
             for (var request : received) { assertTrue(request.getBoolean("avoidMotorways")); assertEquals("distance", request.getString("criterion")); }
             assertEquals(100, route.getDouble("waypointAt"), .001);
+            assertEquals(200, route.getJSONArray("waypointAts").getDouble(1), .001);
+            assertEquals(48.002, received.get(2).getJSONObject("start").getDouble("lat"), .000001);
+            assertEquals(48.003, received.get(2).getJSONObject("end").getDouble("lat"), .000001);
+            wireConfig.getJSONArray("vias").getJSONObject(1).put("at", 10);
+            assertThrows(IllegalArgumentException.class, () -> NativeRouting.Config.fromJson(wireConfig));
         }
     }
 
