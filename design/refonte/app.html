@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="fr">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>Éclaire, proposition interactive</title><link rel="stylesheet" href="app.css"></head>
+<body>
+<main class="app" data-ui>
+  <div id="map" aria-label="Carte du réseau routier de Paris"></div>
+  <header class="app-head"><a class="wordmark" href="./" target="_top">éclaire<span aria-hidden="true">↗</span></a><button id="theme" class="circle" aria-label="Passer en mode nuit" aria-pressed="false">◐</button></header>
+  <div class="demo-tag">Proposition · simulation à Paris</div>
+  <div id="road-labels" aria-hidden="true"></div>
+  <div class="map-tools"><button id="follow" hidden>Revenir au suivi ↗</button><button id="zoom-in" class="circle" aria-label="Zoom avant">+</button><button id="zoom-out" class="circle" aria-label="Zoom arrière">−</button></div>
+  <section id="workspace" class="workspace" aria-label="Préparation du trajet">
+    <div class="workspace-top"><span id="state-label">Un départ, une envie.</span><button id="home" hidden>← Trajet</button></div>
+    <div id="content"><p>Chargement du réseau Paris…</p></div>
+    <p id="status" role="status">Les calculs utilisent l’extrait OpenStreetMap local.</p>
+  </section>
+  <a class="attribution" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap</a>
+</main>
+<script type="module" src="app.ts"></script>
+</body></html>

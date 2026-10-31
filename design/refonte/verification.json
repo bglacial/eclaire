@@ -1,0 +1,108 @@
+{
+  "source": "Design Taste Frontend inspect.mjs",
+  "url": "http://localhost:5173/design/refonte/",
+  "at": "2026-10-31T09:36:39.037Z",
+  "viewports": [
+    {
+      "width": 1440,
+      "height": 900,
+      "motion": {
+        "elements": 29,
+        "css": 29,
+        "transitions": 0,
+        "scripted": 0,
+        "videos": 0,
+        "playingVideos": 0
+      },
+      "headings": {
+        "count": 19,
+        "maxLines": 2,
+        "over2Lines": 0,
+        "statements": 0,
+        "centered": 1,
+        "medianWords": 2,
+        "mixedFontHeadings": 0
+      },
+      "fontsLoaded": [
+        "big shoulders",
+        "public sans"
+      ],
+      "consoleErrors": []
+    },
+    {
+      "width": 768,
+      "height": 1024,
+      "motion": {
+        "elements": 29,
+        "css": 29,
+        "transitions": 0,
+        "scripted": 0,
+        "videos": 0,
+        "playingVideos": 0
+      },
+      "headings": {
+        "count": 19,
+        "maxLines": 2,
+        "over2Lines": 0,
+        "statements": 0,
+        "centered": 1,
+        "medianWords": 2,
+        "mixedFontHeadings": 0
+      },
+      "fontsLoaded": [
+        "big shoulders",
+        "public sans"
+      ],
+      "consoleErrors": []
+    },
+    {
+      "width": 390,
+      "height": 844,
+      "motion": {
+        "elements": 29,
+        "css": 29,
+        "transitions": 0,
+        "scripted": 0,
+        "videos": 0,
+        "playingVideos": 0
+      },
+      "headings": {
+        "count": 20,
+        "maxLines": 3,
+        "over2Lines": 0,
+        "statements": 1,
+        "centered": 1,
+        "medianWords": 2,
+        "mixedFontHeadings": 0
+      },
+      "fontsLoaded": [
+        "big shoulders",
+        "public sans"
+      ],
+      "consoleErrors": []
+    }
+  ],
+  "findings": [
+    {
+      "level": "WARN",
+      "id": "size-count",
+      "width": 1440,
+      "message": "10 different font sizes (16, 18, 22, 38, 58, 60, 63, 121, 209, 432).",
+      "fix": "A page needs about five: display, heading, lead, body, small.",
+      "alsoAt": [
+        768
+      ]
+    },
+    {
+      "level": "WARN",
+      "id": "no-footage",
+      "width": 1440,
+      "message": "No video anywhere on the page.",
+      "fix": "Look for one honest clip with scripts/assets.mjs --video (the place, the material, the process) and use it as a muted loop with a poster frame. Defend its absence only if no clip fits the subject."
+    }
+  ],
+  "prototypeChecks": 19,
+  "typescript": "passed",
+  "applicationBuild": "passed",
+  "physicalDevice": "not performed for this proposal"
+}

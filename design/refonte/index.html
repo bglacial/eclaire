@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="fr">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="Une nouvelle direction pour Éclaire : carte, étapes, pauses et guidage. Proposition interactive distincte de l’alpha.12."><title>Éclaire · Le chemin prend vie</title><link rel="stylesheet" href="presentation.css"></head>
+<body>
+<header class="nav"><a class="brand" href="#top">éclaire ↗</a><nav aria-label="Présentation"><a href="#essayer">Essayer</a><a href="#gestes">Parcours</a><a href="#choix">Les choix</a></nav></header>
+<main>
+  <section class="hero" id="top">
+    <div class="hero-field"><h1>Le chemin<br>prend vie.</h1><div class="hero-crop"><img src="assets/exploration.png" alt="Deux fronts réels, cyan et ambre, explorent le réseau Paris dans le prototype Éclaire" width="390" height="844" fetchpriority="high"></div></div>
+    <div class="hero-band"><p>Deux recherches éclairent les routes. Éclaire montre leur rencontre, puis le trajet retenu.</p><a class="action" href="#essayer">Essayer la proposition ↗</a></div>
+  </section>
+  <section class="play" id="essayer">
+    <div class="play-intro"><h2 class="reveal">Où va-t-on ?</h2><p class="reveal">Tapez un lieu de l’extrait Paris. Deux recherches éclairent les routes, puis le trajet se dessine.</p></div>
+    <form class="destination-form reveal" id="demo-form"><label class="sr-only" for="demo-destination">Destination depuis le Louvre</label><div class="destination-line"><input id="demo-destination" value="Panthéon" list="destinations" autocomplete="off" aria-describedby="demo-note"><button type="submit" class="arrow" aria-label="Calculer vers cette destination">↗</button></div><datalist id="destinations"><option value="Panthéon"><option value="Point zéro"><option value="Le Café Marly"></datalist></form>
+    <div class="examples reveal" aria-label="Exemples de destination"><button data-destination="Panthéon">Panthéon</button><button data-destination="Point zéro">Point zéro</button><button data-destination="Le Café Marly">Le Café Marly</button></div>
+    <p id="demo-note" class="reveal">Départ du Louvre. Vrai calcul local à Paris, sans GPS ni trafic. Le guidage se simule au clic.</p>
+    <div class="demo-window reveal"><iframe id="prototype" src="app.html?mode=result" title="Prototype interactif Éclaire, calcul et étapes à Paris" loading="lazy"></iframe></div>
+    <p class="demo-link reveal"><a href="app.html" target="_blank" rel="noopener">Ouvrir le prototype en plein écran ↗</a></p>
+  </section>
+  <section class="journey" id="gestes">
+    <div class="journey-title"><h2 class="reveal">Chaque geste<br>à sa place.</h2><p class="reveal">La carte reste le point de repère. Les commandes suivent ce que vous êtes en train de faire.</p></div>
+    <div class="journey-layout"><div class="journey-copy">
+      <article class="moment" data-screen="prepare"><h3 class="reveal">Préparer.</h3><p class="reveal">Une destination, un départ et une action claire. Le résultat ouvre le trajet sans masquer toute la carte.</p><img class="reveal" src="assets/prepare.png" alt="Préparation claire, saisie du Panthéon depuis le Louvre" width="390" height="844" loading="lazy"></article>
+      <article class="moment" data-screen="stops"><h3 class="reveal">Ajuster.</h3><p class="reveal">Ajouter, retirer, remettre dans l’ordre. Les étapes se modifient dans le même espace ; le trajet attend la validation.</p><img class="reveal" src="assets/stops.png" alt="Panneau des étapes avec Café Marly et Parking Hôtel de Ville, boutons de déplacement" width="390" height="844" loading="lazy"></article>
+      <article class="moment" data-screen="places"><h3 class="reveal">Faire une pause.</h3><p class="reveal">Voir le temps de détour avant d’ajouter un lieu. Une information utile à la décision, avec la mention d’estimation.</p><img class="reveal" src="assets/places.png" alt="Restaurants de l’extrait Paris comparés selon leur détour routier estimé" width="390" height="844" loading="lazy"></article>
+      <article class="moment" data-screen="guide"><h3 class="reveal">Rouler.</h3><p class="reveal">Une instruction dominante et une arrivée toujours visible. La nuit, la carte s’assombrit ; les commandes gardent leur place.</p><img class="reveal" src="assets/guide.png" alt="Guidage de nuit simulé, instruction et temps de parcours sur fond sombre" width="390" height="844" loading="lazy"></article>
+    </div><div class="sticky-stage" aria-hidden="true"><img id="stage-image" src="assets/prepare.png" alt="" width="390" height="844" loading="lazy"><span>Le même espace, quatre moments.</span></div></div>
+  </section>
+  <section class="choices" id="choix"><h2 class="reveal">Voir clair.<br>Aller loin.</h2><div class="command-layout"><div><label class="reveal" for="filter">Explorer les choix de conception</label><input class="reveal" id="filter" type="search" placeholder="Carte, étapes, signal…"><div id="commands" class="commands"></div><p id="empty" hidden>Aucun choix ne correspond à ce mot.</p></div><div class="choice-answer reveal" aria-live="polite"><h3 id="choice-title">La carte d’abord.</h3><p id="choice-copy">Un fond calme et un trajet orange. La menthe est réservée à l’action principale ; les deux couleurs du calcul gardent leur rôle d’explication.</p><p id="choice-limit">La palette de nuit est manuelle dans cette proposition.</p><a href="INTENTION.md">Lire les intentions et les limites ↗</a></div></div></section>
+  <section class="close"><h2 class="reveal">La route<br>vous attend.</h2><div class="close-info"><p class="reveal">L’alpha.12 contient les nouvelles étapes et les lieux sur le parcours. Cette nouvelle direction graphique reste une proposition à explorer.</p></div><div class="closing-name" aria-hidden="true">éclaire↗</div><a class="action reveal" href="https://github.com/bglacial/eclaire/releases/tag/v1.1.0-alpha.12">Télécharger l’alpha.12 ↗</a><footer><p>Proposition du 31 octobre 2026</p><p>Captures du prototype. Données © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, ODbL. Polices Big Shoulders et Public Sans, SIL OFL.</p><a href="#top">Revenir en haut ↑</a></footer></section>
+</main>
+<noscript><p>Les captures restent consultables. Le calcul interactif nécessite JavaScript et le serveur local du projet.</p></noscript>
+<script type="module" src="presentation.js"></script>
+</body></html>
