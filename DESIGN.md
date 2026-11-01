@@ -16,8 +16,10 @@ Carte sur toute la surface, marque et paramètres flottants en haut. Préparatio
 
 L’espace Étapes et lieux remplace visuellement le panneau courant sans arrêter la session de guidage. Deux vues permettent de modifier les étapes ou de comparer les lieux et leurs détours. Les changements de trajet restent soumis au calcul et à une confirmation ; l’annulation conserve le trajet actif.
 
+Les paramètres utilisent une roue dentée et un libellé visible dès 360 px. La page plein écran regroupe affichage, préférences de trajet et mises à jour. Le retour Carte reste visible au défilement ; le dialogue natif isole le focus et le restitue à la commande d’ouverture.
+
 En guidage portrait, instruction et résumé sont regroupés en bas. Le paysage répartit instruction et commandes sur les côtés pour dégager le centre. Le cadrage mesure les panneaux effectivement affichés et respecte les zones système. Attribution OSM toujours accessible. Carte PiP et Android Auto : route orange, véhicule menthe ; le PiP conserve ses composants natifs.
 
 ## Mouvement
 
-Conserver le moteur Canvas avec une lecture de trace d’environ deux secondes et une confirmation finale de 650 ms. Le calcul conserve sa durée propre ; recalculs GPS en 200 ms au plus. Transitions d’interface : 200 ms, `cubic-bezier(.23,1,.32,1)`, opacité et déplacement de 8 px. Pression : 160 ms, échelle .97. Aucun déplacement au clavier ; en mouvement réduit, conserver seulement les retours d’opacité. Pas de bibliothèque ajoutée ni de chorégraphie publicitaire au chargement du produit.
+Conserver le moteur Canvas avec une lecture de trace d’environ deux secondes et une confirmation finale de 650 ms. Le calcul conserve sa durée propre ; recalculs GPS en 200 ms au plus. Transitions d’interface : 200 ms, `cubic-bezier(.23,1,.32,1)`, opacité et déplacement de 8 px. Pression de l’action principale seulement : 160 ms, échelle .97. Les commandes répétées restent stables. Aucun déplacement au clavier ; en mouvement réduit, conserver seulement les retours d’opacité. Pas de bibliothèque ajoutée ni de chorégraphie publicitaire au chargement du produit.

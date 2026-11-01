@@ -59,7 +59,20 @@ async function calculate(page) {
 try {
   const web = await setup();
   assert.equal(await web.page.locator('#end').inputValue(), '');
+  assert.equal(await web.page.locator('#swap').isDisabled(), true);
   await web.page.locator('#settings-open').click();
+  assert.equal(await web.page.locator('#settings-page').evaluate(element => element.matches(':modal')), true);
+  assert.equal(await web.page.locator('#settings-open').getAttribute('aria-expanded'), 'true');
+  assert.equal(await web.page.evaluate(() => document.activeElement.id), 'settings-close');
+  for (let i = 0; i < 8; i++) {
+    await web.page.keyboard.press('Tab');
+    assert.equal(await web.page.evaluate(() => document.activeElement === document.body || !!document.activeElement.closest('#settings-page')), true, 'Le focus ne doit pas atteindre la carte derrière les paramètres');
+  }
+  await web.page.keyboard.press('Escape');
+  assert.equal(await web.page.locator('#settings-page').isVisible(), false);
+  assert.equal(await web.page.evaluate(() => document.activeElement.id), 'settings-open');
+  await web.page.locator('#settings-open').press('Enter');
+  assert.equal(await web.page.locator('#settings-page').isVisible(), true);
   assert.equal(await web.page.locator('#settings-version').textContent(), version);
   assert.equal(await web.page.locator('#updates-last-check').textContent(), 'Jamais');
   await web.page.locator('#settings-avoid-motorways').check();
@@ -77,9 +90,31 @@ try {
   assert.equal(await web.page.locator('#updates-reload').isVisible(), false);
   assert.equal(await web.page.locator('#updates-check').isEnabled(), true);
   await web.page.locator('#settings-close').click();
+  assert.equal(await web.page.locator('#settings-open').getAttribute('aria-expanded'), 'false');
+  for (const width of [320, 360, 390, 844]) {
+    await web.page.setViewportSize({ width, height: 844 });
+    const header = await web.page.evaluate(() => {
+      const box = selector => document.querySelector(selector).getBoundingClientRect();
+      return { fits: box('.brand').right <= box('#settings-open').left && box('#settings-open').right <= box('#help').left && box('#help').right <= innerWidth, labelled: getComputedStyle(document.querySelector('#settings-open span')).display !== 'none' };
+    });
+    assert.equal(header.fits, true, `Commandes sans chevauchement à ${width}px`);
+    assert.equal(header.labelled, width >= 360);
+  }
+  await web.page.setViewportSize({ width: 390, height: 844 });
+  await web.page.locator('#zoom-in').click();
+  for (const reducedMotion of ['no-preference', 'reduce']) {
+    await web.page.emulateMedia({ reducedMotion });
+    assert.equal(await web.page.locator('#zoom-in').evaluate(element => getComputedStyle(element).transitionProperty), 'opacity');
+    assert.equal(await web.page.locator('#launch').evaluate(element => getComputedStyle(element).transitionProperty.includes('transform')), reducedMotion === 'no-preference');
+  }
+  await web.page.emulateMedia({ reducedMotion: 'no-preference' });
+  await web.page.keyboard.press('Tab');
+  assert.equal(await web.page.locator('#zoom-in').evaluate(element => getComputedStyle(element).transitionDuration), '0s');
+  check('UX : paramètres isolés au clavier, retour du focus, en-tête 320–844px et mouvement réduit');
   check('Paramètres Web : version, évitements, date, version disponible et erreur réseau explicite');
   assert.equal(await web.page.locator('#road-preferences, #avoid-motorways, #avoid-tolls').count(), 0);
   await choose(web.page, 'end', 'Panthéon');
+  assert.equal(await web.page.locator('#swap').isDisabled(), false);
   if (await web.page.locator('.planner-options').getAttribute('open') === null) await web.page.locator('.planner-options > summary').click();
   await web.page.locator('.saved-places summary').click();
   await web.page.locator('#save-home').click();

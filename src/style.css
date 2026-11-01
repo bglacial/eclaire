@@ -61,14 +61,14 @@ main { height: 100vh; height: 100dvh; position: relative; isolation: isolate; ov
 #map.picking { cursor: crosshair; }
 .planner, .trip-workspace, .navigation { position: absolute; z-index: 520; bottom: calc(32px + var(--safe-bottom)); left: calc(24px + var(--safe-left)); right: calc(24px + var(--safe-right)); padding: 20px 24px; background: var(--surface); border-radius: 20px; max-height: calc(65dvh - var(--safe-top) - var(--safe-bottom)); overflow-y: auto; overscroll-behavior: contain; overflow-wrap: anywhere; }
 .planner.is-collapsed { padding: 8px 12px; }
-#route-panel-toggle { width: auto; margin: 0 0 10px; min-height: 36px; padding: 6px 12px; font-size: 13px; }
+#route-panel-toggle { width: auto; margin: 0 0 10px; min-height: 48px; padding: 6px 12px; font-size: 13px; }
 .planner.is-collapsed #route-panel-toggle { margin: 0; width: 100%; }
 .planner-intro { margin-bottom: 16px; }
 .planner-intro p { font-size: 14px; color: var(--muted); margin-bottom: 4px; }
 h1 { font-size: 1.65rem; line-height: 1.2; font-weight: 600; letter-spacing: -0.045em; }
 h2 { font-size: 1.45rem; letter-spacing: -0.035em; line-height: 1.25; }
 h3 { font-size: 1.125rem; line-height: 1.3; }
-#route-editor > summary { display: flex; align-items: center; justify-content: space-between; min-height: 40px; padding: 8px 12px; border-radius: 10px; background: var(--raised); font-size: 14px; list-style: none; }
+#route-editor > summary { display: flex; align-items: center; justify-content: space-between; min-height: 48px; padding: 8px 12px; border-radius: 10px; background: var(--raised); font-size: 14px; list-style: none; }
 #route-editor > summary::-webkit-details-marker { display: none; }
 #route-editor[open] > summary { margin-bottom: 16px; }
 .planner:has(#route-result[hidden]) #route-editor > summary { display: none; }
@@ -89,11 +89,11 @@ input[type=search]::-webkit-search-cancel-button { display: none; }
 .pick { background: transparent; width: 44px; height: 44px; }
 .pick.selected { color: var(--action-ink); background: var(--accent); }
 .location-actions { display: flex; align-items: center; gap: 12px; grid-column: 1; }
-.location-button, .swap-button { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; padding: 0 4px; font-size: 14px; background: transparent; color: var(--muted); border-radius: 10px; }
+.location-button, .swap-button { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 0 4px; font-size: 14px; background: transparent; color: var(--muted); border-radius: 10px; }
 .location-button { flex: 1; justify-content: flex-start; }
 .location-button[aria-busy=true] { color: var(--ink); }
 .planner-options { grid-column: 1; }
-.planner-options > summary, .saved-places > summary, .result-itinerary > summary { padding: 8px 0; min-height: 40px; font-size: 14px; }
+.planner-options > summary, .saved-places > summary, .result-itinerary > summary { padding: 12px 0; min-height: 48px; font-size: 14px; }
 .options-content { padding: 12px 0; }
 .saved-places p { margin: 8px 0; font-size: 14px; color: var(--muted); }
 .saved-places .location-actions { flex-wrap: wrap; }
@@ -207,13 +207,17 @@ input[type=search]::-webkit-search-cancel-button { display: none; }
 .about dd { margin: 4px 0 0; color: var(--muted); }
 .about summary { min-height: 48px; display: list-item; padding: 12px 0; }
 .about details a { color: var(--ink); }
-.settings-page { position: fixed; z-index: 900; inset: 0; overflow-y: auto; overscroll-behavior: contain; background: var(--ground); padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left); }
-.settings-header { display: flex; align-items: center; gap: 16px; max-width: 640px; margin: auto; padding: 20px; }
+.settings-page { position: fixed; z-index: 900; inset: 0; width: 100%; max-width: none; height: 100%; max-height: none; margin: 0; border: 0; overflow-y: auto; overscroll-behavior: contain; color: var(--ink); background: var(--ground); padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left); }
+.settings-header { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 20px; max-width: 640px; margin: auto; padding: 16px 24px; background: var(--ground); border-bottom: 1px solid var(--line); }
 .settings-header h2 { font-size: 1.5rem; }
-.settings-content { max-width: 640px; margin: auto; padding: 8px 24px 40px; }
-.settings-content label { display: block; font-weight: 600; margin-top: 24px; }
+.settings-back { flex-shrink: 0; }
+.settings-content { max-width: 640px; margin: auto; padding: 16px 24px 40px; }
+.settings-content label { display: block; font-weight: 600; margin-top: 16px; }
 .settings-content label:first-child { margin-top: 0; }
 .settings-content p { margin: 6px 0 12px; color: var(--muted); line-height: 1.5; font-size: 14px; }
+.settings-group { margin-top: 28px; padding-top: 24px; border-top: 1px solid var(--line); }
+.settings-intro + .settings-group { margin-top: 20px; padding-top: 0; border-top: 0; }
+.settings-group .road-preferences { margin-top: 24px; }
 .settings-content select { width: 100%; min-height: 48px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); }
 .settings-content .settings-version { margin-top: 32px; display: flex; justify-content: space-between; gap: 12px; padding-top: 20px; }
 .settings-content .settings-version strong { color: var(--ink); }
@@ -273,6 +277,7 @@ main:has(.trip-workspace:not([hidden])) .planner, main:has(.trip-workspace:not([
   .brand { font-size: 36px; padding: 10px 12px; }
   .header-right .help-button { width: 48px; padding: 0; }
   .help-button span { display: none; }
+  .header-right { gap: 6px; }
   .planner, .trip-workspace, .navigation { left: calc(12px + var(--safe-left)); right: calc(12px + var(--safe-right)); padding: 16px; bottom: calc(30px + var(--safe-bottom)); }
   .planner { max-height: calc(66dvh - var(--safe-bottom)); }
   .route-form { display: flex; flex-direction: column; gap: 8px; }
@@ -281,9 +286,7 @@ main:has(.trip-workspace:not([hidden])) .planner, main:has(.trip-workspace:not([
   .planner-intro { margin-bottom: 12px; }
   .planner-footer { display: none; }
   .launch-row { padding: 0; }
-  .planner-options > summary { min-height: 36px; padding: 6px 0; }
-  .location-actions { min-height: 36px; }
-  .location-button, .swap-button { min-height: 36px; }
+  .location-actions { min-height: 48px; }
   .map-tools { top: calc(88px + var(--safe-top)); right: calc(16px + var(--safe-right)); }
   .map-tools .icon-button { width: 44px; height: 44px; }
   .zoom-controls { gap: 6px; }
@@ -304,7 +307,6 @@ main:has(.trip-workspace:not([hidden])) .planner, main:has(.trip-workspace:not([
   .metrics strong { font-size: 1.65rem; }
   #route-edit-stops, #compare-routes, #replay { grid-column: auto; grid-row: auto; font-size: 13px; padding: 10px; }
   #navigation-start { grid-column: 1 / -1; grid-row: auto; }
-  .result-itinerary > summary { min-height: 32px; padding: 4px 0; }
   .navigation { display: block; max-height: calc(64dvh - var(--safe-bottom)); }
   #navigation-next { margin-bottom: 16px; }
   #navigation-turn-distance { font-size: 2.4rem; }
@@ -328,6 +330,14 @@ main:has(.trip-workspace:not([hidden])) .planner, main:has(.trip-workspace:not([
   .about { padding: 24px; }
   .is-exploring .planner { padding: 12px; }
   .is-exploring .exploring-heading { display: none; }
+}
+@media (min-width: 360px) and (max-width: 800px) {
+  #settings-open { width: auto; padding: 0 12px; }
+  #settings-open span { display: inline; }
+}
+@media (max-width: 380px) {
+  .topbar { gap: 8px; }
+  .brand { font-size: 32px; gap: 6px; padding: 10px; }
 }
 @media (max-height: 700px) and (max-width: 800px) {
   .planner-intro { display: none; }
@@ -357,9 +367,10 @@ html:not(.keyboard-input) .about::backdrop { transition: opacity 200ms var(--eas
   html:not(.keyboard-input) .about[open] { opacity: 0; transform: scale(0.97); }
   html:not(.keyboard-input) .about[open]::backdrop { opacity: 0; }
 }
+html:not(.keyboard-input) button { transition: opacity 160ms var(--ease-out); }
 @media (prefers-reduced-motion: no-preference) {
-  html:not(.keyboard-input) button { transition: transform 160ms var(--ease-out), opacity 160ms var(--ease-out); }
-  html:not(.keyboard-input) button:active { transform: scale(0.97); }
+  html:not(.keyboard-input) button.primary { transition: transform 160ms var(--ease-out), opacity 160ms var(--ease-out); }
+  html:not(.keyboard-input) button.primary:active { transform: scale(0.97); }
 }
 @media (prefers-reduced-motion: reduce) {
   html:not(.keyboard-input) .route-result, html:not(.keyboard-input) .trip-workspace, html:not(.keyboard-input) .settings-page, html:not(.keyboard-input) .about { transition-property: opacity, display, overlay; transform: none; }

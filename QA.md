@@ -1,5 +1,13 @@
 # Recette Éclaire France
 
+## Alpha.14 · paramètres et interactions · 1er novembre 2026
+
+- 65 tests TypeScript réussis et compilation web de production réussie.
+- 19 scénarios navigateur simulés réussis, dont confinement du focus dans les paramètres, fermeture par Échap, retour du focus, en-tête sans chevauchement à 320/360/390/844 px et adaptation des mouvements au clavier et à la préférence système.
+- APK `1.1.0-alpha.14`, versionCode 17 : construction réussie et 32 tests unitaires Android sans échec. Signature identique à l’alpha.13, alignement vérifié, API publique HTTPS et version embarquée vérifiées, harnais GPS absent.
+- Ressources iOS synchronisées, build 17, compilation pour simulateur réussie sans signature. Aucun IPA ni distribution TestFlight.
+- Pas de nouvel essai sur émulateur Android, de validation sur téléphone physique ni de trajet routier réel pour cette alpha. La publication GitHub ne déploie pas le site public.
+
 Vérifications réalisées le 25 octobre 2026. La recette du navigateur ne constitue pas une validation sur téléphone Android réel.
 
 ## Automatisé

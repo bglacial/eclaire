@@ -40,7 +40,8 @@ const paths: Record<string, string> = {
   check: '<path d="m5 12 4 4L19 6"/>',
   stop: '<rect x="6" y="6" width="12" height="12" rx="1"/>',
   layers: '<path d="m12 3 10 6-10 6L2 9l10-6Zm-9 11 9 5 9-5M3 18l9 5 9-5"/>',
-  settings: '<circle cx="12" cy="12" r="3"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M19 5l-1.5 1.5m-11 11L5 19"/>',
+  settings: '<path d="M10 2h4l.5 3 2 1 3-.9 2 3.5-2.3 2v2.8l2.3 2-2 3.5-3-.9-2 1-.5 3h-4l-.5-3-2-1-3 .9-2-3.5 2.3-2v-2.8l-2.3-2 2-3.5 3 .9 2-1 .5-3Z"/><circle cx="12" cy="12" r="3"/>',
+  back: '<path d="m12 5-7 7 7 7M5 12h14"/>',
 };
 const icon = (name: string) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name]}</svg>`;
 
@@ -49,7 +50,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <header class="topbar">
     <a class="brand" href="./" aria-label="Éclaire, accueil" translate="no">éclaire<span class="brand-symbol" aria-hidden="true">↗</span></a>
     <span class="tagline">Deux points. Un chemin qui s’éclaire.</span>
-    <div class="header-right"><span class="edition">France <span>métropolitaine & Corse</span></span><button class="help-button" id="settings-open" aria-label="Paramètres" hidden>${icon('settings')}<span>Paramètres</span></button><button class="help-button" id="help" aria-label="Aide et fonctionnement" aria-haspopup="dialog" aria-expanded="false" aria-controls="about">${icon('info')}<span>Aide</span></button></div>
+    <div class="header-right"><span class="edition">France <span>métropolitaine & Corse</span></span><button class="help-button" id="settings-open" aria-label="Paramètres" aria-haspopup="dialog" aria-expanded="false" aria-controls="settings-page" hidden>${icon('settings')}<span>Paramètres</span></button><button class="help-button" id="help" aria-label="Aide et fonctionnement" aria-haspopup="dialog" aria-expanded="false" aria-controls="about">${icon('info')}<span>Aide</span></button></div>
   </header>
   <main>
     <div id="map" aria-label="Carte interactive de France. Utilisez les boutons Choisir sur la carte, puis touchez une route." role="region"></div>
@@ -64,7 +65,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
 
         <div class="field-wrap end-field"><span class="field-point" aria-hidden="true">B</span><div class="field-body"><label for="end">Arrivée</label><input id="end" name="end" type="search" spellcheck="false" placeholder="Une adresse, un lieu…" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="end-results" /></div><button class="icon-button pick" data-pick="end" title="Choisir l’arrivée sur la carte" aria-label="Choisir l’arrivée sur la carte">${icon('pin')}</button><div id="end-results" class="suggestions" role="listbox" aria-label="Suggestions d’arrivée" hidden></div></div>
       </div>
-      <div class="location-actions"><button id="geolocate" class="location-button" aria-label="Utiliser ma position comme départ">${icon('locate')} Ma position</button><button id="swap" class="swap-button" aria-label="Permuter le départ et l’arrivée">${icon('swap')} Permuter</button></div>
+      <div class="location-actions"><button id="geolocate" class="location-button" aria-label="Utiliser ma position comme départ">${icon('locate')} Ma position</button><button id="swap" class="swap-button" aria-label="Permuter le départ et l’arrivée" disabled>${icon('swap')} Permuter</button></div>
       <details class="planner-options"><summary>Options du trajet</summary><div class="options-content"><div class="field-wrap via-field"><span class="field-point" aria-hidden="true">•</span><div class="field-body"><label for="via">Étape facultative</label><input id="via" name="via" type="search" spellcheck="false" placeholder="Une adresse, un lieu…" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="via-results" /></div><button class="icon-button pick" data-pick="via" title="Choisir l’étape sur la carte" aria-label="Choisir l’étape sur la carte">${icon('pin')}</button><div id="via-results" class="suggestions" role="listbox" aria-label="Suggestions d’étape" hidden></div></div>
       <details class="saved-places"><summary>Destinations enregistrées</summary><p>Choisissez une arrivée puis ajoutez-la aux favoris ou enregistrez-la comme domicile ou travail. Ces lieux et les dernières arrivées restent sur cet appareil.</p><div class="location-actions"><button id="save-home" class="setting-button">Enregistrer comme domicile</button><button id="save-work" class="setting-button">Enregistrer comme travail</button></div><button id="save-favorite" class="setting-button">Ajouter l’arrivée aux favoris</button><div id="saved-places-list"></div><button id="clear-recent" class="setting-button">Effacer les destinations récentes</button></details>
       <fieldset class="criteria"><legend>Critère du trajet</legend><label><input type="radio" name="criterion" value="time" checked><span>${icon('time')} Le plus rapide</span></label><label><input type="radio" name="criterion" value="distance"><span>${icon('route')} Le plus court</span></label></fieldset></div></details>
@@ -94,14 +95,19 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <dialog id="about" class="about" aria-labelledby="about-title"><button id="close-about" class="icon-button" aria-label="Fermer l’aide">${icon('close')}</button><h2 id="about-title">Comment ça marche</h2><p>Un front cyan part de A, un front ambre part de B. Chaque branche suit une route réellement explorée.</p><p>La première rencontre ne suffit pas. Le trajet apparaît quand le calcul confirme qu’aucun meilleur chemin n’existe dans le réseau chargé.</p><dl><div><dt>Le plus court</dt><dd>Minimise la longueur des routes.</dd></div><div><dt>Le plus rapide</dt><dd>Minimise le temps estimé selon les vitesses OSM, sans trafic en direct.</dd></div></dl><button id="lite" class="setting-button" aria-pressed="false">${icon('layers')} Mode léger</button><p>Réduit les halos et le nombre de fronts pour les appareils modestes. La réduction des animations suit aussi votre préférence système.</p><details><summary>Données et limites</summary><p>Le service France utilise une recherche bidirectionnelle exacte. Les grandes traces sont échantillonnées pour préserver le téléphone ; le calcul et le trajet final restent complets. Sans service, seule la démo Paris utilise le calcul embarqué.</p><p id="data-info"></p><p>Les points sont raccordés à une route accessible à 2 km maximum. Les accès privés et de desserte sont exclus. Certaines restrictions OSM ne sont pas prises en charge. Vérifiez l’accès final et respectez la signalisation.</p><p>Le guidage GPS expérimental est réservé à l’application mobile sur téléphone. Le GPS continue écran verrouillé jusqu’à l’arrivée ou à Quitter. Aucun trafic en direct n’est intégré.</p><a href="/data/provenance.json" target="_blank" rel="noopener">Provenance de la démo Paris</a></details><details><summary>Position et confidentialité</summary><p>Le GPS reste sur l’appareil pendant le suivi. Le calcul d’un trajet depuis votre position transmet ce point au service routier configuré, ainsi que les recalculs. L’IGN, Photon (Komoot / OpenStreetMap) et l’Annuaire des entreprises reçoivent le texte recherché. Pour les lieux le long du parcours, Photon reçoit un à trois points de la zone recherchée, sans nom ni compte utilisateur. Le fournisseur des tuiles reçoit les zones consultées. Aucun historique GPS n’est enregistré par l’application.</p></details></dialog>
     <div id="loading" class="loading" role="status"><span class="loading-bolt">${icon('bolt')}</span><strong>Chargement de la carte</strong><p>Chargement des données OpenStreetMap…</p><button id="retry" class="primary" hidden>Réessayer</button></div>
   </main>
-  <section id="settings-page" class="settings-page" aria-labelledby="settings-title" hidden>
-    <header class="settings-header"><button id="settings-close" class="icon-button" aria-label="Retour à la carte">${icon('close')}</button><h2 id="settings-title">Paramètres</h2></header>
+  <dialog id="settings-page" class="settings-page" aria-labelledby="settings-title" hidden>
+    <header class="settings-header"><button id="settings-close" class="setting-button settings-back" aria-label="Retour à la carte">${icon('back')}<span>Carte</span></button><h2 id="settings-title">Paramètres</h2></header>
     <div class="settings-content">
-      <label for="settings-theme">Apparence</label><p>Choisissez le thème ou suivez celui de l’appareil.</p><select id="settings-theme"><option value="auto">Automatique</option><option value="light">Clair</option><option value="dark">Sombre</option></select>
-      <label for="settings-criterion">Trajet préféré</label><p>Ce choix s’applique aux prochains trajets.</p><select id="settings-criterion"><option value="time">Le plus rapide</option><option value="distance">Le plus court</option></select>
-      <fieldset class="road-preferences settings-avoidance"><legend>Éviter sur les trajets</legend><label><input id="settings-avoid-motorways" type="checkbox"> Les autoroutes</label><label><input id="settings-avoid-tolls" type="checkbox"> Les péages</label><p>Ces choix sont mémorisés. Selon les données OpenStreetMap, parfois incomplètes. Service France requis, sans secours Paris avec ces options.</p></fieldset>
-      <fieldset id="settings-pip" class="road-preferences settings-avoidance" hidden><legend>Fenêtre flottante</legend><label><input id="settings-pip-automatic" type="checkbox"> Ouvrir automatiquement pendant le guidage</label><p>La fenêtre reste aussi accessible depuis le guidage.</p></fieldset>
-      <section class="settings-updates" aria-labelledby="settings-updates-title"><h3 id="settings-updates-title">Mises à jour</h3>
+      <p class="settings-intro">Vos préférences sont enregistrées sur cet appareil.</p>
+      <section class="settings-group" aria-labelledby="settings-display-title"><h3 id="settings-display-title">Affichage</h3>
+        <label for="settings-theme">Thème</label><p id="settings-theme-hint">Automatique suit l’apparence de votre appareil.</p><select id="settings-theme" aria-describedby="settings-theme-hint"><option value="auto">Automatique</option><option value="light">Clair</option><option value="dark">Sombre</option></select>
+      </section>
+      <section class="settings-group" aria-labelledby="settings-route-title"><h3 id="settings-route-title">Préférences de trajet</h3>
+        <label for="settings-criterion">Critère par défaut</label><p id="settings-criterion-hint">S’applique aussi au trajet en préparation.</p><select id="settings-criterion" aria-describedby="settings-criterion-hint"><option value="time">Le plus rapide</option><option value="distance">Le plus court</option></select>
+        <fieldset class="road-preferences settings-avoidance" aria-describedby="settings-avoidance-hint"><legend>Routes à éviter</legend><label><input id="settings-avoid-motorways" type="checkbox"> Les autoroutes</label><label><input id="settings-avoid-tolls" type="checkbox"> Les péages</label><p id="settings-avoidance-hint">Modifier ces choix nécessite un nouveau calcul du trajet. Les évitements utilisent les données OpenStreetMap, parfois incomplètes, et nécessitent le service France. La démo Paris ne les prend pas en charge.</p></fieldset>
+      </section>
+      <fieldset id="settings-pip" class="road-preferences settings-group" hidden><legend>Fenêtre flottante</legend><label><input id="settings-pip-automatic" type="checkbox"> Ouvrir automatiquement pendant le guidage</label><p>La fenêtre reste aussi accessible depuis le guidage.</p></fieldset>
+      <section class="settings-updates settings-group" aria-labelledby="settings-updates-title"><h3 id="settings-updates-title">Mises à jour</h3>
         <button id="updates-check" class="setting-button">Rechercher les mises à jour</button>
         <p>Dernière recherche : <time id="updates-last-check">Jamais</time></p>
         <p id="updates-status" role="status" aria-live="polite"></p>
@@ -109,7 +115,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       </section>
       <p class="settings-version">Version <strong id="settings-version">${__APP_VERSION__}</strong></p><p id="settings-error" role="status" hidden></p>
     </div>
-  </section>`;
+  </dialog>`;
 
 // Keyboard interactions remain immediate, including actions that reveal a result.
 document.addEventListener('keydown', () => document.documentElement.classList.add('keyboard-input'));
@@ -173,16 +179,21 @@ const roadPreferences = () => ({ avoidMotorways: $<HTMLInputElement>('settings-a
     date.dateTime = timestamp ? new Date(timestamp).toISOString() : '';
   };
   try { updateDate(localStorage.getItem('eclaire.updateAttempt')); } catch { updateDate(0); }
+  const settingsPage = $<HTMLDialogElement>('settings-page');
   $('settings-open').addEventListener('click', () => {
-    $('settings-page').hidden = false; $('settings-close').focus();
+    settingsPage.hidden = false; settingsPage.showModal(); settingsPage.scrollTop = 0;
+    $('settings-open').setAttribute('aria-expanded', 'true'); $('settings-close').focus();
     if (android) void device.getUpdateStatus().then(state => updateDate(state.lastCheckedAt)).catch(() => { $('updates-status').textContent = 'La date de la dernière recherche est indisponible.'; });
   });
-  const closeSettings = () => { $('settings-page').hidden = true; $('settings-open').focus(); };
+  const closeSettings = () => {
+    settingsPage.close(); settingsPage.hidden = true;
+    $('settings-open').setAttribute('aria-expanded', 'false'); $('settings-open').focus();
+  };
   $('settings-close').addEventListener('click', closeSettings);
   window.addEventListener('eclaire-back', event => {
     if (!$('settings-page').hidden) { event.preventDefault(); closeSettings(); }
   });
-  document.addEventListener('keydown', event => { if (event.key === 'Escape' && !$('settings-page').hidden) closeSettings(); });
+  settingsPage.addEventListener('cancel', event => { event.preventDefault(); closeSettings(); });
   $('updates-reload').addEventListener('click', () => location.reload());
   $('updates-check').addEventListener('click', async () => {
     const button = $<HTMLButtonElement>('updates-check');
@@ -261,6 +272,7 @@ function notice(message: string, kind: 'error' | 'info' = 'info') {
 
 function updateLaunch() {
   $('app').classList.toggle('is-exploring', playing);
+  $<HTMLButtonElement>('swap').disabled = !selections.start || !selections.end;
   launch.disabled = !workerReady || !selections.start || !selections.end || (!!inputs.via.value.trim() && !selections.via);
   launch.innerHTML = playing ? `${icon('stop')}<span>Interrompre l’exploration</span>` : `${icon('bolt')}<span>Éclairer la route</span>${icon('arrow')}`;
 }
