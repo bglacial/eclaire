@@ -161,6 +161,8 @@ npm run build
 npm run android:sync
 ```
 
+Avec Vite lancé (`npm run dev`) et Playwright disponible, `node tests/user-feedback-ui.mjs` vérifie les parcours d’interface et `node tests/map-interactions-ui.mjs` couvre les paramètres Android, le cadrage du calcul et de la relecture, ainsi que l’alignement du tracé pendant un pincement tactile. Le service national et le GPS Android sont simulés dans ces recettes.
+
 Résultats du 26 octobre 2026 : **31 tests TypeScript et 8 tests Java réussis**. Les tests couvrent notamment l’oracle Bellman-Ford sur 400 graphes pour les deux critères, 200 comparaisons landmarks/Dijkstra avec restrictions de virage, le protocole national, la trace bornée (ordre des fronts et résultat exact conservés), l’interruption, les manœuvres françaises et le suivi GPS simulé. Le build TypeScript/Vite est vérifié séparément de la préparation du graphe national et du déploiement.
 
 Mesures historiques du service local sans accélération, sans trafic :
@@ -230,6 +232,8 @@ Ces temps sont mesurés sur le Mac local et ne prédisent pas les temps du Raspb
 
 
 ## Préversions alpha
+
+La version **1.1.0-alpha.16** corrige le débordement du réglage Android de fenêtre flottante, recadre immédiatement le trajet au lancement d’un calcul ou d’une relecture et garde le tracé attaché à la carte pendant les gestes à deux doigts. Elle inclut aussi la nouvelle identité menthe, encre et orange : logo, favicons, icônes Android/iOS et écrans de lancement.
 
 La version **1.1.0-alpha.15** affine la préparation du trajet : titre et texte d’aide hiérarchisés, champs sur fonds distincts, sélection sur carte de 48 px, ouverture des options explicite et bouton de calcul pleine largeur sur mobile. Les paramètres sont regroupés sur des surfaces opaques. Les parcours de calcul et de guidage restent inchangés.
 

@@ -21,12 +21,16 @@ export class ExplorationRenderer {
   private interruptedAt = 0;
   private frame = 0;
   private dpr = 1;
+  private origin?: L.LatLng;
+  private zoom = 0;
+  private bearing = 0;
   private moving = false;
   private reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
   lite = (navigator as Navigator & { deviceMemory?: number }).deviceMemory !== undefined && (navigator as Navigator & { deviceMemory?: number }).deviceMemory! <= 4;
 
   constructor(private map: L.Map, private roads: RoadGeometry) {
     this.canvas.className = 'exploration-canvas leaflet-zoom-hide';
+    this.canvas.style.transformOrigin = '0 0';
     this.canvas.setAttribute('aria-hidden', 'true');
     const pane = map.getPane('exploration') || map.createPane('exploration');
     pane.style.zIndex = '450'; pane.style.pointerEvents = 'none'; pane.append(this.canvas);
@@ -35,7 +39,8 @@ export class ExplorationRenderer {
     theme.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
     map.on('unload', () => theme.disconnect());
     map.on('movestart', () => { this.moving = true; });
-    map.on('moveend zoomend resize', () => { this.moving = false; this.project(); });
+    map.on('zoom rotate', () => this.transform());
+    map.on('moveend zoomend rotateend resize', () => { this.moving = false; this.project(); });
     matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', e => { this.reduced = e.matches; this.wake(); });
     this.project();
   }
@@ -69,9 +74,17 @@ export class ExplorationRenderer {
     ctx.beginPath(); for (const id of ids) this.trace(ctx, this.edgeLine(id)); ctx.stroke(); ctx.globalAlpha = 1;
   }
 
+  private transform() {
+    if (!this.origin) return;
+    const position = this.map.latLngToContainerPoint(this.origin).subtract(L.DomUtil.getPosition(this.map.getPane('mapPane')!));
+    const scale = this.map.getZoomScale(this.map.getZoom(), this.zoom);
+    this.canvas.style.transform = `translate(${position.x}px, ${position.y}px) rotate(${(this.map.getBearing?.() ?? 0) - this.bearing}deg) scale(${scale})`;
+  }
+
   private project() {
     const size = this.map.getSize();
-    L.DomUtil.setPosition(this.canvas, this.map.containerPointToLayerPoint([0, 0]));
+    this.origin = this.map.containerPointToLatLng([0, 0]);
+    this.zoom = this.map.getZoom(); this.bearing = this.map.getBearing?.() ?? 0; this.transform();
     this.dpr = this.lite ? 1 : Math.min(devicePixelRatio, 2);
     for (const canvas of [this.canvas, this.visitedCanvas]) { canvas.width = size.x * this.dpr; canvas.height = size.y * this.dpr; }
     this.canvas.style.width = `${size.x}px`; this.canvas.style.height = `${size.y}px`;

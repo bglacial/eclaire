@@ -224,6 +224,7 @@ input[type=search]::-webkit-search-cancel-button { display: none; }
 .settings-group .road-preferences { margin-top: 24px; }
 .settings-content > fieldset.settings-group { padding: 24px; }
 .settings-content > fieldset.settings-group > legend { float: left; width: 100%; margin-bottom: 12px; }
+.settings-content > fieldset.settings-group > legend + * { clear: both; }
 .settings-content select { width: 100%; min-height: 48px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); }
 .settings-content .settings-version { margin-top: 32px; display: flex; justify-content: space-between; gap: 12px; padding-top: 20px; }
 .settings-content .settings-version strong { color: var(--ink); }

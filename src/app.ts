@@ -407,7 +407,7 @@ function fitPoints() {
     return edge.geometry?.map(p => L.latLng(p[0], p[1])) ?? [routeGeometry.nodes[edge.from], routeGeometry.nodes[edge.to]].map(p => L.latLng(p.lat, p.lon));
   })) : L.latLngBounds([markers.start!.getLatLng(), markers.end!.getLatLng(), ...(markers.via ? [markers.via.getLatLng()] : [])]);
   map.fitBounds(bounds, {
-    paddingTopLeft: padding.topLeft, paddingBottomRight: padding.bottomRight, maxZoom: 16, animate: !renderer.reducedMotion && !document.documentElement.classList.contains('keyboard-input'),
+    paddingTopLeft: padding.topLeft, paddingBottomRight: padding.bottomRight, maxZoom: 16, animate: !playing && !renderer.reducedMotion && !document.documentElement.classList.contains('keyboard-input'),
   });
 }
 
@@ -857,7 +857,7 @@ $('replay').addEventListener('click', () => {
   renderer.clear(); cursor = 0; carry = 0; playing = true;
   $('route-result').hidden = true; $('playback').hidden = false; $('playback').classList.remove('complete');
   $('playback-title').textContent = 'Relecture de l’exploration…';
-  $('playback-progress').style.transform = 'scaleX(0)'; updateLaunch();
+  $('playback-progress').style.transform = 'scaleX(0)'; updateLaunch(); fitPoints();
   lastTick = performance.now(); playbackFrame = requestAnimationFrame(tick);
 });
 $('compare-routes').addEventListener('click', () => { void compareRoutes(); });

@@ -2,6 +2,9 @@
 import { GuidanceProgress, type NavigationRoute } from '../src/navigation';
 import type { NativeGuidanceState } from '../src/native-guidance';
 import { metres } from '../src/graph';
+import L from 'leaflet';
+
+L.Map.addInitHook(function (this: L.Map) { Object.assign(window, { testMap: this }); });
 
 const nativeListeners = new Map<string, (state: NativeGuidanceState) => void>();
 let nativeProgress: GuidanceProgress | undefined;
