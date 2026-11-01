@@ -57,7 +57,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <section class="planner" aria-labelledby="planner-title">
       <button id="route-panel-toggle" class="setting-button" aria-expanded="true" aria-controls="planner-content" hidden>Réduire le panneau trajet</button>
       <div id="planner-content">
-      <div class="planner-intro"><p>Un départ, une envie.</p><h1 id="planner-title">Où va-t-on ?</h1></div>
+      <div class="planner-intro"><h1 id="planner-title">Où va-t-on ?</h1><p>Choisissez votre arrivée, la carte fait le lien.</p></div>
       <div class="exploring-heading"><h2>La route prend vie.</h2><p>Deux recherches, depuis le départ et l’arrivée.</p></div>
       <details id="route-editor" open><summary>Modifier le trajet ${icon('route')}</summary><div class="route-form">
       <div class="location-fields">

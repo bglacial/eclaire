@@ -23,3 +23,7 @@ En guidage portrait, instruction et résumé sont regroupés en bas. Le paysage 
 ## Mouvement
 
 Conserver le moteur Canvas avec une lecture de trace d’environ deux secondes et une confirmation finale de 650 ms. Le calcul conserve sa durée propre ; recalculs GPS en 200 ms au plus. Transitions d’interface : 200 ms, `cubic-bezier(.23,1,.32,1)`, opacité et déplacement de 8 px. Pression de l’action principale seulement : 160 ms, échelle .97. Les commandes répétées restent stables. Aucun déplacement au clavier ; en mouvement réduit, conserver seulement les retours d’opacité. Pas de bibliothèque ajoutée ni de chorégraphie publicitaire au chargement du produit.
+
+## Affinage de la préparation
+
+Le titre précède une seule phrase d’aide. Les champs de trajet se distinguent par leur fond, avec des commandes de sélection de 48 px. Options du trajet utilise une surface discrète et un indicateur d’ouverture. Sur mobile, l’action de calcul occupe la largeur disponible. Les groupes de paramètres se séparent par des surfaces opaques et de l’espace.

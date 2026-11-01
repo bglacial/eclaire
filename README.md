@@ -231,6 +231,8 @@ Ces temps sont mesurés sur le Mac local et ne prédisent pas les temps du Raspb
 
 ## Préversions alpha
 
+La version **1.1.0-alpha.15** affine la préparation du trajet : titre et texte d’aide hiérarchisés, champs sur fonds distincts, sélection sur carte de 48 px, ouverture des options explicite et bouton de calcul pleine largeur sur mobile. Les paramètres sont regroupés sur des surfaces opaques. Les parcours de calcul et de guidage restent inchangés.
+
 La version **1.1.0-alpha.14** clarifie l’accès aux paramètres avec une roue dentée et un libellé visible dès 360 px. Les réglages sont regroupés, le retour Carte reste accessible au défilement et le focus clavier reste dans les paramètres jusqu’à leur fermeture. Les commandes tactiles de préparation et de lecture du trajet sont agrandies. Les boutons de zoom et les commandes répétées restent stables ; la pression animée est réservée aux actions principales. Permuter devient disponible lorsque les deux points sont choisis.
 
 La version **1.1.0-alpha.10** ajoute le mode image dans l’image Android (Android 8 et plus, sur les appareils compatibles). Pendant un guidage GPS actif, revenir à l’accueil ou ouvrir une autre application affiche une fenêtre flottante avec la carte et la prochaine indication. La fenêtre reprend le service GPS et les indications vocales existants ; toucher la fenêtre puis l’action d’agrandissement rend l’application à nouveau visible. La fonction dépend de l’autorisation « Picture-in-picture » d’Android. Le recalcul après une sortie de route nécessite toujours de revenir à l’application complète.
