@@ -10,6 +10,10 @@ Neutres teintés en OKLCH. Menthe `oklch(.91 .15 139)` pour l’action principal
 
 Public Sans, hébergée dans l’application, sert les libellés et les données à une échelle fixe. Big Shoulders 800 est réservée à la marque. Les licences SIL OFL sont livrées avec les polices. Chiffres tabulaires pour les métriques, cibles de commande de 48 px et arrondis de 10 à 20 px.
 
+## Identité et icônes
+
+Le symbole source `public/logo.svg` dessine un trajet encre qui rejoint une flèche vers le nord-est, avec un point de départ orange sur une tuile menthe. Il accompagne le mot-symbole Big Shoulders et le chargement de la carte. Le favicon, les icônes web et Apple, les icônes Android (classiques, adaptatives et monochromes) et iOS ainsi que les écrans de lancement reprennent ce dessin. Les icônes masquables et iOS ont un fond menthe opaque ; les écrans de lancement utilisent le fond clair de l’application. Conserver la zone centrale de sécurité des icônes adaptatives Android.
+
 ## Composition
 
 Carte sur toute la surface, marque et paramètres flottants en haut. Préparation dans un panneau bas sur téléphone et un ruban horizontal sur ordinateur. Départ et arrivée restent visibles ; étape facultative, critère et favoris sont regroupés sous Options du trajet. Le résultat met l’arrivée, la durée et la distance au premier plan.
