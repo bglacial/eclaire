@@ -109,10 +109,11 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       <fieldset id="settings-pip" class="road-preferences settings-group" hidden><legend>Fenêtre flottante</legend><label><input id="settings-pip-automatic" type="checkbox"> Ouvrir automatiquement pendant le guidage</label><p>La fenêtre reste aussi accessible depuis le guidage.</p></fieldset>
       <section class="settings-updates settings-group" aria-labelledby="settings-updates-title"><h3 id="settings-updates-title">Mises à jour</h3>
         <button id="updates-check" class="setting-button">Rechercher les mises à jour</button>
-        <p>Dernière recherche : <time id="updates-last-check">Jamais</time></p>
+        <p id="updates-history">Dernière recherche : <time id="updates-last-check">Jamais</time></p>
         <p id="updates-status" role="status" aria-live="polite"></p>
         <button id="updates-reload" class="setting-button" hidden>Actualiser l’application</button>
       </section>
+      <p><a href="https://eclaire.nriault.fr/confidentialite.html" target="_blank" rel="noopener">Politique de confidentialité</a></p>
       <p class="settings-version">Version <strong id="settings-version">${__APP_VERSION__}</strong></p><p id="settings-error" role="status" hidden></p>
     </div>
   </dialog>`;
@@ -183,7 +184,14 @@ const roadPreferences = () => ({ avoidMotorways: $<HTMLInputElement>('settings-a
   $('settings-open').addEventListener('click', () => {
     settingsPage.hidden = false; settingsPage.showModal(); settingsPage.scrollTop = 0;
     $('settings-open').setAttribute('aria-expanded', 'true'); $('settings-close').focus();
-    if (android) void device.getUpdateStatus().then(state => updateDate(state.lastCheckedAt)).catch(() => { $('updates-status').textContent = 'La date de la dernière recherche est indisponible.'; });
+    if (android) void device.getUpdateStatus().then(state => {
+      updateDate(state.lastCheckedAt);
+      if (state.status === 'store') {
+        $('updates-check').textContent = 'Ouvrir Google Play';
+        $('updates-history').hidden = true;
+        $('updates-status').textContent = 'Les mises à jour sont distribuées par Google Play.';
+      }
+    }).catch(() => { $('updates-status').textContent = 'La date de la dernière recherche est indisponible.'; });
   });
   const closeSettings = () => {
     settingsPage.close(); settingsPage.hidden = true;
@@ -203,6 +211,7 @@ const roadPreferences = () => ({ avoidMotorways: $<HTMLInputElement>('settings-a
       if (android) {
         const state = await device.checkForUpdates(); updateDate(state.lastCheckedAt);
         const messages = {
+          store: 'Les mises à jour sont distribuées par Google Play.',
           available: 'Une mise à jour est disponible. Confirmez son installation dans la fenêtre Android.',
           current: 'Cette version est à jour.',
           checking: 'Une recherche est déjà en cours. Réessayez dans un instant.',

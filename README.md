@@ -86,6 +86,20 @@ La version nationale exige le service, une page HTTPS ou localhost, et un accès
 
 À partir de l’alpha 1.1.0-alpha.2, Android recherche automatiquement les releases GitHub publiées, y compris les préversions, à l’ouverture ou à la reprise de l’application, au plus une fois toutes les six heures après une vérification réussie. Un tag seul ne suffit pas : la release doit contenir un APK nommé `eclaire-<version>-debug.apk`. En cas de nouvelle version, l’utilisateur choisit de la télécharger. L’application vérifie le nom du paquet, le numéro de version Android et la signature avant d’ouvrir l’installateur ; Android demande la confirmation finale et, si nécessaire, l’autorisation d’installer des applications depuis Éclaire. L’alpha.1 ne possède pas encore ce mécanisme : installer l’alpha.2 une première fois manuellement. La clé de signature doit rester la même entre les releases pour permettre les mises à jour. À partir de l’alpha.6, le bouton **Rechercher les mises à jour** des paramètres force une recherche immédiate. La date de dernière tentative est affichée, y compris après un échec réseau signalé explicitement.
 
+### Bundle Google Play
+
+La variante `debug` conserve les mises à jour APK GitHub décrites ci-dessus. La variante `release` utilise exclusivement Google Play : elle ne contient ni le téléchargeur d’APK ni la permission `REQUEST_INSTALL_PACKAGES`. Son bouton de mise à jour ouvre sa fiche Google Play.
+
+La signature release lit `.play-signing.local/keystore.properties` à la racine du dépôt : `storeFile` (chemin absolu du keystore), `storePassword`, `keyAlias`, `keyPassword`. Ce dossier est exclu de Git. Sauvegarder le keystore et ses mots de passe dans un emplacement sécurisé ; ne pas les publier ni les remplacer entre deux uploads. Sans ce fichier, le bundle produit n’est pas signé.
+
+```sh
+VITE_ROUTING_API_URL=https://eclaire.nriault.fr/api npm run android:sync
+cd android
+./gradlew testDebugUnitTest testReleaseUnitTest bundleRelease
+```
+
+Sortie : `android/app/build/outputs/bundle/release/app-release.aab`. Le test `PlayDistributionTest` vérifie l’absence de permission d’installation d’APK et l’ouverture de Google Play. Un APK debug installé précédemment ne peut pas être remplacé par la version Play si leurs signatures diffèrent ; sa désinstallation efface les préférences locales. La première release Play nécessite aussi la fiche du Store, la politique de confidentialité, les déclarations et les testeurs dans la console. Une compilation réussie ne valide pas le GPS sur appareil réel ni l’acceptation Google.
+
 ## Guidage GPS
 
 Le guidage est réservé à l’**application mobile sur téléphone** : il n’est pas disponible sur le site web, même depuis un téléphone, ni sur tablette. Dans l’application, calculer un trajet national, puis toucher **Démarrer le guidage GPS** et autoriser la localisation précise. Le service fournit les manœuvres GraphHopper en français sur le parcours effectivement calculé : virages, bifurcations et ronds-points selon les données importées. Le guidage affiche la prochaine manœuvre, sa distance, la distance restante et une durée estimée **sans trafic**. Il ne donne pas d’assistance de choix de voie de circulation.

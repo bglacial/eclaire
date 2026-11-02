@@ -3,7 +3,7 @@ import { isPhoneDevice } from './location';
 
 export const canGuide = (platform: string, phone: boolean) => (platform === 'android' || platform === 'ios') && phone;
 export const isMobileApp = () => canGuide(Capacitor.getPlatform(), isPhoneDevice());
-export interface UpdateStatus { lastCheckedAt: number; checking: boolean; status?: 'current' | 'available' | 'checking' | 'error' }
+export interface UpdateStatus { lastCheckedAt: number; checking: boolean; status?: 'current' | 'available' | 'checking' | 'error' | 'store' }
 export const device = registerPlugin<{
   setKeepScreenOn(options: { enabled: boolean }): Promise<void>;
   getPipSettings(): Promise<{ supported: boolean; automatic: boolean }>;
