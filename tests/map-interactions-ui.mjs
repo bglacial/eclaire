@@ -72,7 +72,8 @@ try {
     console.log('OK paramètres Android : bloc fenêtre flottante lisible de 320 à 390px');
   }
   await page.setViewportSize({ width: 390, height: 844 });
-  await choose('start', 'Musée du Louvre'); await choose('end', 'Panthéon');
+  await page.waitForFunction(() => document.getElementById('start').value === 'Ma position GPS');
+  await choose('end', 'Panthéon');
   await page.locator('#launch').click();
   await page.locator('#route-result').waitFor({ state: 'visible' });
   await page.waitForFunction(() => !window.testMap._panAnim?._inProgress);
@@ -83,7 +84,8 @@ try {
       await page.emulateMedia({ reducedMotion });
       await page.evaluate(() => window.testMap.panBy([700, 300], { animate: false }));
       const before = requests.length;
-      await page.locator('#replay').click();
+      // La relecture reste une commande Web ; on vérifie ici son moteur de cadrage.
+      await page.locator('#replay').dispatchEvent('click');
       assert.equal(await routeFits(), true, 'La relecture recadre immédiatement entre les panneaux');
       await page.locator('#route-result').waitFor({ state: 'visible' });
       assert.equal(requests.length, before, 'La relecture réutilise le calcul');

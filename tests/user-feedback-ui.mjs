@@ -12,7 +12,8 @@ const health = { status: 'ready', edges: 1, nodes: 2, bounds: [41.3, -5.3, 51.2,
 async function setup({ native = false, gps = 'normal', width = 390, height = 844 } = {}) {
   const context = await browser.newContext({ viewport: { width, height }, geolocation: { latitude: 45.7578, longitude: 4.832, accuracy: 8 }, permissions: ['geolocation'] });
   const page = await context.newPage();
-  const requests = [], errors = [];
+  const requests = [], errors = [], parisRequests = [];
+  page.on('request', request => { if (request.url().includes('/data/paris.json')) parisRequests.push(request.url()); });
   let lastResponse;
   page.on('pageerror', e => errors.push(e.message));
   await page.route('https://tile.openstreetmap.org/**', route => route.abort());
@@ -41,10 +42,11 @@ async function setup({ native = false, gps = 'normal', width = 390, height = 844
       },
     } });
   }, gps);
-  await page.goto(`${base}/${native ? 'tests/gps-ui.html' : ''}`);
+  await page.goto(`${base}/${native ? `tests/gps-ui.html?gps=${gps}` : ''}`);
   await page.locator('#start').waitFor({ state: 'attached' });
   await page.locator('#loading').waitFor({ state: 'hidden' });
   if (gps === 'normal') await page.waitForFunction(() => document.getElementById('start').value === 'Ma position GPS');
+  assert.deepEqual(parisRequests, [], 'Le démarrage ne doit pas charger le réseau Paris');
   return { page, context, requests, errors, response: () => lastResponse };
 }
 async function choose(page, side, query) {
@@ -54,7 +56,7 @@ async function choose(page, side, query) {
 }
 async function calculate(page) {
   await page.locator('#launch').click();
-  await page.locator('#route-panel-toggle').waitFor({ state: 'visible' });
+  await page.locator('#route-result').waitFor({ state: 'visible' });
 }
 try {
   const web = await setup();
@@ -308,9 +310,183 @@ try {
   assert.deepEqual(delayed.errors, []); await delayed.context.close();
   check('GPS tardif : ne remplace pas un départ choisi entre-temps');
 
+  const pending = await setup({ native: true, gps: 'delayed' });
+  await pending.page.locator('#gps-fixture').evaluate(el => { el.style.display = 'none'; });
+  assert.ok(await pending.page.evaluate(() => window.testMap.getZoom() < 10), 'La vue initiale couvre la France');
+  await choose(pending.page, 'end', 'Lyon');
+  assert.equal(await pending.page.locator('#launch').isDisabled(), true);
+  await pending.page.getByRole('button', { name: 'Livrer la position', exact: true, includeHidden: true }).dispatchEvent('click');
+  await pending.page.waitForFunction(() => document.getElementById('start').value === 'Ma position GPS');
+  assert.equal(await pending.page.locator('#end').inputValue(), 'Lyon');
+  assert.equal(await pending.page.locator('#notice').isVisible(), false);
+  await calculate(pending.page);
+  assert.equal(pending.requests[0].start.lat, 48.8573375);
+  assert.deepEqual(pending.errors, []); await pending.context.close();
+  check('Mobile : arrivée choisie pendant le GPS conservée, puis calcul depuis la vraie position');
+
+  const noGps = await setup({ native: true, gps: 'denied' });
+  await noGps.page.locator('#gps-fixture').evaluate(el => { el.style.display = 'none'; });
+  await noGps.page.getByRole('button', { name: 'Réessayer le GPS', exact: true }).waitFor();
+  assert.equal(await noGps.page.locator('#launch').isDisabled(), true);
+  await choose(noGps.page, 'end', 'Lyon');
+  assert.equal(await noGps.page.locator('#gps-retry').isVisible(), true);
+  await noGps.page.getByRole('button', { name: 'Autoriser GPS', exact: true, includeHidden: true }).dispatchEvent('click');
+  await noGps.page.getByRole('button', { name: 'Réessayer le GPS', exact: true }).click();
+  await noGps.page.waitForFunction(() => document.getElementById('start').value === 'Ma position GPS');
+  assert.equal(await noGps.page.locator('#notice').isVisible(), false);
+  assert.deepEqual(noGps.errors, []); await noGps.context.close();
+  check('Mobile : GPS refusé sans départ de substitution, nouvelle tentative possible');
+
+  const compact = await setup({ native: true });
+  const compactPage = compact.page;
+  await compactPage.locator('#gps-fixture').evaluate(el => { el.style.display = 'none'; });
+  await choose(compactPage, 'end', 'Panthéon');
+  let releaseRoute;
+  const heldRoute = new Promise(resolve => { releaseRoute = resolve; });
+  const holdRoute = async route => { await heldRoute; await route.fallback(); };
+  await compactPage.route('**/api/route', holdRoute);
+  await compactPage.locator('#launch').click();
+  await compactPage.locator('.is-exploring').waitFor();
+  assert.equal(await compactPage.locator('.map-legend').isVisible(), false);
+  releaseRoute();
+  await compactPage.locator('#route-result').waitFor({ state: 'visible' });
+  await compactPage.unroute('**/api/route', holdRoute);
+  for (const selector of ['#route-panel-toggle', '.result-heading', '#result-title', '.result-itinerary', '#result-explanation', '#compare-routes', '#comparison-status', '#choose-alternative', '#replay', '#navigation-availability', '#route-edit-stops', '.planner-footer']) {
+    assert.equal(await compactPage.locator(selector).isVisible(), false, `${selector} absent du résumé mobile`);
+  }
+  assert.match(await compactPage.locator('#distance').textContent(), /km$/);
+  assert.notEqual(await compactPage.locator('#duration').textContent(), '');
+  assert.equal(await compactPage.locator('#navigation-start').textContent(), ' Démarrer le guidage');
+  const edit = compactPage.getByRole('button', { name: 'Modifier le trajet', exact: true });
+  assert.equal((await edit.textContent()).trim(), '');
+  assert.equal(await edit.getAttribute('aria-expanded'), 'false');
+  assert.equal(await edit.locator('svg').count(), 1);
+  for (const size of [{ width: 320, height: 640 }, { width: 390, height: 844 }, { width: 844, height: 390 }]) {
+    await compactPage.setViewportSize(size);
+    const panel = await compactPage.locator('.planner').boundingBox(), editBox = await edit.boundingBox();
+    assert.ok(panel.height <= 150, `Résumé mobile compact à ${size.width}px : ${panel.height}px`);
+    assert.ok(editBox.width >= 48 && editBox.height >= 48, 'Cible de modification de 48px');
+    assert.equal(await compactPage.locator('.planner').evaluate(el => el.scrollHeight <= el.clientHeight + 1 && el.scrollWidth <= el.clientWidth + 1), true, 'Résumé sans défilement');
+    const visibleText = await compactPage.locator('.planner').innerText();
+    assert.equal(visibleText.replace(await compactPage.locator('#duration').textContent(), '').replace(await compactPage.locator('#distance').textContent(), '').replace('Démarrer le guidage', '').trim(), '', 'Seuls durée, kilomètres et guidage sont affichés');
+  }
+  await compactPage.setViewportSize({ width: 390, height: 844 });
+  await compactPage.screenshot({ path: '/tmp/eclaire-mobile-compact-result.png' });
+  await edit.focus(); await compactPage.keyboard.press('Enter');
+  assert.equal(await compactPage.locator('#end').isVisible(), true);
+  assert.equal(await compactPage.locator('#start').isVisible(), false);
+  assert.equal(await compactPage.locator('#route-result').isVisible(), false);
+  const closeEdit = compactPage.getByRole('button', { name: 'Revenir au résumé du trajet', exact: true });
+  assert.equal(await closeEdit.getAttribute('aria-expanded'), 'true');
+  await closeEdit.click();
+  assert.equal(await compactPage.locator('#route-result').isVisible(), true);
+  assert.equal(compact.requests.length, 1, 'Ouvrir et fermer la modification conserve le trajet');
+  await edit.click(); await calculate(compactPage);
+  assert.equal(compact.requests.length, 2, 'Le recalcul revient au résumé compact');
+  assert.equal(await compactPage.locator('#route-panel-toggle').isVisible(), false);
+  await compactPage.locator('#navigation-start').click();
+  await compactPage.waitForFunction(() => window.testNativeStarts.length === 1);
+  assert.deepEqual(compact.errors, []); await compact.context.close();
+  check('Mobile : légende masquée, résumé compact portrait/paysage, modification par icône et démarrage du guidage');
+
+  const controls = await setup({ native: true });
+  const controlPage = controls.page;
+  await controlPage.locator('#gps-fixture').evaluate(el => { el.style.display = 'none'; });
+  await choose(controlPage, 'end', 'Panthéon'); await calculate(controlPage);
+  await controlPage.locator('#navigation-start').click();
+  await controlPage.waitForFunction(() => window.testNativeStarts.length === 1 && document.getElementById('navigation-speed').textContent !== '—');
+  assert.equal(await controlPage.locator('#navigation-pip').count(), 0);
+  assert.doesNotMatch(await controlPage.locator('#navigation').innerText(), /Guidage expérimental|Position rapprochée|Fenêtre flottante/);
+  const voiceButton = controlPage.locator('#navigation-voice'), quitButton = controlPage.getByRole('button', { name: 'Quitter le guidage', exact: true });
+  for (const button of [voiceButton, quitButton]) {
+    assert.equal((await button.textContent()).trim(), '');
+    assert.equal(await button.locator('svg').count(), 1);
+  }
+  for (const size of [{ width: 320, height: 640 }, { width: 390, height: 844 }, { width: 844, height: 390 }]) {
+    await controlPage.setViewportSize(size);
+    for (const button of [voiceButton, quitButton]) {
+      const box = await button.boundingBox();
+      assert.equal(box.width, 48); assert.equal(box.height, 48);
+    }
+    assert.equal(await controlPage.locator('#navigation').evaluate(el => el.scrollWidth <= el.clientWidth + 1), true, 'Commandes sans débordement horizontal');
+  }
+  await controlPage.setViewportSize({ width: 390, height: 844 });
+  await controlPage.screenshot({ path: '/tmp/eclaire-guidage-apres.png' });
+  assert.equal(await voiceButton.getAttribute('aria-label'), 'Activer la voix');
+  assert.equal(await voiceButton.locator('.voice-off').isVisible(), true);
+  await voiceButton.focus(); await controlPage.keyboard.press('Enter');
+  assert.equal(await voiceButton.getAttribute('aria-label'), 'Désactiver la voix');
+  assert.equal(await voiceButton.getAttribute('aria-pressed'), 'true');
+  assert.equal(await voiceButton.locator('.voice-on').isVisible(), true);
+  assert.equal(await voiceButton.locator('.voice-off').isVisible(), false);
+  await controlPage.getByRole('button', { name: 'Désactiver la voix', exact: true }).click();
+  assert.equal(await voiceButton.getAttribute('aria-pressed'), 'false');
+  await controlPage.evaluate(() => window.testPublishGuidance({ active: true, status: 'on-route', voice: true }));
+  assert.equal(await voiceButton.getAttribute('aria-label'), 'Désactiver la voix');
+  assert.equal(await voiceButton.locator('.voice-on').isVisible(), true);
+  await controlPage.evaluate(() => {
+    const origin = window.testNativeStarts.at(-1).route.points[0];
+    window.testPublishGuidance({ active: true, status: 'on-route', fix: { lat: origin.lat, lon: origin.lon + 0.0006, accuracy: 5, speed: 5, timestamp: Date.now() + 10 } });
+  });
+  await controlPage.waitForFunction(() => document.getElementById('navigation-speed').textContent === '18');
+  assert.equal(await controlPage.locator('#navigation-status').isVisible(), false, 'Pas de message de rapprochement à environ 45 mètres du trajet');
+  assert.equal(await controlPage.locator('#navigation-status').textContent(), '');
+  await controlPage.evaluate(() => window.testPublishGuidance({ active: true, status: 'reroute-failed', nativeRerouting: true, message: 'Recalcul indisponible.' }));
+  assert.equal(await controlPage.locator('#navigation-status').isVisible(), true);
+  assert.equal(await controlPage.locator('#navigation-status').textContent(), 'Recalcul indisponible.');
+  await quitButton.click();
+  assert.equal(await controlPage.locator('#navigation').isVisible(), false);
+  assert.ok(await controlPage.evaluate(() => window.testNativeStops > 0));
+  assert.deepEqual(controls.errors, []); await controls.context.close();
+  check('Guidage : commandes voix/sortie à icône, voix synchronisée, textes retirés et erreurs visibles');
+
+  const information = await setup({ native: true, width: 320, height: 640 });
+  const infoPage = information.page;
+  await infoPage.locator('#gps-fixture').evaluate(el => { el.style.display = 'none'; });
+  const infoUrl = infoPage.url();
+  await infoPage.locator('#help').click();
+  assert.equal(await infoPage.locator('#about').evaluate(el => el.matches(':modal')), true);
+  const infoBackHandled = await infoPage.evaluate(() => !window.dispatchEvent(new Event('eclaire-back', { cancelable: true })));
+  assert.equal(infoBackHandled, true, 'Retour Android doit fermer Information sans quitter la carte');
+  await infoPage.locator('#about').waitFor({ state: 'hidden' });
+  assert.equal(infoPage.url(), infoUrl);
+  assert.equal(await infoPage.evaluate(() => document.activeElement.id), 'help');
+  await infoPage.locator('#help').click();
+  assert.equal(await infoPage.locator('#about a[href*="provenance.json"]').count(), 0, 'Aucun lien vers le fichier JSON qui quitte l’interface');
+  await infoPage.locator('#about details').evaluateAll(details => details.forEach(detail => { detail.open = true; }));
+  const infoText = await infoPage.locator('#about').innerText();
+  assert.doesNotMatch(infoText, /front cyan|front ambre|nœuds|arêtes|bidirectionnelle|échantillonnées|GraphHopper|démo Paris/);
+  assert.match(infoText, /sans trafic en direct/);
+  assert.match(infoText, /OpenStreetMap/);
+  assert.match(infoText, /historique GPS/);
+  await infoPage.locator('#lite').click();
+  assert.equal(await infoPage.locator('#lite').getAttribute('aria-pressed'), 'true');
+  await infoPage.locator('#about').evaluate(el => { el.scrollTop = el.scrollHeight; });
+  const backBox = await infoPage.locator('#close-about').boundingBox();
+  assert.ok(backBox.y >= 0 && backBox.y + backBox.height <= 640, 'Retour Carte reste visible en bas de page');
+  assert.equal(await infoPage.locator('#about').evaluate(el => el.scrollWidth <= el.clientWidth + 1), true);
+  await infoPage.locator('#close-about').click(); await infoPage.locator('#about').waitFor({ state: 'hidden' });
+  await infoPage.locator('#help').click(); await infoPage.keyboard.press('Escape');
+  await infoPage.locator('#about').waitFor({ state: 'hidden' });
+  assert.equal(await infoPage.locator('#help').getAttribute('aria-expanded'), 'false');
+  assert.equal(await infoPage.evaluate(() => document.activeElement.id), 'help');
+  await infoPage.locator('#zoom-in').click();
+  await choose(infoPage, 'end', 'Panthéon'); await calculate(infoPage);
+  assert.equal(information.requests.length, 1, 'Le calcul reste utilisable après fermeture de la page');
+  assert.deepEqual(information.errors, []); await information.context.close();
+  check('Information : textes grand public, Retour Android/Carte/Échap et aucun lien JSON bloquant');
+
   const guidance = await setup({ native: true });
   const g = guidance.page;
   await g.locator('#gps-fixture').evaluate(el => { el.style.display = 'none'; });
+  assert.equal(await g.locator('#start').isVisible(), false);
+  assert.equal(await g.locator('#start').isDisabled(), true);
+  assert.equal(await g.locator('#geolocate').isVisible(), false);
+  assert.equal(await g.locator('#swap').isVisible(), false);
+  assert.equal(await g.locator('#notice').isVisible(), false);
+  assert.equal(await g.locator('.point-icon:has(.point-marker.start)').evaluate(el => el.classList.contains('leaflet-marker-draggable')), false);
+  await g.screenshot({ path: '/tmp/eclaire-mobile-gps.png' });
+  check('Mobile : départ GPS imposé, commandes retirées, aucun texte Départ GPS ni repère déplaçable');
   await g.locator('#end').fill('Volkswagen le mans');
   await g.locator('#end-results [role=option]').filter({ hasText: 'VOLKSWAGEN LE MANS' }).waitFor();
   assert.match(await g.locator('#end-results [role=option]').first().textContent(), /20 BOULEVARD RENE CASSIN/);
@@ -383,7 +559,7 @@ try {
   const handled = await page.evaluate(() => !window.dispatchEvent(new Event('eclaire-back', { cancelable: true })));
   assert.equal(handled, true); assert.equal(await page.locator('#settings-page').isVisible(), false);
   assert.equal(await page.evaluate(() => window.dispatchEvent(new Event('eclaire-back', { cancelable: true }))), true);
-  await choose(page, 'start', 'Musée du Louvre'); await choose(page, 'end', 'Panthéon'); await calculate(page);
+  await choose(page, 'end', 'Panthéon'); await calculate(page);
   await page.getByRole('button', { name: 'GPS Lyon', exact: true, includeHidden: true }).dispatchEvent('click');
   await page.locator('#navigation-start').click();
   await page.waitForFunction(() => document.getElementById('gps-watch-count').textContent.startsWith('1 suivi'));

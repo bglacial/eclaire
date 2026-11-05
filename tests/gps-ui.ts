@@ -49,7 +49,7 @@ const watches = new Map<number, { success: PositionCallback; error?: PositionErr
 let identifier = 0;
 let gps = { latitude: 48.8573375, longitude: 2.3467217, accuracy: 5 };
 let speed = 0, heading: number | null = null;
-let denied = false;
+let denied = new URLSearchParams(location.search).get('gps') === 'denied';
 let serviceMode = 'réel';
 const realFetch = window.fetch.bind(window);
 window.fetch = async (input, init) => {
@@ -60,7 +60,7 @@ window.fetch = async (input, init) => {
   }
   return realFetch(input, init);
 };
-let delayPosition = false;
+let delayPosition = new URLSearchParams(location.search).get('gps') === 'delayed';
 const pendingPositions: (() => void)[] = [];
 const position = () => ({ timestamp: Date.now(), coords: { ...gps, altitude: null, altitudeAccuracy: null, speed, heading } }) as GeolocationPosition;
 const permissionError = { code: 1, message: 'Refus simulé', PERMISSION_DENIED: 1, POSITION_UNAVAILABLE: 2, TIMEOUT: 3 } as GeolocationPositionError;

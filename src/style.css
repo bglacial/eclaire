@@ -75,6 +75,7 @@ h3 { font-size: 1.125rem; line-height: 1.3; }
 .planner:has(#route-result:not([hidden])) .planner-intro, .planner:has(#route-editor[open]) #route-result { display: none; }
 .route-form { display: grid; grid-template-columns: minmax(0, 1fr) 290px; gap: 10px 24px; }
 .location-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.location-fields:has(.start-field[hidden]) { grid-template-columns: 1fr; }
 .field-wrap { position: relative; display: grid; grid-template-columns: 24px minmax(0, 1fr) 48px; align-items: center; gap: 10px; min-width: 0; background: var(--raised); border: 0; border-radius: 12px; min-height: 68px; padding: 7px 6px 7px 12px; }
 .field-wrap:focus-within { outline: 2px solid var(--route); outline-offset: 0; }
 .field-point, .endpoint-badge { display: inline-grid; place-items: center; width: 24px; height: 24px; flex-shrink: 0; border-radius: 50%; color: var(--surface); background: var(--ink); font-size: 13px; font-weight: 600; }
@@ -158,7 +159,9 @@ input[type=search]::-webkit-search-cancel-button { display: none; }
 .navigation .primary { width: 100%; margin: 8px 0; }
 .navigation-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .navigation-actions button { flex: 1 1 100px; min-height: 48px; border-radius: 10px; background: var(--raised); font-size: 14px; padding: 10px; }
-.navigation-bottom > small { display: block; font-size: 12px; line-height: 1.4; color: var(--muted); margin-top: 12px; }
+.navigation-actions .icon-button { flex: 0 0 48px; padding: 0; border-radius: 50%; }
+#navigation-voice .voice-on, #navigation-voice[aria-pressed=true] .voice-off { display: none; }
+#navigation-voice[aria-pressed=true] .voice-on { display: block; }
 .navigation-attribution { display: none; }
 .is-guiding .planner, .is-guiding .map-legend, .is-guiding #playback, .is-guiding #france, .is-guiding #fit { display: none; }
 .suggestions { grid-column: 1 / -1; position: relative; margin: 4px 0 0; z-index: 5; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px; max-height: 220px; overflow-y: auto; }
@@ -201,10 +204,13 @@ input[type=search]::-webkit-search-cancel-button { display: none; }
 #playback-percent { margin-left: auto; font-size: 13px; font-variant-numeric: tabular-nums; }
 .playback-track { position: absolute; bottom: 0; left: 0; width: 100%; height: 3px; background: var(--raised); }
 .playback-track span { display: block; width: 100%; height: 100%; background: var(--route); transform: scaleX(0); transform-origin: left; }
-.about { overscroll-behavior: contain; position: fixed; inset: 0; margin: auto; width: min(560px, calc(100% - 32px)); max-height: calc(100dvh - 48px); overflow-y: auto; border: 0; border-radius: 20px; padding: 32px; color: var(--ink); background: var(--surface); }
+.about { overscroll-behavior: contain; position: fixed; inset: 0; margin: auto; width: min(560px, calc(100% - 32px)); max-height: calc(100dvh - 48px); overflow-y: auto; border: 0; border-radius: 20px; padding: 0; color: var(--ink); background: var(--surface); }
 .about::backdrop { background: oklch(0.2 0.014 155 / 0.45); }
-.about > button:first-child { position: absolute; right: 12px; top: 12px; }
-.about h2 { font-size: 1.75rem; margin: 24px 0; }
+.about-header { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 16px; padding: 16px 24px; background: var(--surface); border-bottom: 1px solid var(--line); }
+.about-header h2 { font-size: 1.125rem; margin: 0; }
+.about-content { padding: 0 24px 24px; }
+.about h3 { margin-top: 24px; }
+.about #lite { margin-top: 12px; }
 .about p, .about dl { font-size: 16px; line-height: 1.6; margin-top: 16px; }
 .about dl { display: grid; gap: 16px; margin: 24px 0; }
 .about dt { font-weight: 600; }
@@ -320,10 +326,8 @@ main:has(.trip-workspace:not([hidden])) .planner, main:has(.trip-workspace:not([
   .navigation-metrics { gap: 8px; }
   .navigation-metrics strong { font-size: 1.3rem; }
   .navigation-metrics span { font-size: 12px; }
-  .navigation-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 10px; }
+  .navigation-actions { gap: 6px; margin-top: 10px; }
   .navigation-actions button { font-size: 13px; padding: 8px; }
-  .navigation-actions #navigation-edit-stops { grid-column: 1 / -1; }
-  .navigation-bottom > small { font-size: 11px; line-height: 1.35; margin-top: 8px; }
   .navigation-attribution { display: block; margin-top: 6px; font-size: 10px; color: var(--muted); }
   .is-guiding .leaflet-control-attribution { display: none; }
   .trip-workspace-header { gap: 10px; }
@@ -335,10 +339,25 @@ main:has(.trip-workspace:not([hidden])) .planner, main:has(.trip-workspace:not([
   #trip-places li > button { grid-column: 2; grid-row: 1 / 3; width: auto; max-width: 110px; }
   .settings-content { padding-inline: 16px; }
   .settings-group { padding: 20px; }
-  .about { padding: 24px; }
+  .about-header { gap: 12px; padding: 12px 16px; }
+  .about-content { padding: 0 20px 20px; }
   .is-exploring .planner { padding: 12px; }
   .is-exploring .exploring-heading { display: none; }
 }
+/* Le résumé mobile laisse la carte visible et garde l’édition dans le formulaire existant. */
+.is-mobile-app .map-legend { display: none; }
+.is-mobile-app .planner:has(#route-result:not([hidden])) { padding: 12px; }
+.is-mobile-app .route-result { margin: 0; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.is-mobile-app .route-result > :not(.metrics):not(#navigation-start),
+.is-mobile-app .metrics span,
+.is-mobile-app .planner:has(#route-result:not([hidden])) .planner-footer,
+.is-mobile-app .planner:has(#route-result:not([hidden])) #notice:not(.error) { display: none; }
+.is-mobile-app .route-result:has(#navigation-start[hidden]) #navigation-availability { display: block; }
+.is-mobile-app .metrics { grid-column: 1; grid-row: 1; min-height: 48px; padding-right: 60px; gap: 8px 20px; align-items: center; flex-wrap: wrap; }
+.is-mobile-app .metrics strong { font-size: 1.4rem; }
+.is-mobile-app #navigation-start { grid-column: 1; grid-row: 2; }
+.is-mobile-app #route-editor > summary { width: 48px; height: 48px; padding: 0; justify-content: center; border-radius: 50%; }
+.is-mobile-app .planner:has(#route-result:not([hidden])) #route-editor:not([open]) > summary { position: absolute; top: 12px; right: 12px; }
 @media (min-width: 360px) and (max-width: 800px) {
   #settings-open { width: auto; padding: 0 12px; }
   #settings-open span { display: inline; }
@@ -359,7 +378,7 @@ main:has(.trip-workspace:not([hidden])) .planner, main:has(.trip-workspace:not([
   .is-guiding #navigation-next, .is-guiding .navigation-bottom { position: absolute; background: var(--surface); padding: 16px; max-height: calc(100dvh - var(--safe-top) - var(--safe-bottom) - 24px); overflow-y: auto; pointer-events: auto; border-radius: 16px; }
   .is-guiding #navigation-next { top: calc(12px + var(--safe-top)); left: 0; width: min(35vw, 300px); }
   .is-guiding .navigation-bottom { right: 0; bottom: calc(12px + var(--safe-bottom)); width: min(35vw, 300px); }
-  .is-guiding .navigation-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .is-guiding .navigation-actions { gap: 6px; }
   .is-guiding .navigation-actions button { min-height: 44px; padding: 6px; font-size: 12px; }
   .is-guiding .map-tools { top: calc(12px + var(--safe-top)); right: calc(min(35vw, 300px) + var(--safe-right) + 48px); }
 }

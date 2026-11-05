@@ -72,13 +72,10 @@ export class GpsGuidance {
     element('navigation-stop').addEventListener('click', () => this.stop());
     element('navigation-resume').addEventListener('click', () => { void this.start(); });
     element('navigation-follow').addEventListener('click', () => { this.follow = true; this.lastCenter = undefined; this.center(); this.followLabel(); });
-    if (Capacitor.getPlatform() === 'android') void device.getPipSettings().then(settings => { element('navigation-pip').hidden = !settings.supported; }).catch(() => undefined);
-    element('navigation-pip').addEventListener('click', () => { void device.enterPip().catch(() => this.status('Fenêtre flottante indisponible. Vérifiez son autorisation dans les réglages Android.')); });
     element('navigation-voice').hidden = !Capacitor.isNativePlatform();
     element('navigation-voice').addEventListener('click', () => {
       this.voice = !this.voice;
-      element('navigation-voice').setAttribute('aria-pressed', String(this.voice));
-      text('navigation-voice', this.voice ? 'Voix activée' : 'Activer la voix');
+      this.voiceLabel();
       const enabled = this.voice;
       void this.command(() => nativeGuidance.setVoice({ enabled })).catch(() => this.status('La voix native est indisponible. Réessayez.'));
     });
@@ -208,8 +205,7 @@ export class GpsGuidance {
     if (Number.isSafeInteger(reached) && reached > this.reachedCount && reached <= 8) { this.onWaypointReached(reached - this.reachedCount); this.reachedCount = reached; }
     if (typeof state.voice === 'boolean' && state.voice !== this.voice) {
       this.voice = state.voice;
-      element('navigation-voice').setAttribute('aria-pressed', String(this.voice));
-      text('navigation-voice', this.voice ? 'Voix activée' : 'Activer la voix');
+      this.voiceLabel();
     }
     if (state.status === 'arrived') { this.arrive(); return; }
     if (!state.active) { this.pause(state.status === 'denied' ? 'Localisation refusée. Autorisez le GPS précis dans les réglages du téléphone.' : 'Guidage arrêté sur le téléphone. Reprenez le GPS pour continuer.'); return; }
@@ -307,7 +303,7 @@ export class GpsGuidance {
     text('navigation-remaining', guidanceDistance(state.remaining));
     const minutes = Math.ceil(state.seconds / 60);
     text('navigation-time', minutes < 60 ? `${Math.max(1, minutes)} min` : `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, '0')}`);
-    this.status(match.distance > 35 ? `Position rapprochée du trajet à ${Math.round(match.distance)} m. Vérifiez comment rejoindre la route.` : `GPS actif · précision ± ${Math.round(fix.accuracy)} m · estimation sans trafic.`, match.distance > 35);
+    this.status('', false);
     if (this.follow) this.center();
   }
 
@@ -348,6 +344,12 @@ export class GpsGuidance {
     this.map.setView(this.map.unproject(projected, zoom), zoom, { animate: false });
   }
   private followLabel() { element('navigation-follow').hidden = this.follow; }
+  private voiceLabel() {
+    const button = element('navigation-voice');
+    const label = this.voice ? 'Désactiver la voix' : 'Activer la voix';
+    button.setAttribute('aria-pressed', String(this.voice));
+    button.setAttribute('aria-label', label); button.title = label;
+  }
   private rotateVehicle() {
     const image = this.marker?.getElement()?.querySelector<HTMLElement>('.vehicle-image');
     if (image) image.style.transform = `rotate(${this.vehicleHeading + this.map.getBearing()}deg)`;
