@@ -52,6 +52,17 @@ public class EdgeToEdgeInstrumentedTest {
             instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK);
             while (!"true".equals(js(scenario, "document.getElementById('settings-page').hidden")) && System.nanoTime() < deadline) Thread.sleep(100);
             assertEquals("true", js(scenario, "document.getElementById('settings-page').hidden"));
+            String destination = js(scenario, "document.getElementById('end').value");
+            js(scenario, "document.getElementById('shortcut-home').click(); void 0");
+            assertEquals("true", js(scenario, "document.getElementById('place-picker').open"));
+            instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK);
+            deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+            while ("true".equals(js(scenario, "document.getElementById('place-picker').open")) && System.nanoTime() < deadline) {
+                instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK);
+                Thread.sleep(100);
+            }
+            assertEquals("false", js(scenario, "document.getElementById('place-picker').open"));
+            assertEquals(destination, js(scenario, "document.getElementById('end').value"));
             scenario.onActivity(activity -> assertTrue(!activity.isFinishing()));
         }
     }

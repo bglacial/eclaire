@@ -253,6 +253,7 @@ final class EclaireDevice: CAPPlugin, CAPBridgedPlugin {
 
 final class EclaireViewController: CAPBridgeViewController {
     override func capacitorDidLoad() {
+        webView?.allowsBackForwardNavigationGestures = true
         bridge?.registerPluginInstance(EclaireDevice())
         bridge?.registerPluginInstance(EclaireNavigation())
     }

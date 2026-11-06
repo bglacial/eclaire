@@ -19,15 +19,15 @@ export async function preciseLocationPermission(geolocation: {
   if (permissions.location !== 'granted') throw { code: permissions.coarseLocation === 'granted' ? 'PRECISE_LOCATION_REQUIRED' : 1 };
 }
 
-export function locationError(error: unknown) {
+export function locationError(error: unknown, allowManualPoint = true) {
   const code = (error as { code?: string | number } | null)?.code;
   if (code === 'PRECISE_LOCATION_REQUIRED') return 'Activez « Position précise » dans les autorisations Android d’Éclaire, puis réessayez.';
-  if (code === 'INACCURATE_POSITION') return 'La position est trop approximative. Activez « Position précise », puis réessayez ou placez le départ sur la carte.';
+  if (code === 'INACCURATE_POSITION') return allowManualPoint ? 'La position est trop approximative. Activez « Position précise », puis réessayez ou choisissez un point sur la carte.' : 'La position est trop approximative. Activez « Position précise », puis réessayez.';
   if (code === 'STALE_POSITION') return 'Le téléphone a renvoyé une ancienne position. Réessayez pour obtenir un point GPS récent.';
-  if (code === 1 || code === 'OS-PLUG-GLOC-0003') return 'Localisation refusée. Autorisez la position pour Éclaire dans les réglages, ou choisissez un point sur la carte.';
+  if (code === 1 || code === 'OS-PLUG-GLOC-0003') return allowManualPoint ? 'Localisation refusée. Autorisez la position pour Éclaire dans les réglages, ou choisissez un point sur la carte.' : 'Localisation refusée. Autorisez la position précise pour Éclaire dans les réglages, puis réessayez.';
   if (code === 'OS-PLUG-GLOC-0007' || code === 'OS-PLUG-GLOC-0009' || code === 'OS-PLUG-GLOC-0017') return 'Activez la localisation du téléphone, puis réessayez.';
-  if (code === 3 || code === 'OS-PLUG-GLOC-0010') return 'Le signal GPS met trop de temps à arriver. Réessayez près d’une fenêtre ou à l’extérieur, ou choisissez un point sur la carte.';
-  return 'Position indisponible. Vérifiez les réglages de localisation ou choisissez un point sur la carte.';
+  if (code === 3 || code === 'OS-PLUG-GLOC-0010') return allowManualPoint ? 'Le signal GPS met trop de temps à arriver. Réessayez près d’une fenêtre ou à l’extérieur, ou choisissez un point sur la carte.' : 'Le signal GPS met trop de temps à arriver. Réessayez près d’une fenêtre ou à l’extérieur.';
+  return allowManualPoint ? 'Position indisponible. Vérifiez les réglages de localisation ou choisissez un point sur la carte.' : 'Position indisponible. Vérifiez les réglages de localisation, puis réessayez.';
 }
 
 export function selectionPosition(position: { timestamp: number; coords: { latitude: number; longitude: number; accuracy: number } }, now = Date.now()) {

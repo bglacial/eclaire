@@ -33,3 +33,7 @@ test('le départ GPS conserve les vraies coordonnées et rejette les points anci
   assert.throws(() => selectionPosition({ ...position, timestamp: 50_000 }, 100_000), error => { assert.match(locationError(error), /ancienne/); return true; });
   assert.throws(() => selectionPosition({ ...position, coords: { ...position.coords, latitude: NaN } }, 100_000));
 });
+
+test('les erreurs du départ mobile ne proposent aucun départ manuel de substitution', () => {
+  for (const code of [1, 3, 'INACCURATE_POSITION', 'OS-PLUG-GLOC-0003', 'OS-PLUG-GLOC-0010', 'unknown']) assert.doesNotMatch(locationError({ code }, false), /carte/);
+});

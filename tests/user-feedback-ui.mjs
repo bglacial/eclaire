@@ -1,63 +1,9 @@
-// Recette locale : Vite lancé, Playwright installé ou disponible via NODE_PATH.
-// Le GPS et le service national sont simulés ; les tests routing.test.ts couvrent le moteur.
-import { createRequire } from 'node:module';
 import assert from 'node:assert/strict';
-const { chromium } = createRequire(import.meta.url)('playwright');
+import { createRequire } from 'node:module';
+import { browser, setup, choose, addStop, calculate } from './ui-fixture.mjs';
 const { version } = createRequire(import.meta.url)('../package.json');
-const base = process.env.ECLAIRE_TEST_URL || 'http://127.0.0.1:5173';
-const browser = await chromium.launch({ headless: true, channel: 'chrome' });
 const passed = [];
 const check = name => { passed.push(name); console.log(`OK ${name}`); };
-const health = { status: 'ready', edges: 1, nodes: 2, bounds: [41.3, -5.3, 51.2, 9.7], roadPreferences: true };
-async function setup({ native = false, gps = 'normal', width = 390, height = 844 } = {}) {
-  const context = await browser.newContext({ viewport: { width, height }, geolocation: { latitude: 45.7578, longitude: 4.832, accuracy: 8 }, permissions: ['geolocation'] });
-  const page = await context.newPage();
-  const requests = [], errors = [], parisRequests = [];
-  page.on('request', request => { if (request.url().includes('/data/paris.json')) parisRequests.push(request.url()); });
-  let lastResponse;
-  page.on('pageerror', e => errors.push(e.message));
-  await page.route('https://tile.openstreetmap.org/**', route => route.abort());
-  await page.route('https://data.geopf.fr/**', route => route.fulfill({ json: { features: [] } }));
-  await page.route('https://photon.komoot.io/**', route => route.fulfill({ json: { features: [] } }));
-  await page.route('https://recherche-entreprises.api.gouv.fr/**', route => route.fulfill({ json: { results: [{ nom_complet: 'LECLUSE', matching_etablissements: [{ liste_enseignes: ['LECLUSE AUTOMOBILES VOLKSWAGEN LE MANS'], adresse: '20 BOULEVARD RENE CASSIN 72000 LE MANS', latitude: '47.979982079', longitude: '0.198400238', etat_administratif: 'A' }] }] } }));
-  await page.route('**/api/health', route => route.fulfill({ json: health }));
-  await page.route('**/api/route/*', route => route.fulfill({ json: { cancelled: true } }));
-  await page.route('**/api/route', route => {
-    const body = route.request().postDataJSON(); requests.push(body);
-    const geometry = body.criterion === 'distance' ? [[body.start.lat, body.start.lon], [(body.start.lat + body.end.lat) / 2 + 0.001, (body.start.lon + body.end.lon) / 2], [body.end.lat, body.end.lon]] : [[body.start.lat, body.start.lon], [body.end.lat, body.end.lon]];
-    const length = Math.max(10, Math.hypot((body.start.lat - body.end.lat) * 111195, (body.start.lon - body.end.lon) * 74000));
-    const messages = [
-      { type: 'metadata', snapped: [body.start, body.end], traceStride: 1 },
-      { type: 'batch', edges: [{ key: 0, geometry, length, seconds: length / 10, name: 'Recette' }], events: Array.from({ length: 500 }, (_, i) => ({ key: 0, side: i % 2 })) },
-      { type: 'result', result: { found: true, path: [0], meeting: 0, length, seconds: length / 10, cost: length / 10, visited: 500, computeMs: 1, instructions: [{ at: 0, sign: 0, text: 'Continuez', name: 'Recette' }, { at: length, sign: 4, text: 'Arrivée', name: '' }] } },
-    ];
-    lastResponse = messages.map(m => JSON.stringify(m)).join('\n') + '\n';
-    return route.fulfill({ contentType: 'application/x-ndjson', body: lastResponse });
-  });
-  if (gps !== 'normal') await context.addInitScript(mode => {
-    Object.defineProperty(navigator, 'geolocation', { configurable: true, value: {
-      getCurrentPosition(success, error) {
-        window.deliverPosition = () => success({ timestamp: Date.now(), coords: { latitude: 45.7578, longitude: 4.832, accuracy: 8 } });
-        if (mode === 'denied') queueMicrotask(() => error({ code: 1 }));
-      },
-    } });
-  }, gps);
-  await page.goto(`${base}/${native ? `tests/gps-ui.html?gps=${gps}` : ''}`);
-  await page.locator('#start').waitFor({ state: 'attached' });
-  await page.locator('#loading').waitFor({ state: 'hidden' });
-  if (gps === 'normal') await page.waitForFunction(() => document.getElementById('start').value === 'Ma position GPS');
-  assert.deepEqual(parisRequests, [], 'Le démarrage ne doit pas charger le réseau Paris');
-  return { page, context, requests, errors, response: () => lastResponse };
-}
-async function choose(page, side, query) {
-  if (side === 'via' && !await page.locator('.planner-options').getAttribute('open').then(value => value !== null)) await page.locator('.planner-options > summary').click();
-  await page.locator(`#${side}`).fill(query);
-  await page.locator(`#${side}-results [role=option]`).first().click();
-}
-async function calculate(page) {
-  await page.locator('#launch').click();
-  await page.locator('#route-result').waitFor({ state: 'visible' });
-}
 try {
   const web = await setup();
   assert.equal(await web.page.locator('#end').inputValue(), '');
@@ -115,26 +61,35 @@ try {
   check('UX : paramètres isolés au clavier, retour du focus, en-tête 320–844px et mouvement réduit');
   check('Paramètres Web : version, évitements, date, version disponible et erreur réseau explicite');
   assert.equal(await web.page.locator('#road-preferences, #avoid-motorways, #avoid-tolls').count(), 0);
+  await web.page.locator('#shortcut-home').click();
+  await web.page.locator('#place-query').fill('Panthéon');
+  await web.page.locator('#place-results button').first().click();
+  await web.page.locator('#place-confirm').click();
+  assert.equal(await web.page.locator('#end').inputValue(), '', 'Définir le domicile ne choisit aucune arrivée');
   await choose(web.page, 'end', 'Panthéon');
   assert.equal(await web.page.locator('#swap').isDisabled(), false);
-  if (await web.page.locator('.planner-options').getAttribute('open') === null) await web.page.locator('.planner-options > summary').click();
-  await web.page.locator('.saved-places summary').click();
-  await web.page.locator('#save-home').click();
+  await web.page.locator('#settings-open').click(); await web.page.locator('#settings-saved-places').click();
   await web.page.locator('#save-favorite').click();
-  assert.match(await web.page.locator('#saved-places-list').textContent(), /Domicile : Panthéon/);
-  if (await web.page.locator('.planner-options').getAttribute('open') === null) await web.page.locator('.planner-options > summary').click();
-  await web.page.locator('.saved-places summary').click();
+  await web.page.locator('#place-saved-list').getByRole('button', { name: /Panthéon/ }).first().click();
+  await web.page.locator('#place-confirm').click();
+  assert.match(await web.page.locator('#saved-places-list').textContent(), /Domicile/);
+  await web.page.locator('#saved-places-close').click(); await web.page.locator('#settings-close').click();
   const began = Date.now(); await calculate(web.page);
   assert.ok(Date.now() - began < 4500, 'La lecture de la trace ne doit plus durer dix secondes');
   assert.equal(web.requests[0].start.lat, 45.7578);
   assert.equal(web.requests[0].avoidMotorways, true); assert.equal(web.requests[0].avoidTolls, true);
   check('Web : GPS à l’ouverture, arrivée vide, évitements transmis, animation accélérée');
   const beforeReplay = web.requests.length;
+  await web.page.locator('.exploration-options > summary').click();
   await web.page.locator('#replay').click();
   await web.page.locator('#route-result').waitFor({ state: 'visible' });
   assert.equal(web.requests.length, beforeReplay);
   assert.match(await web.page.locator('#result-explanation').textContent(), /temps estimé/);
-  check('Relecture de l’exploration sans nouveau calcul');
+  await web.page.locator('#replay').evaluate(button => { button.click(); document.getElementById('launch').click(); });
+  await web.page.locator('#route-result').waitFor({ state: 'visible' });
+  assert.equal(web.requests.length, beforeReplay);
+  assert.equal(await web.page.locator('#result-title').textContent(), 'Panthéon');
+  check('Relecture et interruption sans nouveau calcul ni perte du trajet');
   await web.page.locator('#compare-routes').click();
   await web.page.locator('#choose-alternative').waitFor({ state: 'visible' });
   assert.equal(web.requests.at(-1).criterion, 'distance');
@@ -158,7 +113,10 @@ try {
   await web.page.locator('#settings-open').click();
   await web.page.locator('#settings-avoid-motorways').uncheck();
   await web.page.locator('#settings-close').click();
-  assert.equal(await web.page.locator('#route-result').isVisible(), false);
+  assert.equal(await web.page.locator('#route-result').isVisible(), true, 'Modifier une préférence par défaut ne change pas le trajet courant');
+  await web.page.locator('#route-editor > summary').click();
+  if (await web.page.locator('.planner-options').getAttribute('open') === null) await web.page.locator('.planner-options > summary').click();
+  await web.page.locator('#trip-avoid-motorways').uncheck();
   await calculate(web.page);
   assert.equal(web.requests.at(-1).avoidMotorways, false);
   assert.equal(web.requests.at(-1).avoidTolls, true);
@@ -171,20 +129,22 @@ try {
   assert.equal(await web.page.locator('#settings-avoid-tolls').isChecked(), true);
   assert.notEqual(await web.page.locator('#updates-last-check').textContent(), 'Jamais');
   await web.page.locator('#settings-close').click();
-  if (await web.page.locator('.planner-options').getAttribute('open') === null) await web.page.locator('.planner-options > summary').click();
-  await web.page.locator('.saved-places summary').click();
-  assert.match(await web.page.locator('#saved-places-list').textContent(), /Domicile : Panthéon/);
+  await web.page.locator('#open-saved-places').click();
+  assert.match(await web.page.locator('#saved-places-list').textContent(), /Domicile/);
   assert.match(await web.page.locator('#saved-places-list').textContent(), /Favoris/);
+  await web.page.getByLabel('Modifier Domicile', { exact: true }).click();
   await web.page.getByRole('button', { name: 'Supprimer domicile' }).click();
+  await web.page.getByLabel('Modifier Panthéon', { exact: true }).click();
   await web.page.getByRole('button', { name: 'Supprimer Panthéon des favoris' }).click();
-  await web.page.locator('#clear-recent').click();
-  assert.equal(await web.page.locator('#saved-places-list').textContent(), '');
+  web.page.once('dialog', dialog => dialog.accept()); await web.page.locator('#clear-recent').click();
+  assert.equal(await web.page.locator('#saved-recent-list').textContent(), '');
+  await web.page.locator('#saved-places-close').click();
   check('Domicile, favoris et destinations récentes : persistance et suppression');
   check('Panneau réductible, carte manipulable, restauration et préférences mémorisées');
   assert.deepEqual(web.errors, []); await web.context.close();
 
   const via = await setup();
-  await choose(via.page, 'via', 'Musée du Louvre'); await choose(via.page, 'end', 'Panthéon');
+  await choose(via.page, 'end', 'Panthéon'); await choose(via.page, 'via', 'Musée du Louvre');
   await calculate(via.page);
   assert.equal(via.requests.length, 2);
   assert.deepEqual(via.requests[0].end, via.requests[1].start);
@@ -200,7 +160,7 @@ try {
 
   const viaNative = await setup({ native: true });
   await viaNative.page.locator('#gps-fixture').evaluate(el => { el.style.display = 'none'; });
-  await choose(viaNative.page, 'via', 'Musée du Louvre'); await choose(viaNative.page, 'end', 'Panthéon');
+  await choose(viaNative.page, 'end', 'Panthéon'); await choose(viaNative.page, 'via', 'Musée du Louvre');
   await calculate(viaNative.page); await viaNative.page.locator('#navigation-start').click();
   await viaNative.page.waitForFunction(() => window.testNativeRouting?.via?.at > 0);
   const nativeConfig = await viaNative.page.evaluate(() => window.testNativeRouting);
@@ -221,10 +181,8 @@ try {
   await editing.page.locator('#navigation-voice').click();
   const stopsBeforeEdit = await editing.page.evaluate(() => window.testNativeStops);
   await editing.page.locator('#navigation-edit-stops').click();
-  await editing.page.locator('#trip-add-search').fill('premier arrêt');
-  await editing.page.locator('#trip-suggestions button').first().click();
-  await editing.page.locator('#trip-add-search').fill('second arrêt');
-  await editing.page.locator('#trip-suggestions button').first().click();
+  await addStop(editing.page, 'premier arrêt');
+  await addStop(editing.page, 'second arrêt');
   await editing.page.getByRole('button', { name: 'Monter second arrêt', exact: true }).click();
   assert.match(await editing.page.locator('#trip-stops li').first().textContent(), /second arrêt/);
   await editing.page.getByRole('button', { name: 'Descendre second arrêt', exact: true }).click();
@@ -234,7 +192,7 @@ try {
   await editing.page.waitForFunction(() => document.getElementById('trip-status').textContent.includes('Panne de recette'));
   assert.equal(await editing.page.evaluate(() => window.testNativeStarts.length), 1);
   assert.equal(await editing.page.evaluate(() => window.testNativeStops), stopsBeforeEdit);
-  assert.equal(await editing.page.locator('#navigation').isVisible(), false);
+  assert.equal(await editing.page.locator('#trip-workspace').evaluate(el => el.matches(':modal')), true);
   assert.equal(await editing.page.locator('#trip-workspace').isVisible(), true);
   await editing.page.unroute('**/api/route', failEdit);
   let startedRequest, releaseRequest;
@@ -259,6 +217,7 @@ try {
   await editing.page.locator('#navigation-edit-stops').click();
   await editing.page.getByRole('button', { name: 'Retirer premier arrêt', exact: true }).click();
   await editing.page.locator('#trip-close').click();
+  await editing.page.locator('#trip-discard').click();
   assert.equal(await editing.page.evaluate(() => window.testNativeStarts.length), 2);
   await editing.page.locator('#navigation-edit-stops').click();
   assert.equal(await editing.page.locator('#trip-stops li').count(), 2);
@@ -266,12 +225,13 @@ try {
     { geometry: { coordinates: [2.349, 48.8535] }, properties: { osm_type: 'N', osm_id: 1, osm_key: 'amenity', osm_value: 'fuel', name: 'Station plus loin' } },
     { geometry: { coordinates: [2.3466, 48.8535] }, properties: { osm_type: 'N', osm_id: 2, osm_key: 'amenity', osm_value: 'fuel', name: 'Station sur le trajet', street: 'Rue de recette' } },
   ] } }));
-  await editing.page.locator('#trip-view-places').click();
+  await editing.page.locator('#trip-add').click(); await editing.page.locator('#place-along').click();
   await editing.page.getByRole('button', { name: 'Stations-service', exact: true }).click();
   await editing.page.waitForFunction(() => document.getElementById('trip-places-status').textContent.includes('Lieux classés'));
   assert.equal(await editing.page.locator('#trip-places li').count(), 2);
   assert.equal(await editing.page.locator('#trip-places li strong').first().textContent(), 'Station sur le trajet');
-  await editing.page.getByRole('button', { name: 'Ajouter Station sur le trajet aux étapes', exact: true }).click();
+  await editing.page.getByRole('button', { name: 'Voir Station sur le trajet', exact: true }).click();
+  await editing.page.locator('#trip-place-add').click();
   await editing.page.locator('#trip-apply').click(); await editing.page.locator('#trip-workspace').waitFor({ state: 'hidden' });
   const withPoi = await editing.page.evaluate(() => window.testNativeStarts.at(-1));
   assert.deepEqual(withPoi.routing.vias.map(via => via.lat), [48.855, 48.8535, 48.852]);
@@ -351,43 +311,39 @@ try {
   releaseRoute();
   await compactPage.locator('#route-result').waitFor({ state: 'visible' });
   await compactPage.unroute('**/api/route', holdRoute);
-  for (const selector of ['#route-panel-toggle', '.result-heading', '#result-title', '.result-itinerary', '#result-explanation', '#compare-routes', '#comparison-status', '#choose-alternative', '#replay', '#navigation-availability', '#route-edit-stops', '.planner-footer']) {
-    assert.equal(await compactPage.locator(selector).isVisible(), false, `${selector} absent du résumé mobile`);
+  for (const selector of ['.result-heading', '#result-title', '.result-itinerary', '#compare-routes', '#route-edit-stops']) {
+    assert.equal(await compactPage.locator(selector).isVisible(), true, `${selector} disponible dans le résumé`);
   }
   assert.match(await compactPage.locator('#distance').textContent(), /km$/);
   assert.notEqual(await compactPage.locator('#duration').textContent(), '');
-  assert.equal(await compactPage.locator('#navigation-start').textContent(), ' Démarrer le guidage');
-  const edit = compactPage.getByRole('button', { name: 'Modifier le trajet', exact: true });
-  assert.equal((await edit.textContent()).trim(), '');
+  assert.match(await compactPage.locator('#navigation-start').textContent(), /Démarrer le guidage/);
+  const edit = compactPage.locator('#route-editor > summary');
+  assert.match(await edit.textContent(), /Modifier/);
   assert.equal(await edit.getAttribute('aria-expanded'), 'false');
-  assert.equal(await edit.locator('svg').count(), 1);
   for (const size of [{ width: 320, height: 640 }, { width: 390, height: 844 }, { width: 844, height: 390 }]) {
     await compactPage.setViewportSize(size);
     const panel = await compactPage.locator('.planner').boundingBox(), editBox = await edit.boundingBox();
-    assert.ok(panel.height <= 150, `Résumé mobile compact à ${size.width}px : ${panel.height}px`);
+    assert.ok(panel.height < size.height, 'La carte et les commandes restent accessibles');
     assert.ok(editBox.width >= 48 && editBox.height >= 48, 'Cible de modification de 48px');
-    assert.equal(await compactPage.locator('.planner').evaluate(el => el.scrollHeight <= el.clientHeight + 1 && el.scrollWidth <= el.clientWidth + 1), true, 'Résumé sans défilement');
-    const visibleText = await compactPage.locator('.planner').innerText();
-    assert.equal(visibleText.replace(await compactPage.locator('#duration').textContent(), '').replace(await compactPage.locator('#distance').textContent(), '').replace('Démarrer le guidage', '').trim(), '', 'Seuls durée, kilomètres et guidage sont affichés');
+    assert.equal(await compactPage.locator('.planner').evaluate(el => el.scrollWidth <= el.clientWidth + 1), true, 'Résumé sans débordement horizontal');
+    await compactPage.locator('#navigation-start').scrollIntoViewIfNeeded();
+    assert.equal(await compactPage.locator('#navigation-start').isVisible(), true);
   }
   await compactPage.setViewportSize({ width: 390, height: 844 });
-  await compactPage.screenshot({ path: '/tmp/eclaire-mobile-compact-result.png' });
-  await edit.focus(); await compactPage.keyboard.press('Enter');
-  assert.equal(await compactPage.locator('#end').isVisible(), true);
-  assert.equal(await compactPage.locator('#start').isVisible(), false);
+  await edit.scrollIntoViewIfNeeded(); await edit.focus(); await compactPage.keyboard.press('Enter');
+  assert.equal(await compactPage.locator('#destination-open').isVisible(), true);
+  assert.equal(await compactPage.locator('#start-open').isVisible(), false);
   assert.equal(await compactPage.locator('#route-result').isVisible(), false);
-  const closeEdit = compactPage.getByRole('button', { name: 'Revenir au résumé du trajet', exact: true });
-  assert.equal(await closeEdit.getAttribute('aria-expanded'), 'true');
-  await closeEdit.click();
+  await compactPage.waitForFunction(() => document.querySelector('#route-editor > summary').getAttribute('aria-expanded') === 'true');
+  await edit.click();
   assert.equal(await compactPage.locator('#route-result').isVisible(), true);
   assert.equal(compact.requests.length, 1, 'Ouvrir et fermer la modification conserve le trajet');
   await edit.click(); await calculate(compactPage);
-  assert.equal(compact.requests.length, 2, 'Le recalcul revient au résumé compact');
-  assert.equal(await compactPage.locator('#route-panel-toggle').isVisible(), false);
+  assert.equal(compact.requests.length, 2, 'Le recalcul revient au résumé');
   await compactPage.locator('#navigation-start').click();
   await compactPage.waitForFunction(() => window.testNativeStarts.length === 1);
   assert.deepEqual(compact.errors, []); await compact.context.close();
-  check('Mobile : légende masquée, résumé compact portrait/paysage, modification par icône et démarrage du guidage');
+  check('Mobile : résumé lisible avec étapes, comparaison et guidage en portrait/paysage');
 
   const controls = await setup({ native: true });
   const controlPage = controls.page;
@@ -399,14 +355,14 @@ try {
   assert.doesNotMatch(await controlPage.locator('#navigation').innerText(), /Guidage expérimental|Position rapprochée|Fenêtre flottante/);
   const voiceButton = controlPage.locator('#navigation-voice'), quitButton = controlPage.getByRole('button', { name: 'Quitter le guidage', exact: true });
   for (const button of [voiceButton, quitButton]) {
-    assert.equal((await button.textContent()).trim(), '');
+    assert.match((await button.textContent()).trim(), /Voix|Terminer/);
     assert.equal(await button.locator('svg').count(), 1);
   }
   for (const size of [{ width: 320, height: 640 }, { width: 390, height: 844 }, { width: 844, height: 390 }]) {
     await controlPage.setViewportSize(size);
     for (const button of [voiceButton, quitButton]) {
       const box = await button.boundingBox();
-      assert.equal(box.width, 48); assert.equal(box.height, 48);
+      assert.ok(box.width >= 48 && box.height >= 48);
     }
     assert.equal(await controlPage.locator('#navigation').evaluate(el => el.scrollWidth <= el.clientWidth + 1), true, 'Commandes sans débordement horizontal');
   }
@@ -435,10 +391,14 @@ try {
   assert.equal(await controlPage.locator('#navigation-status').isVisible(), true);
   assert.equal(await controlPage.locator('#navigation-status').textContent(), 'Recalcul indisponible.');
   await quitButton.click();
+  assert.equal(await controlPage.locator('#navigation-exit').evaluate(el => el.matches(':modal')), true);
+  await controlPage.locator('#navigation-exit-cancel').click();
+  assert.equal(await controlPage.locator('#navigation').isVisible(), true);
+  await quitButton.click(); await controlPage.locator('#navigation-exit-confirm').click();
   assert.equal(await controlPage.locator('#navigation').isVisible(), false);
   assert.ok(await controlPage.evaluate(() => window.testNativeStops > 0));
   assert.deepEqual(controls.errors, []); await controls.context.close();
-  check('Guidage : commandes voix/sortie à icône, voix synchronisée, textes retirés et erreurs visibles');
+  check('Guidage : commandes nommées, voix synchronisée, sortie confirmée et erreurs visibles');
 
   const information = await setup({ native: true, width: 320, height: 640 });
   const infoPage = information.page;
@@ -487,17 +447,17 @@ try {
   assert.equal(await g.locator('.point-icon:has(.point-marker.start)').evaluate(el => el.classList.contains('leaflet-marker-draggable')), false);
   await g.screenshot({ path: '/tmp/eclaire-mobile-gps.png' });
   check('Mobile : départ GPS imposé, commandes retirées, aucun texte Départ GPS ni repère déplaçable');
-  await g.locator('#end').fill('Volkswagen le mans');
-  await g.locator('#end-results [role=option]').filter({ hasText: 'VOLKSWAGEN LE MANS' }).waitFor();
-  assert.match(await g.locator('#end-results [role=option]').first().textContent(), /20 BOULEVARD RENE CASSIN/);
+  await g.locator('#destination-open').click(); await g.locator('#place-query').fill('Volkswagen le mans');
+  await g.locator('#place-results button').filter({ hasText: 'VOLKSWAGEN LE MANS' }).waitFor();
+  assert.match(await g.locator('#place-results button').first().textContent(), /20 BOULEVARD RENE CASSIN/);
   await choose(g, 'end', 'Panthéon'); await calculate(g);
   await g.locator('#navigation-start').click();
   await g.waitForFunction(() => document.getElementById('gps-watch-count').textContent.startsWith('1 suivi'));
-  assert.equal(await g.locator('#navigation-follow').isVisible(), false);
+  assert.equal(await g.locator('#navigation-follow').isVisible(), true);
   await g.mouse.move(180, 360); await g.mouse.down(); await g.mouse.move(240, 410, { steps: 5 }); await g.mouse.up();
   await g.locator('#navigation-follow').waitFor({ state: 'visible' });
   await g.locator('#navigation-follow').click();
-  assert.equal(await g.locator('#navigation-follow').isVisible(), false);
+  assert.equal(await g.locator('#navigation-follow').isVisible(), true);
   await g.getByRole('button', { name: 'GPS 50 km/h vers est', exact: true, includeHidden: true }).dispatchEvent('click');
   await g.waitForTimeout(100);
   await g.getByRole('button', { name: 'GPS imprécis', exact: true, includeHidden: true }).dispatchEvent('click');
@@ -565,11 +525,12 @@ try {
   await page.waitForFunction(() => document.getElementById('gps-watch-count').textContent.startsWith('1 suivi'));
   assert.equal(native.requests.length, 2); assert.equal(native.requests[1].start.lat, 45.7578);
   await page.locator('#navigation-stop').click();
+  if (await page.locator('#navigation-exit').isVisible()) await page.locator('#navigation-exit-confirm').click();
   await page.waitForFunction(() => document.getElementById('gps-watch-count').textContent.startsWith('0 suivi'));
   check('Mobile simulé : retour paramètres consommé, départ éloigné recalculé avant un unique suivi GPS');
 
   await page.getByRole('button', { name: 'Différer la position', exact: true, includeHidden: true }).dispatchEvent('click');
-  await page.locator('#navigation-start').click(); await page.locator('#navigation-stop').click();
+  await page.locator('#navigation-start').click(); await page.locator('#navigation-stop').click(); await page.locator('#navigation-exit-confirm').click();
   await page.getByRole('button', { name: 'Livrer la position', exact: true, includeHidden: true }).dispatchEvent('click');
   assert.equal(await page.locator('#navigation').isVisible(), false);
   assert.match(await page.locator('#gps-watch-count').textContent(), /^0 suivi/);

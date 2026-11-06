@@ -52,8 +52,15 @@ export class ExplorationRenderer {
     let line = this.lines.get(id);
     if (line) return line;
     const edge = this.roads.edges[id];
-    const points = edge.geometry ? edge.geometry.map(p => this.map.latLngToContainerPoint(p)) : [edge.from, edge.to].map(index => this.projected[index] ??= this.map.latLngToContainerPoint([this.roads.nodes[index].lat, this.roads.nodes[index].lon]));
+    const points = edge.geometry ? edge.geometry.map(p => this.projectPoint(p)) : [edge.from, edge.to].map(index => this.projected[index] ??= this.projectPoint([this.roads.nodes[index].lat, this.roads.nodes[index].lon]));
     line = measureLine(points); this.lines.set(id, line); return line;
+  }
+
+  private projectPoint(point: L.LatLngExpression) {
+    // A pan commit can change bearing before the next draw; keep the cached camera's basis.
+    const delta = this.map.project(point, this.zoom).subtract(this.map.project(this.origin!, this.zoom));
+    const angle = this.bearing * Math.PI / 180, cosine = Math.cos(angle), sine = Math.sin(angle);
+    return L.point(delta.x * cosine - delta.y * sine, delta.x * sine + delta.y * cosine);
   }
 
   private trace(ctx: CanvasRenderingContext2D, line: MeasuredLine, from = 0, to = 1) {

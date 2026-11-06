@@ -4,7 +4,7 @@ import type { NativeGuidanceState } from '../src/native-guidance';
 import { metres } from '../src/graph';
 import L from 'leaflet';
 
-L.Map.addInitHook(function (this: L.Map) { Object.assign(window, { testMap: this }); });
+L.Map.addInitHook(function (this: L.Map) { if (this.getContainer().id === 'map') Object.assign(window, { testMap: this }); });
 
 const nativeListeners = new Map<string, (state: NativeGuidanceState) => void>();
 let nativeProgress: GuidanceProgress | undefined;
@@ -42,7 +42,8 @@ Object.assign(window, {
 });
 Object.defineProperty(navigator, 'userAgent', { configurable: true, value: 'Mozilla/5.0 (Linux; Android 14; Test Phone) AppleWebKit/537.36 Chrome/120.0 Mobile Safari/537.36' });
 Object.defineProperty(navigator, 'userAgentData', { configurable: true, value: { mobile: true } });
-Object.defineProperty(navigator, 'permissions', { configurable: true, value: { query: async () => ({ state: 'granted' }) } });
+let permissionPrompt = new URLSearchParams(location.search).get('gps') === 'prompt';
+Object.defineProperty(navigator, 'permissions', { configurable: true, value: { query: async () => ({ state: permissionPrompt ? 'prompt' : 'granted' }) } });
 Object.defineProperty(AbortSignal, 'any', { configurable: true, value: undefined });
 Object.defineProperty(AbortSignal, 'timeout', { configurable: true, value: undefined });
 const watches = new Map<number, { success: PositionCallback; error?: PositionErrorCallback | null }>();
@@ -128,7 +129,7 @@ button('Nouveau trajet natif simulé', () => {
 });
 button('Arrivée GPS', () => { gps = { latitude: 48.84607934422299, longitude: 2.347058525015233, accuracy: 5 }; emit(); });
 button('Refuser GPS', () => { denied = true; emit(); });
-button('Autoriser GPS', () => { denied = false; });
+button('Autoriser GPS', () => { denied = false; permissionPrompt = false; });
 button('Signal perdu', () => { for (const callback of watches.values()) callback.error?.({ ...permissionError, code: 2, message: 'Signal perdu simulé' }); });
 for (const mode of ['réel', 'occupé', 'hors ligne', 'sans trajet']) button(`Service ${mode}`, () => { serviceMode = mode; updateCount(); });
 button('Carte taille nulle', () => { document.getElementById('map')!.style.height = '0px'; window.dispatchEvent(new Event('resize')); });

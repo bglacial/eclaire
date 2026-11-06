@@ -344,20 +344,6 @@ main:has(.trip-workspace:not([hidden])) .planner, main:has(.trip-workspace:not([
   .is-exploring .planner { padding: 12px; }
   .is-exploring .exploring-heading { display: none; }
 }
-/* Le résumé mobile laisse la carte visible et garde l’édition dans le formulaire existant. */
-.is-mobile-app .map-legend { display: none; }
-.is-mobile-app .planner:has(#route-result:not([hidden])) { padding: 12px; }
-.is-mobile-app .route-result { margin: 0; grid-template-columns: minmax(0, 1fr); gap: 10px; }
-.is-mobile-app .route-result > :not(.metrics):not(#navigation-start),
-.is-mobile-app .metrics span,
-.is-mobile-app .planner:has(#route-result:not([hidden])) .planner-footer,
-.is-mobile-app .planner:has(#route-result:not([hidden])) #notice:not(.error) { display: none; }
-.is-mobile-app .route-result:has(#navigation-start[hidden]) #navigation-availability { display: block; }
-.is-mobile-app .metrics { grid-column: 1; grid-row: 1; min-height: 48px; padding-right: 60px; gap: 8px 20px; align-items: center; flex-wrap: wrap; }
-.is-mobile-app .metrics strong { font-size: 1.4rem; }
-.is-mobile-app #navigation-start { grid-column: 1; grid-row: 2; }
-.is-mobile-app #route-editor > summary { width: 48px; height: 48px; padding: 0; justify-content: center; border-radius: 50%; }
-.is-mobile-app .planner:has(#route-result:not([hidden])) #route-editor:not([open]) > summary { position: absolute; top: 12px; right: 12px; }
 @media (min-width: 360px) and (max-width: 800px) {
   #settings-open { width: auto; padding: 0 12px; }
   #settings-open span { display: inline; }

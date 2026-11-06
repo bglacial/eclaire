@@ -22,8 +22,10 @@ await page.route('**/api/route', route => {
 });
 
 async function choose(side, query) {
-  await page.locator(`#${side}`).fill(query);
-  await page.locator(`#${side}-results [role=option]`).first().click();
+  await page.locator(side === 'end' ? '#destination-open' : '#start-open').click();
+  await page.locator('#place-query').fill(query);
+  await page.locator('#place-results button').first().click();
+  await page.locator('#place-confirm').click();
 }
 async function routeFits() {
   return page.evaluate(({ start, end }) => {
@@ -98,8 +100,12 @@ try {
   await page.evaluate(() => window.testMap.panBy([700, 300], { animate: false }));
   const beforeRecalculate = requests.length;
   await page.locator('#launch').click();
-  assert.equal(await routeFits(), true, 'Le recalcul recadre immédiatement entre les panneaux');
+  await page.locator('#trip-workspace').waitFor({ state: 'hidden' });
   await page.locator('#route-result').waitFor({ state: 'visible' });
+  await page.waitForFunction(() => !window.testMap._panAnim?._inProgress);
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await page.waitForFunction(() => !window.testMap._panAnim?._inProgress);
+  assert.equal(await routeFits(), true, 'Le recalcul confirme le trajet puis le recadre entre les panneaux');
   assert.equal(requests.length, beforeRecalculate + 1);
   console.log('OK recalcul : cadrage immédiat après déplacement manuel');
   await page.waitForFunction(() => !window.testMap._panAnim?._inProgress);
@@ -121,7 +127,8 @@ try {
   await page.waitForTimeout(100);
   assert.equal(await traceFollowsMap(), true, 'Le tracé suit aussi le déplacement sans zoom');
   await page.evaluate(() => window.testMap.setBearing(35));
-  assert.equal(await traceFollowsMap(), true, 'Le tracé suit aussi la rotation');
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
+  assert.equal(await traceFollowsMap(), true, 'Le tracé suit aussi la rotation après un pan et un recalcul');
   console.log('OK tracé : aligné pendant/après un pincement à deux doigts et une rotation');
   assert.deepEqual(errors, []);
 } finally { await browser.close(); }

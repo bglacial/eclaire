@@ -60,6 +60,8 @@ export class GpsGuidance {
     return { fix: state.fix, at: this.progress?.match?.at ?? 0 };
   }
 
+  private arrived = false;
+
   constructor(private map: L.Map, private onEnter: () => void, private onExit: () => void, private onRecalculate: (fix: GpsFix) => void, private routingConfig: () => NativeRoutingConfig | undefined, private onRouteChanged: (route: NavigationRoute) => void, private onWaypointReached: (count: number) => void = () => {}) {
     const theme = new MutationObserver(() => {
       const style = getComputedStyle(document.documentElement);
@@ -69,7 +71,11 @@ export class GpsGuidance {
     theme.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
     map.on('unload', () => theme.disconnect());
     element('navigation-start').addEventListener('click', () => { void this.start(); });
-    element('navigation-stop').addEventListener('click', () => this.stop());
+    const exit = element('navigation-exit') as HTMLDialogElement;
+    element('navigation-stop').addEventListener('click', () => { if (this.arrived) this.stop(); else exit.showModal(); });
+    element('navigation-exit-cancel').addEventListener('click', () => exit.close());
+    element('navigation-exit-confirm').addEventListener('click', () => { exit.close(); this.stop(); });
+    window.addEventListener('eclaire-back', event => { if (exit.open) { event.preventDefault(); event.stopImmediatePropagation(); exit.close(); } }, { capture: true });
     element('navigation-resume').addEventListener('click', () => { void this.start(); });
     element('navigation-follow').addEventListener('click', () => { this.follow = true; this.lastCenter = undefined; this.center(); this.followLabel(); });
     element('navigation-voice').hidden = !Capacitor.isNativePlatform();
@@ -106,7 +112,7 @@ export class GpsGuidance {
     if (!this.route || this.watching || this.starting || document.hidden) return;
     const route = this.route;
     const generation = ++this.generation;
-    this.session = true; this.starting = true; this.follow = true; this.firstCenter = true; this.lastCenter = undefined; this.speeds = new RecentSpeed(); this.displayAt = undefined; this.offRouteCount = 0; this.nativeRerouting = false; this.routeVersion = 1; this.requestingRoute = false;
+    this.arrived = false; this.session = true; this.starting = true; this.follow = true; this.firstCenter = true; this.lastCenter = undefined; this.speeds = new RecentSpeed(); this.displayAt = undefined; this.offRouteCount = 0; this.nativeRerouting = false; this.routeVersion = 1; this.requestingRoute = false;
     this.reachedCount = 0;
     this.progress ??= new GuidanceProgress(this.route);
     this.onEnter();
@@ -146,7 +152,7 @@ export class GpsGuidance {
       await this.command(async () => { if (generation === this.generation) await nativeGuidance.start({ route, voice: this.voice, routing }); });
       if (generation === this.generation) await this.keepScreenOn(!document.hidden).catch(() => undefined);
     } catch (error) {
-      if (generation === this.generation) this.pause(error instanceof Error && error.message ? error.message : locationError(error));
+      if (generation === this.generation) this.pause(error instanceof Error && error.message ? error.message : locationError(error, false));
     }
   }
 
@@ -241,7 +247,7 @@ export class GpsGuidance {
   }
 
   private arrive() {
-    this.release(false); this.clearSpeed(); text('navigation-instruction', 'Vous êtes arrivé au point routier'); text('navigation-turn-distance', '0 m');
+    this.arrived = true; this.release(false); this.clearSpeed(); text('navigation-instruction', 'Vous êtes arrivé au point routier'); text('navigation-turn-distance', '0 m');
     text('navigation-remaining', '0 m'); text('navigation-time', '0 min');
     this.status('Position GPS arrêtée. Vérifiez l’accès final à votre destination.');
     if (this.follow) this.center();
@@ -343,7 +349,7 @@ export class GpsGuidance {
     this.lastCenter = { x: projected.x, y: projected.y };
     this.map.setView(this.map.unproject(projected, zoom), zoom, { animate: false });
   }
-  private followLabel() { element('navigation-follow').hidden = this.follow; }
+  private followLabel() { element('navigation-follow').hidden = false; element('navigation-follow').setAttribute('aria-label', this.follow ? 'Recentrer la carte' : 'Reprendre le suivi GPS'); }
   private voiceLabel() {
     const button = element('navigation-voice');
     const label = this.voice ? 'Désactiver la voix' : 'Activer la voix';
