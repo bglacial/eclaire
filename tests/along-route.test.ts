@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { decodePlaces, detourAnchors, insertionIndex, photonRequests, pointAt, projectPlace, searchAlongRoute } from '../src/along-route';
 import type { NavigationRoute } from '../src/navigation';
 
@@ -20,6 +21,7 @@ test('la requête couvre une zone de 50 km et les coordonnées sont les seules d
   const queries = photonRequests(route, 0, 'fuel');
   assert.equal(queries.length, 3);
   assert.equal(queries[0].searchParams.get('osm_tag'), 'amenity:fuel');
+  assert.equal(photonRequests(route, 0, 'charging')[0].searchParams.get('osm_tag'), 'amenity:charging_station');
   assert.equal(queries[2].searchParams.get('lat'), pointAt(route, 50000).lat.toFixed(6));
   assert.equal(queries[0].searchParams.get('radius'), '26');
   assert.throws(() => photonRequests(route, 0, 'fuel";node;' as 'fuel'));
@@ -48,4 +50,19 @@ test('le service reçoit une recherche explicite, et une annulation ou une limit
     globalThis.fetch = async (_input, init) => { if (init?.signal?.aborted) throw new DOMException('Annulé', 'AbortError'); return Response.json({ features: [] }); };
     await assert.rejects(searchAlongRoute(route, 0, 'parking', controller.signal), { name: 'AbortError' });
   } finally { globalThis.fetch = original; }
+});
+
+
+test('bornes Photon enregistrées et tags facultatifs, accès privé et pays filtrés', () => {
+  const recorded = JSON.parse(readFileSync(new URL('./fixtures/photon-charging-paris.json', import.meta.url), 'utf8'));
+  const longRoute: NavigationRoute = { ...route, length: 250000, points: [{ lat: 48.84, lon: 2.354298, at: 0, seconds: 0 }, { lat: 48.90, lon: 2.354298, at: 50000, seconds: 5000 }, { lat: 49.5, lon: 2.354298, at: 250000, seconds: 25000 }] };
+  const original = recorded.features[0];
+  const decoded = decodePlaces(recorded, longRoute, 0, 'charging');
+  assert.ok(decoded.some(item => item.id === `N/${original.properties.osm_id}`));
+  assert.equal(decoded.find(item => item.id === `N/${original.properties.osm_id}`)?.chargingDetails, 'Puissance non renseignée');
+  const feature = (id: number, extra: Record<string, string>, countrycode = 'FR') => ({ ...original, properties: { ...original.properties, osm_id: id, name: '', countrycode, extra } });
+  const results = decodePlaces({ features: [feature(1, { operator: 'Opérateur', 'socket:type2': '2', 'socket:type2:output': '22 kW' }), feature(2, { access: 'private' }), feature(3, {}, 'BE'), feature(4, { access: 'no' })] }, longRoute, 0, 'charging');
+  assert.equal(results.length, 1);
+  assert.equal(results[0].name, 'Opérateur');
+  assert.equal(results[0].chargingDetails, 'Puissance : 22 kW · Connecteurs : type2');
 });

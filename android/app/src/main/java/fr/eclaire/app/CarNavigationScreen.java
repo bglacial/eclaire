@@ -72,7 +72,7 @@ final class CarNavigationScreen extends Screen {
 
     private static TravelEstimate estimate(double metres, double seconds) {
         long duration = Math.max(0, Math.round(seconds));
-        long arrival = System.currentTimeMillis() + duration * 1000;
+        long arrival = ArrivalClock.arrivalMillis(System.currentTimeMillis(), Math.max(0, seconds));
         return new TravelEstimate.Builder(Distance.create(Math.max(0, metres), Distance.UNIT_METERS), DateTimeWithZone.create(arrival, TimeZone.getDefault()))
                 .setRemainingTimeSeconds(duration).build();
     }

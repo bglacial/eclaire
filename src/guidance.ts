@@ -1,4 +1,5 @@
 import L from 'leaflet';
+import { arrivalClock } from './eta';
 import { mapPadding } from './map-viewport';
 import { Capacitor, type PluginListenerHandle } from '@capacitor/core';
 import { Geolocation } from '@capacitor/geolocation';
@@ -121,7 +122,7 @@ export class GpsGuidance {
     this.map.invalidateSize({ pan: false, animate: false });
     element('navigation-resume').hidden = true;
     text('navigation-instruction', 'Recherche de votre position…'); text('navigation-turn-distance', 'GPS');
-    text('navigation-remaining', '—'); text('navigation-time', '—'); text('navigation-speed', '—');
+    text('navigation-remaining', '—'); text('navigation-time', '—'); text('navigation-arrival', ''); text('navigation-speed', '—');
     this.status('Autorisez la localisation pour démarrer.'); this.followLabel();
     try {
       if (Capacitor.isNativePlatform()) {
@@ -194,14 +195,14 @@ export class GpsGuidance {
   private pause(message: string) {
     this.release(); this.status(message);
     text('navigation-instruction', 'Guidage en pause'); text('navigation-turn-distance', 'GPS');
-    text('navigation-remaining', '—'); text('navigation-time', '—'); this.clearSpeed();
+    text('navigation-remaining', '—'); text('navigation-time', '—'); text('navigation-arrival', ''); this.clearSpeed();
     element('navigation-resume').hidden = false;
   }
 
   private uncertain(message: string) {
     cancelAnimationFrame(this.frame); this.frame = 0; this.map.stopHeadingUp(); this.clearSpeed();
     text('navigation-instruction', 'En attente d’un signal précis'); text('navigation-turn-distance', 'GPS');
-    text('navigation-remaining', '—'); text('navigation-time', '—');
+    text('navigation-remaining', '—'); text('navigation-time', '—'); text('navigation-arrival', '');
     this.status(message);
   }
 
@@ -234,7 +235,7 @@ export class GpsGuidance {
     }
     if (state.status === 'rerouting' || state.status === 'reroute-failed') {
       text('navigation-instruction', state.status === 'rerouting' ? 'Recalcul du trajet…' : 'Recalcul en attente');
-      text('navigation-turn-distance', '↗'); text('navigation-remaining', '—'); text('navigation-time', '—');
+      text('navigation-turn-distance', '↗'); text('navigation-remaining', '—'); text('navigation-time', '—'); text('navigation-arrival', '');
       this.status(state.message || 'Recalcul du trajet depuis votre position…');
     }
     if (state.status === 'uncertain') {
@@ -248,7 +249,7 @@ export class GpsGuidance {
 
   private arrive() {
     this.arrived = true; this.release(false); this.clearSpeed(); text('navigation-instruction', 'Vous êtes arrivé au point routier'); text('navigation-turn-distance', '0 m');
-    text('navigation-remaining', '0 m'); text('navigation-time', '0 min');
+    text('navigation-remaining', '0 m'); text('navigation-time', '0 min'); text('navigation-arrival', '');
     this.status('Position GPS arrêtée. Vérifiez l’accès final à votre destination.');
     if (this.follow) this.center();
   }
@@ -269,7 +270,7 @@ export class GpsGuidance {
       if (!this.approachPoint) this.approachPoint = L.circleMarker(target, { renderer: this.renderer, radius: 7, color: getComputedStyle(document.documentElement).getPropertyValue('--surface').trim(), weight: 3, fillColor: getComputedStyle(document.documentElement).getPropertyValue('--route').trim(), fillOpacity: 1, interactive: false }).addTo(this.map);
       else this.approachPoint.setLatLng(target);
       text('navigation-instruction', 'Rejoignez le point routier'); text('navigation-turn-distance', `À ${guidanceDistance(state.match.distance)}`);
-      text('navigation-remaining', '—'); text('navigation-time', '—'); text('navigation-limit', 'Limite : —'); element('navigation-speed').classList.remove('over-limit');
+      text('navigation-remaining', '—'); text('navigation-time', '—'); text('navigation-arrival', ''); text('navigation-limit', 'Limite : —'); element('navigation-speed').classList.remove('over-limit');
       this.status('Point routier le plus proche du trajet. Rejoignez-le par une voie accessible.');
       this.followGpsHeading(fix);
       if (this.follow) {
@@ -286,7 +287,7 @@ export class GpsGuidance {
       cancelAnimationFrame(this.frame); this.frame = 0; this.displayAt = undefined; this.marker.setLatLng(point);
       text('navigation-limit', 'Limite : —'); element('navigation-speed').classList.remove('over-limit');
       text('navigation-instruction', 'Vous êtes hors du trajet'); text('navigation-turn-distance', '↗');
-      text('navigation-remaining', '—'); text('navigation-time', '—');
+      text('navigation-remaining', '—'); text('navigation-time', '—'); text('navigation-arrival', '');
       this.status(nativeMessage || 'Recalcul du trajet depuis votre position…');
       this.followGpsHeading(fix);
       if (this.follow) this.center();
@@ -309,6 +310,8 @@ export class GpsGuidance {
     text('navigation-remaining', guidanceDistance(state.remaining));
     const minutes = Math.ceil(state.seconds / 60);
     text('navigation-time', minutes < 60 ? `${Math.max(1, minutes)} min` : `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, '0')}`);
+    const arrival = arrivalClock(Date.now(), state.seconds);
+    text('navigation-arrival', arrival ? `Arrivée vers ${arrival}` : '');
     this.status('', false);
     if (this.follow) this.center();
   }

@@ -1,4 +1,5 @@
 import L from 'leaflet';
+import { arrivalClock } from './eta';
 import { icon } from './icons';
 import { installDialogNavigation } from './dialog-navigation';
 import { PlacePicker } from './place-picker';
@@ -58,7 +59,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       </div></details>
       <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
       <button id="gps-retry" class="setting-button" hidden>Réessayer le GPS</button>
-      <div id="route-result" class="route-result" hidden><div class="result-heading"><span>${icon('check')} Mon trajet</span><span id="result-criterion"></span></div><h2 id="result-title"></h2><div class="metrics"><div aria-label="Durée estimée"><strong id="duration"></strong></div><div aria-label="Distance"><strong id="distance"></strong></div></div><p class="estimate-caption">Durée estimée, sans trafic</p><p id="result-preferences" class="page-hint" hidden></p><div class="result-itinerary"><div id="route-endpoints" class="route-endpoints"></div></div><p id="result-explanation" hidden></p><button id="compare-routes" class="text-button">Comparer les trajets</button><p id="comparison-status" role="status"></p><button id="choose-alternative" class="outline-button" hidden></button><details class="exploration-options"><summary>Voir l’exploration et les options</summary><button id="replay" class="text-button">Revoir l’exploration</button><button id="result-options" class="text-button">Options du trajet</button><button id="new-trip" class="text-button">Nouveau trajet</button></details><button id="navigation-start" class="primary" hidden>${icon('locate')}<span>Démarrer le guidage</span></button><p id="navigation-availability" hidden></p></div>
+      <div id="route-result" class="route-result" hidden><div class="result-heading"><span>${icon('check')} Mon trajet</span><span id="result-criterion"></span></div><h2 id="result-title"></h2><div class="metrics"><div aria-label="Durée estimée"><strong id="duration"></strong></div><div aria-label="Distance"><strong id="distance"></strong></div></div><p class="estimate-caption">Durée estimée, sans trafic<br><span id="result-arrival"></span></p><p id="result-preferences" class="page-hint" hidden></p><div class="result-itinerary"><div id="route-endpoints" class="route-endpoints"></div></div><p id="result-explanation" hidden></p><button id="compare-routes" class="text-button">Comparer les trajets</button><p id="comparison-status" role="status"></p><button id="choose-alternative" class="outline-button" hidden></button><details class="exploration-options"><summary>Voir l’exploration et les options</summary><button id="replay" class="text-button">Revoir l’exploration</button><button id="result-options" class="text-button">Options du trajet</button><button id="new-trip" class="text-button">Nouveau trajet</button></details><button id="navigation-start" class="primary" hidden>${icon('locate')}<span>Démarrer le guidage</span></button><p id="navigation-availability" hidden></p></div>
       <div class="planner-footer"><span id="departure-status">${icon('locate')} Départ : recherche de ma position…</span><span id="coverage" hidden>Connexion au service France…</span></div>
       </div>
     </section>
@@ -71,7 +72,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         <p id="navigation-next-stop" class="navigation-next-stop"></p><p id="navigation-status" role="status"></p>
         <p id="navigation-offline" role="status" hidden>Connexion absente : trajet conservé, recalcul et nouvelles cartes indisponibles.</p>
         <button id="navigation-resume" class="primary" hidden>Reprendre le GPS</button>
-        <div class="navigation-metrics"><div><strong id="navigation-time">—</strong><span>durée estimée</span></div><div><strong id="navigation-remaining">—</strong><span>restants</span></div><div><strong id="navigation-speed">—</strong><span>km/h · GPS</span><span id="navigation-limit">Limite : —</span></div></div>
+        <div class="navigation-metrics"><div><strong id="navigation-time">—</strong><span>durée estimée</span><span id="navigation-arrival"></span></div><div><strong id="navigation-remaining">—</strong><span>restants</span></div><div><strong id="navigation-speed">—</strong><span>km/h · GPS</span><span id="navigation-limit">Limite : —</span></div></div>
         <div class="navigation-actions"><button id="navigation-follow">${icon('locate')}<span>Recentrer</span></button><button id="navigation-voice" class="icon-button" aria-label="Activer la voix" title="Activer la voix" aria-pressed="false">${icon('voice')}<span>Voix</span></button><button id="navigation-stop" class="icon-button" aria-label="Quitter le guidage" title="Quitter le guidage">${icon('close')}<span>Terminer</span></button></div>
         <div class="navigation-attribution">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> · <a href="https://opendatacommons.org/licenses/odbl/1-0/" target="_blank" rel="noopener">ODbL</a></div>
       </div>
@@ -85,7 +86,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         <dl><div><dt>Le plus rapide</dt><dd>Réduit la durée estimée, sans trafic en direct.</dd></div><div><dt>Le plus court</dt><dd>Réduit la distance à parcourir.</dd></div></dl>
         <h3>Pourquoi cette animation ?</h3><p>Elle montre les routes comparées avant d’afficher votre trajet.</p>
         <button id="lite" class="setting-button" aria-pressed="false">${icon('layers')} Alléger l’animation</button>
-        <h3>Le guidage</h3><p>Dans l’application sur téléphone, le GPS vous guide, même écran verrouillé. Il s’arrête à l’arrivée ou avec la croix.</p><p>Respectez la signalisation. Les trajets et les limitations affichées peuvent contenir des erreurs.</p>
+        <p>L’heure d’arrivée est estimée sans trafic ; avant le départ, elle suppose un départ immédiat. Pendant le guidage, elle évolue avec le trajet restant.</p><h3>Le guidage</h3><p>Dans l’application sur téléphone, le GPS vous guide, même écran verrouillé. Il s’arrête à l’arrivée ou avec la croix.</p><p>Respectez la signalisation. Les trajets et les limitations affichées peuvent contenir des erreurs.</p>
         <details><summary>Carte et connexion</summary><p>Éclaire couvre la France métropolitaine et la Corse. Une connexion est nécessaire pour calculer un trajet et charger les cartes.</p><p>Les cartes et les routes viennent d’OpenStreetMap. Si votre adresse n’est pas accessible en voiture, le trajet peut s’arrêter à proximité.</p></details>
         <details><summary>Vos données</summary><p>Le GPS reste sur votre téléphone pendant le suivi. Le calcul d’un trajet envoie les points nécessaires au service de calcul.</p><p>Les services de recherche reçoivent le texte saisi et les zones recherchées. Le fournisseur de cartes reçoit les zones affichées.</p><p>L’application ne garde pas d’historique GPS. Vos destinations enregistrées restent sur cet appareil.</p></details>
       </div>
@@ -394,6 +395,7 @@ function fitPoints() {
   });
 }
 
+let arrivalTimer = 0;
 function complete(updateGuidance = true) {
   if (updateGuidance) tripRevision++;
   playing = false;
@@ -410,6 +412,15 @@ function complete(updateGuidance = true) {
   }
   if (selections.start && selections.end) confirmedPlan = { start: { ...selections.start }, end: { ...selections.end }, stops: tripStops.map(place => ({ ...place })), criterion: criterion(), preferences: roadPreferences() };
   const minutes = Math.ceil(result.seconds / 60);
+  clearInterval(arrivalTimer);
+  const seconds = result.seconds;
+  const updateArrival = () => {
+    const clock = arrivalClock(Date.now(), seconds);
+    const value = clock ? `Arrivée vers ${clock} si départ maintenant` : '';
+    if ($('result-arrival').textContent !== value) $('result-arrival').textContent = value;
+  };
+  updateArrival();
+  arrivalTimer = window.setInterval(updateArrival, 60_000);
   $('result-title').textContent = selections.end?.name ?? 'Votre trajet';
   $('navigation-next-stop').textContent = tripStops[0] ? `${tripStops[0].name} · prochaine étape` : 'Vers votre destination';
   $('duration').textContent = minutes < 1 ? '< 1 min' : minutes < 60 ? `${minutes} min` : `${Math.floor(minutes / 60)} h${minutes % 60 ? ` ${String(minutes % 60).padStart(2, '0')}` : ''}`;
