@@ -249,6 +249,8 @@ Ces temps sont mesurés sur le Mac local et ne prédisent pas les temps du Raspb
 
 ## Préversions alpha
 
+La version **1.1.0-alpha.19** corrige le cadrage au démarrage et au recentrage du guidage : le point GPS reste dans la carte visible entre les indications et les commandes. Le calcul utilise la hauteur réelle des deux panneaux, y compris pour les longues instructions ; le cadrage paysage et l’édition du trajet sont conservés.
+
 La version **1.1.0-alpha.18** reprend les parcours centrés sur la carte : accès direct au domicile et aux lieux enregistrés, recherche avec aperçu sur carte, éditeur commun de huit étapes avant ou après calcul, fiche des points d’intérêt avec détour estimé et confirmation avant recalcul. Le dernier trajet valide reste conservé pendant la préparation et les échecs. Les préférences par défaut sont séparées des options du trajet actuel. Retour Android, historique Web et geste de retour iOS gardent la carte accessible. Le guidage affiche des commandes nommées et confirme sa fermeture. Voir [les parcours et la recette](docs/parcours-alpha18.md).
 
 La version **1.1.0-alpha.17** simplifie l’application mobile : départ GPS imposé, aucun préchargement Paris, résultat compact et guidage avec commandes voix/sortie à icône. La page Informations utilise des textes grand public, garde un retour Carte visible et se ferme avec Retour Android. Le lien vers la provenance de la démo Paris est retiré.

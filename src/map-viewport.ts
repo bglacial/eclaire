@@ -18,5 +18,9 @@ export function mapPadding() {
     const instruction = rect('#navigation-next')!, bottom = rect('.navigation-bottom')!;
     return { topLeft: [instruction.right - map.left + 16, 24] as [number, number], bottomRight: [map.right - bottom.left + 16, 24] as [number, number] };
   }
+  if (navigation && !trip) {
+    const instruction = rect('#navigation-next')!, bottom = rect('.navigation-bottom')!;
+    return { topLeft: [32, Math.max(top, instruction.bottom - map.top + 16)] as [number, number], bottomRight: [72, Math.max(32, map.bottom - bottom.top + 20)] as [number, number] };
+  }
   return { topLeft: [32, top] as [number, number], bottomRight: [72, Math.max(32, map.bottom - (panel?.top ?? map.bottom) + 20)] as [number, number] };
 }

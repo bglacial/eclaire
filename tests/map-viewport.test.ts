@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mapPadding } from '../src/map-viewport';
 
-test('le cadrage réserve le panneau du bas, le chargement et les deux panneaux en paysage', () => {
+test('le cadrage réserve le chargement, l’éditeur et les deux panneaux de guidage en portrait/paysage', () => {
   const previousDocument = Object.getOwnPropertyDescriptor(globalThis, 'document');
   const previousMedia = Object.getOwnPropertyDescriptor(globalThis, 'matchMedia');
   const box = (left: number, top: number, right: number, bottom: number) => ({ left, top, right, bottom, width: right - left, height: bottom - top });
@@ -19,6 +19,16 @@ test('le cadrage réserve le panneau du bas, le chargement et les deux panneaux 
     panels['#trip-workspace'] = box(12, 350, 378, 814);
     assert.equal(mapPadding().bottomRight[1], 514);
     delete panels['#trip-workspace'];
+    panels['#navigation'] = bounds;
+    panels['#navigation-next'] = box(16, 64, 374, 214);
+    panels['.navigation-bottom'] = box(0, 600, 390, 844);
+    assert.deepEqual(mapPadding(), { topLeft: [32, 230], bottomRight: [72, 264] });
+    panels['#navigation-next'] = box(16, 64, 374, 280);
+    assert.equal(mapPadding().topLeft[1], 296, 'Les longues indications réservent leur hauteur réelle');
+    panels['#trip-workspace'] = box(12, 350, 378, 814);
+    assert.deepEqual(mapPadding(), { topLeft: [32, 86], bottomRight: [72, 514] });
+    delete panels['#trip-workspace'];
+    delete panels['#navigation'];
     bounds = box(0, 0, 1440, 900); panels['.planner'] = box(24, 620, 1416, 868);
     assert.deepEqual(mapPadding(), { topLeft: [32, 86], bottomRight: [72, 300] });
     bounds = box(0, 0, 844, 390); landscape = true;
