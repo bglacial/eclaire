@@ -69,7 +69,8 @@ server {
     proxy_buffering off;
     proxy_read_timeout 170s;
     gzip on;
-    gzip_types application/x-ndjson application/json application/javascript text/css;
+    gzip_vary on;
+    gzip_types application/x-ndjson application/json application/javascript application/manifest+json image/svg+xml text/css text/plain;
     location = /api/route {
         # Une prérequête n'est pas un calcul : réponse avant la phase limit_req.
         if ($request_method = OPTIONS) {

@@ -243,6 +243,12 @@ public final class FranceServer {
         exchange.sendResponseHeaders(status, bytes.length); exchange.getResponseBody().write(bytes); exchange.close();
     }
 
+    static void staticHeaders(com.sun.net.httpserver.Headers headers, String route) {
+        headers.set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://tile.openstreetmap.org; connect-src 'self' https://data.geopf.fr https://photon.komoot.io https://recherche-entreprises.api.gouv.fr; object-src 'none'; base-uri 'self'; frame-ancestors 'none'");
+        headers.set("Cache-Control", route.matches("/assets/[^/]+-[A-Za-z0-9_-]{8}\\.(js|css)")
+                ? "public, max-age=31536000, immutable" : "no-cache");
+    }
+
     public void serve(int port) throws IOException {
         var server = HttpServer.create(new InetSocketAddress(System.getenv().getOrDefault("ECLAIRE_HOST", "127.0.0.1"), port), 16);
         server.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
@@ -269,6 +275,7 @@ public final class FranceServer {
             var file = root.resolve(route.equals("/") ? "index.html" : route.substring(1)).normalize();
             if (!file.startsWith(root) || !Files.isRegularFile(file)) { exchange.sendResponseHeaders(404, -1); exchange.close(); return; }
             String type = Files.probeContentType(file);
+            staticHeaders(exchange.getResponseHeaders(), route);
             exchange.getResponseHeaders().set("Content-Type", file.toString().endsWith(".js") ? "text/javascript" : type == null ? "application/octet-stream" : type);
             exchange.getResponseHeaders().set("X-Content-Type-Options", "nosniff");
             exchange.sendResponseHeaders(200, Files.size(file));

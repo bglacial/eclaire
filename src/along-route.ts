@@ -2,8 +2,9 @@ import type { NavigationRoute } from './navigation';
 import type { Place } from './types';
 import { requestDeadline } from './request-deadline';
 
-export type PoiCategory = 'fuel' | 'parking' | 'restaurant';
-export type RoutePlace = Place & { id: string; at: number; distance: number };
+const osmValues = { fuel: 'fuel', parking: 'parking', restaurant: 'restaurant', charging: 'charging_station' } as const;
+export type PoiCategory = keyof typeof osmValues;
+export type RoutePlace = Place & { id: string; at: number; distance: number; chargingDetails?: string };
 export const searchSpan = 50_000;
 const searchCache = new Map<string, { expires: number; features: unknown[] }>();
 
@@ -32,12 +33,12 @@ export function projectPlace(route: NavigationRoute, place: Place, fromAt: numbe
 }
 
 export function photonRequests(route: NavigationRoute, fromAt: number, category: PoiCategory) {
-  if (!['fuel', 'parking', 'restaurant'].includes(category)) throw new Error('Catégorie inconnue.');
+  if (!Object.prototype.hasOwnProperty.call(osmValues, category)) throw new Error('Catégorie inconnue.');
   const end = Math.min(route.length, fromAt + searchSpan), span = end - fromAt;
   const samples = span <= 6000 ? [(fromAt + end) / 2] : [fromAt, (fromAt + end) / 2, end];
   return samples.map(at => {
     const point = pointAt(route, at), url = new URL('https://photon.komoot.io/reverse');
-    url.search = new URLSearchParams({ lat: point.lat.toFixed(6), lon: point.lon.toFixed(6), radius: String(Math.ceil(span / 2000 + 1)), limit: '20', lang: 'fr', osm_tag: `amenity:${category}` }).toString();
+    url.search = new URLSearchParams({ lat: point.lat.toFixed(6), lon: point.lon.toFixed(6), radius: String(Math.ceil(span / 2000 + 1)), limit: '20', lang: 'fr', osm_tag: `amenity:${osmValues[category]}` }).toString();
     return url;
   });
 }
@@ -48,16 +49,20 @@ export function decodePlaces(value: unknown, route: NavigationRoute, fromAt: num
   const places: RoutePlace[] = [];
   for (const element of body.features) {
     if (!element || typeof element !== 'object') continue;
-    const row = element as { geometry?: { coordinates?: number[] }; properties?: { osm_type?: string; osm_id?: number; osm_key?: string; osm_value?: string; name?: string; housenumber?: string; street?: string; postcode?: string; city?: string; extra?: { access?: string } } };
+    const row = element as { geometry?: { coordinates?: number[] }; properties?: { osm_type?: string; osm_id?: number; osm_key?: string; osm_value?: string; name?: string; housenumber?: string; street?: string; postcode?: string; city?: string; countrycode?: string; extra?: Record<string, unknown> } };
     const lat = row.geometry?.coordinates?.[1], lon = row.geometry?.coordinates?.[0], tags = row.properties;
-    if (!Number.isFinite(lat) || !Number.isFinite(lon) || lat! < 41.3 || lat! > 51.2 || lon! < -5.3 || lon! > 9.7 || !tags || !Number.isSafeInteger(tags.osm_id) || !['N', 'W', 'R'].includes(tags.osm_type ?? '') || tags.osm_key !== 'amenity' || tags.osm_value !== category || tags.extra?.access === 'private' || tags.extra?.access === 'no') continue;
-    const name = typeof tags.name === 'string' && tags.name.trim() ? tags.name.slice(0, 160) : category === 'fuel' ? 'Station-service' : category === 'parking' ? 'Parking' : 'Restaurant';
+    if (!Number.isFinite(lat) || !Number.isFinite(lon) || lat! < 41.3 || lat! > 51.2 || lon! < -5.3 || lon! > 9.7 || !tags || !Number.isSafeInteger(tags.osm_id) || !['N', 'W', 'R'].includes(tags.osm_type ?? '') || tags.osm_key !== 'amenity' || tags.osm_value !== osmValues[category] || (category === 'charging' && typeof tags.countrycode === 'string' && tags.countrycode.toUpperCase() !== 'FR') || tags.extra?.access === 'private' || tags.extra?.access === 'no') continue;
+    const name = typeof tags.name === 'string' && tags.name.trim() ? tags.name.slice(0, 160) : category === 'charging' && typeof tags.extra?.operator === 'string' && tags.extra.operator.trim() ? tags.extra.operator.slice(0, 160) : category === 'fuel' ? 'Station-service' : category === 'parking' ? 'Parking' : category === 'charging' ? 'Borne de recharge' : 'Restaurant';
     const projection = projectPlace(route, { lat: lat!, lon: lon!, name }, fromAt, Math.min(route.length, fromAt + searchSpan));
     if (projection.distance > 1000) continue;
     const detail = [tags.housenumber, tags.street, tags.postcode, tags.city].map(value => typeof value === 'string' ? value.slice(0, 120) : '').filter(Boolean).join(' ');
     const id = `${tags.osm_type}/${tags.osm_id}`;
     if (places.some(place => place.id === id || (place.name === name && Math.hypot((place.lat - lat!) * 111195, (place.lon - lon!) * 111195 * Math.cos(lat! * Math.PI / 180)) < 30))) continue;
-    places.push({ id, name, detail: detail || 'Adresse non renseignée dans OpenStreetMap', lat: lat!, lon: lon!, ...projection });
+    const extra = tags.extra ?? {};
+    const powers = Object.entries(extra).filter(([key, value]) => (key === 'power' || key === 'output' || /^socket:[^:]+:output$/.test(key)) && typeof value === 'string' && value.trim()).map(([, value]) => String(value).slice(0, 80));
+    const connectors = Object.entries(extra).filter(([key, value]) => /^socket:[^:]+$/.test(key) && typeof value === 'string' && value.trim() && value !== 'no' && value !== '0').map(([key]) => key.slice(7).replaceAll('_', ' '));
+    const chargingDetails = category === 'charging' ? [powers.length ? `Puissance : ${[...new Set(powers)].join(', ')}` : 'Puissance non renseignée', connectors.length ? `Connecteurs : ${connectors.join(', ')}` : ''].filter(Boolean).join(' · ') : undefined;
+    places.push({ id, name, detail: detail || 'Adresse non renseignée dans OpenStreetMap', lat: lat!, lon: lon!, ...projection, chargingDetails });
   }
   return places.sort((a, b) => a.distance - b.distance || a.at - b.at).slice(0, 6);
 }

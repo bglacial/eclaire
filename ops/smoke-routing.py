@@ -20,6 +20,13 @@ cases = [
     ('Dunkerque–Perpignan', 'distance', [51.0344, 2.3768], [42.6887, 2.8948], 1058563.6425426053),
     ('Ajaccio–Bastia', 'time', [41.9192, 8.7386], [42.6973, 9.4509], None),
 ]
+# Marges d'environ 2× sur les mesures v2 documentées dans README.md et ops/README.md.
+max_visited = {
+    ('Téloché–Le Barcarès', 'time'): 120_000,
+    ('Téloché–Le Barcarès', 'distance'): 600_000,
+    ('Dunkerque–Perpignan', 'time'): 12_000,
+    ('Dunkerque–Perpignan', 'distance'): 1_010_000,
+}
 for name, criterion, start, end, expected in cases:
     body = {'requestId': str(uuid.uuid4()), 'criterion': criterion,
             'start': dict(zip(('lat', 'lon'), start)), 'end': dict(zip(('lat', 'lon'), end))}
@@ -34,6 +41,10 @@ for name, criterion, start, end, expected in cases:
                 result = item['result']
     assert result and result['found'] and result['path'], (name, result)
     assert math.isfinite(result['cost']), name
+    limit = max_visited.get((name, criterion))
+    if limit is not None:
+        visited = result['visited']
+        assert type(visited) is int and 0 < visited <= limit, (name, criterion, 'états explorés', visited, 'plafond', limit)
     if expected is not None:
         assert abs(result['cost'] - expected) < 0.01, (name, 'coût optimal de référence différent', result['cost'], expected)
     assert result['instructions'][0]['at'] == 0

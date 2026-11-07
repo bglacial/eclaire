@@ -170,7 +170,7 @@ curl -f https://eclaire.nriault.fr/api/health
 
 La recette compare les coûts optimaux de référence pour Paris–Lyon, Brest–Marseille et Téloché–Le Barcarès, vérifie les deux critères et couvre Ajaccio–Bastia. Les coûts de référence sont liés au snapshot OSM du 24 octobre 2026, aux coordonnées du script et au modèle de poids actuel. Lancer ce
 script côté loopback du serveur pour vérifier directement le moteur. Il couvre
-aussi Dunkerque–Perpignan pour les deux critères. Le scénario `traversee` de
+aussi Dunkerque–Perpignan pour les deux critères. Pour ces deux traversées, elle échoue si le nombre d’états explorés dépasse environ deux fois les mesures v2 documentées : 120 000 / 600 000 pour Téloché–Le Barcarès et 12 000 / 1 010 000 pour Dunkerque–Perpignan (rapide / court). Ces plafonds supposent le même snapshot OSM et les index v2 ; ils ne mesurent pas la latence. Le scénario `traversee` de
 `stress-eclaire.py` permet de répéter ce trajet avec plusieurs clients. Le GPS nécessite HTTPS et une permission du
 navigateur. Dans les applications mobiles à jour, le guidage natif continue en arrière-plan ; la publication web seule ne met pas à jour un APK ou une application iOS.
 

@@ -1,0 +1,642 @@
+{
+  "$comment": "Scénarios partagés par les moteurs de guidage TypeScript (src/navigation.ts), Android (GuidanceTracker.java) et iOS (GuidanceTracker.swift). Un fix sans \"now\" est évalué à son propre timestamp. \"at\" et \"toTurn\" sont en mètres, tolérance \"tolerance\". voiceStage et acceptsReroute ne concernent que les moteurs natifs.",
+  "tolerance": 0.01,
+  "routes": {
+    "straight": {
+      "points": [
+        { "lat": 48, "lon": 2, "at": 0, "seconds": 0 },
+        { "lat": 48.001, "lon": 2, "at": 111, "seconds": 20 },
+        { "lat": 48.002, "lon": 2, "at": 222, "seconds": 40 }
+      ],
+      "instructions": [
+        { "at": 0, "text": "Continuez", "sign": 0, "name": "Rue A" },
+        { "at": 111, "text": "Tournez à droite", "sign": 2, "name": "Rue B" },
+        { "at": 222, "text": "Vous êtes arrivé", "sign": 4, "name": "" }
+      ],
+      "length": 222,
+      "seconds": 40
+    },
+    "parallel": {
+      "points": [
+        { "lat": 48.001, "lon": 2, "at": 0, "seconds": 0 },
+        { "lat": 48, "lon": 2, "at": 111, "seconds": 10 },
+        { "lat": 48, "lon": 2.0002, "at": 126, "seconds": 12 },
+        { "lat": 48.001, "lon": 2.0002, "at": 237, "seconds": 22 }
+      ],
+      "instructions": [
+        { "at": 0, "text": "Continuez", "sign": 0, "name": "" },
+        { "at": 237, "text": "Vous êtes arrivé", "sign": 4, "name": "" }
+      ],
+      "length": 237,
+      "seconds": 22
+    },
+    "long": {
+      "points": [
+        { "lat": 48, "lon": 2, "at": 0, "seconds": 0 },
+        { "lat": 48.01, "lon": 2, "at": 1000, "seconds": 100 },
+        { "lat": 48.02, "lon": 2, "at": 2000, "seconds": 200 }
+      ],
+      "instructions": [
+        { "at": 0, "text": "Continuez", "sign": 0, "name": "" },
+        { "at": 2000, "text": "Vous êtes arrivé", "sign": 4, "name": "" }
+      ],
+      "length": 2000,
+      "seconds": 200
+    },
+    "loop0": {
+      "points": [
+        { "lat": 48, "lon": 2, "at": 0, "seconds": 0 },
+        { "lat": 48.000269796, "lon": 2, "at": 30, "seconds": 3 },
+        { "lat": 48.000269796, "lon": 2.000134401, "at": 40, "seconds": 4 },
+        { "lat": 48, "lon": 2.000134401, "at": 70, "seconds": 7 },
+        { "lat": 48, "lon": 2, "at": 80, "seconds": 8 },
+        { "lat": 48.000539593, "lon": 2, "at": 140, "seconds": 14 }
+      ],
+      "instructions": [
+        { "at": 0, "text": "Continuez", "sign": 0, "name": "" },
+        { "at": 140, "text": "Vous êtes arrivé", "sign": 4, "name": "" }
+      ],
+      "length": 140,
+      "seconds": 14
+    },
+    "loop5": {
+      "points": [
+        { "lat": 48, "lon": 2, "at": 0, "seconds": 0 },
+        { "lat": 48.000269796, "lon": 2, "at": 30, "seconds": 3 },
+        { "lat": 48.000269796, "lon": 2.000134401, "at": 40, "seconds": 4 },
+        { "lat": 48, "lon": 2.000134401, "at": 70, "seconds": 7 },
+        { "lat": 48, "lon": 2.000067201, "at": 75, "seconds": 7.5 },
+        { "lat": 48.000539593, "lon": 2.000067201, "at": 135, "seconds": 13.5 }
+      ],
+      "instructions": [
+        { "at": 0, "text": "Continuez", "sign": 0, "name": "" },
+        { "at": 135, "text": "Vous êtes arrivé", "sign": 4, "name": "" }
+      ],
+      "length": 135,
+      "seconds": 13.5
+    }
+  },
+  "validation": [
+    {
+      "name": "trajet complet",
+      "valid": true,
+      "route": {
+        "points": [
+          { "lat": 48, "lon": 2, "at": 0, "seconds": 0 },
+          { "lat": 48.001, "lon": 2, "at": 111, "seconds": 20 },
+          { "lat": 48.002, "lon": 2, "at": 222, "seconds": 40 }
+        ],
+        "instructions": [
+          { "at": 0, "text": "Continuez", "sign": 0, "name": "Rue A" },
+          { "at": 111, "text": "Tournez à droite", "sign": 2, "name": "Rue B" },
+          { "at": 222, "text": "Vous êtes arrivé", "sign": 4, "name": "" }
+        ],
+        "length": 222,
+        "seconds": 40
+      }
+    },
+    {
+      "name": "trajet avec étape",
+      "valid": true,
+      "route": {
+        "points": [
+          { "lat": 48, "lon": 2, "at": 0, "seconds": 0 },
+          { "lat": 48.001, "lon": 2, "at": 111, "seconds": 20 },
+          { "lat": 48.002, "lon": 2, "at": 222, "seconds": 40 }
+        ],
+        "instructions": [
+          { "at": 0, "text": "Continuez", "sign": 0, "name": "Rue A" },
+          { "at": 111, "text": "Tournez à droite", "sign": 2, "name": "Rue B" },
+          { "at": 222, "text": "Vous êtes arrivé", "sign": 4, "name": "" }
+        ],
+        "length": 222,
+        "seconds": 40,
+        "waypointAts": [
+          111
+        ]
+      }
+    },
+    {
+      "name": "limite de vitesse plausible",
+      "valid": true,
+      "route": {
+        "points": [
+          { "lat": 48, "lon": 2, "at": 0, "seconds": 0 },
+          { "lat": 48.001, "lon": 2, "at": 111, "seconds": 20, "speedLimit": 50 },
+          { "lat": 48.002, "lon": 2, "at": 222, "seconds": 40, "speedLimit": 50 }
+        ],
+        "instructions": [
+          { "at": 0, "text": "Continuez", "sign": 0, "name": "Rue A" },
+          { "at": 111, "text": "Tournez à droite", "sign": 2, "name": "Rue B" },
+          { "at": 222, "text": "Vous êtes arrivé", "sign": 4, "name": "" }
+        ],
+        "length": 222,
+        "seconds": 40
+      }
+    },
+    {
+      "name": "un seul point",
+      "valid": false,
+      "route": {
+        "points": [
+          { "lat": 48, "lon": 2, "at": 0, "seconds": 0 }
+        ],
+        "instructions": [
+          { "at": 0, "text": "Continuez", "sign": 0, "name": "Rue A" },
+          { "at": 111, "text": "Tournez à droite", "sign": 2, "name": "Rue B" },
+          { "at": 222, "text": "Vous êtes arrivé", "sign": 4, "name": "" }
+        ],
+        "length": 222,
+        "seconds": 40
+      }
+    },
+    {
+      "name": "sans manœuvre",
+      "valid": false,
+      "route": {
+        "points": [
+          { "lat": 48, "lon": 2, "at": 0, "seconds": 0 },
+          { "lat": 48.001, "lon": 2, "at": 111, "seconds": 20 },
+          { "lat": 48.002, "lon": 2, "at": 222, "seconds": 40 }
+        ],
+        "instructions": [],
+        "length": 222,
+        "seconds": 40
+      }
+    },
+    {
+      "name": "latitude hors limites",
+      "valid": false,
+      "route": {
+        "points": [
+          { "lat": 48, "lon": 2, "at": 0, "seconds": 0 },
+          { "lat": 95, "lon": 2, "at": 111, "seconds": 20 },
+          { "lat": 48.002, "lon": 2, "at": 222, "seconds": 40 }
+        ],
+        "instructions": [
+          { "at": 0, "text": "Continuez", "sign": 0, "name": "Rue A" },
+          { "at": 111, "text": "Tournez à droite", "sign": 2, "name": "Rue B" },
+          { "at": 222, "text": "Vous êtes arrivé", "sign": 4, "name": "" }
+        ],
+        "length": 222,
+        "seconds": 40
+      }
+    },
+    {
+      "name": "distance cumulée décroissante",
+      "valid": false,
+      "route": {
+        "points": [
+          { "lat": 48, "lon": 2, "at": 0, "seconds": 0 },
+          { "lat": 48.001, "lon": 2, "at": 230, "seconds": 20 },
+          { "lat": 48.002, "lon": 2, "at": 222, "seconds": 40 }
+        ],
+        "instructions": [
+          { "at": 0, "text": "Continuez", "sign": 0, "name": "Rue A" },
+          { "at": 111, "text": "Tournez à droite", "sign": 2, "name": "Rue B" },
+          { "at": 222, "text": "Vous êtes arrivé", "sign": 4, "name": "" }
+        ],
+        "length": 222,
+        "seconds": 40
+      }
+    },
+    {
+      "name": "temps négatif",
+      "valid": false,
+      "route": {
+        "points": [
+          { "lat": 48, "lon": 2, "at": 0, "seconds": 0 },
+          { "lat": 48.001, "lon": 2, "at": 111, "seconds": -1 },
+          { "lat": 48.002, "lon": 2, "at": 222, "seconds": 40 }
+        ],
+        "instructions": [
+          { "at": 0, "text": "Continuez", "sign": 0, "name": "Rue A" },
+          { "at": 111, "text": "Tournez à droite", "sign": 2, "name": "Rue B" },
+          { "at": 222, "text": "Vous êtes arrivé", "sign": 4, "name": "" }
+        ],
+        "length": 222,
+        "seconds": 40
+      }
+    },
+    {
+      "name": "premier point non nul",
+      "valid": false,
+      "route": {
+        "points": [
+          { "lat": 48, "lon": 2, "at": 5, "seconds": 0 },
+          { "lat": 48.001, "lon": 2, "at": 111, "seconds": 20 },
+          { "lat": 48.002, "lon": 2, "at": 222, "seconds": 40 }
+        ],
+        "instructions": [
+          { "at": 0, "text": "Continuez", "sign": 0, "name": "Rue A" },
+          { "at": 111, "text": "Tournez à droite", "sign": 2, "name": "Rue B" },
+          { "at": 222, "text": "Vous êtes arrivé", "sign": 4, "name": "" }
+        ],
+        "length": 222,
+        "seconds": 40
+      }
+    },
+    {
+      "name": "longueur incohérente",
+      "valid": false,
+      "route": {
+        "points": [
+          { "lat": 48, "lon": 2, "at": 0, "seconds": 0 },
+          { "lat": 48.001, "lon": 2, "at": 111, "seconds": 20 },
+          { "lat": 48.002, "lon": 2, "at": 222, "seconds": 40 }
+        ],
+        "instructions": [
+          { "at": 0, "text": "Continuez", "sign": 0, "name": "Rue A" },
+          { "at": 111, "text": "Tournez à droite", "sign": 2, "name": "Rue B" },
+          { "at": 222, "text": "Vous êtes arrivé", "sign": 4, "name": "" }
+        ],
+        "length": 500,
+        "seconds": 40
+      }
+    },
+    {
+      "name": "durée incohérente",
+      "valid": false,
+      "route": {
+        "points": [
+          { "lat": 48, "lon": 2, "at": 0, "seconds": 0 },
+          { "lat": 48.001, "lon": 2, "at": 111, "seconds": 20 },
+          { "lat": 48.002, "lon": 2, "at": 222, "seconds": 40 }
+        ],
+        "instructions": [
+          { "at": 0, "text": "Continuez", "sign": 0, "name": "Rue A" },
+          { "at": 111, "text": "Tournez à droite", "sign": 2, "name": "Rue B" },
+          { "at": 222, "text": "Vous êtes arrivé", "sign": 4, "name": "" }
+        ],
+        "length": 222,
+        "seconds": 400
+      }
+    },
+    {
+      "name": "dernière manœuvre sans arrivée",
+      "valid": false,
+      "route": {
+        "points": [
+          { "lat": 48, "lon": 2, "at": 0, "seconds": 0 },
+          { "lat": 48.001, "lon": 2, "at": 111, "seconds": 20 },
+          { "lat": 48.002, "lon": 2, "at": 222, "seconds": 40 }
+        ],
+        "instructions": [
+          { "at": 0, "text": "Continuez", "sign": 0, "name": "Rue A" },
+          { "at": 111, "text": "Tournez à droite", "sign": 2, "name": "Rue B" },
+          { "at": 222, "text": "Vous êtes arrivé", "sign": 0, "name": "" }
+        ],
+        "length": 222,
+        "seconds": 40
+      }
+    },
+    {
+      "name": "première manœuvre après le départ",
+      "valid": false,
+      "route": {
+        "points": [
+          { "lat": 48, "lon": 2, "at": 0, "seconds": 0 },
+          { "lat": 48.001, "lon": 2, "at": 111, "seconds": 20 },
+          { "lat": 48.002, "lon": 2, "at": 222, "seconds": 40 }
+        ],
+        "instructions": [
+          { "at": 5, "text": "Continuez", "sign": 0, "name": "Rue A" },
+          { "at": 111, "text": "Tournez à droite", "sign": 2, "name": "Rue B" },
+          { "at": 222, "text": "Vous êtes arrivé", "sign": 4, "name": "" }
+        ],
+        "length": 222,
+        "seconds": 40
+      }
+    },
+    {
+      "name": "manœuvres désordonnées",
+      "valid": false,
+      "route": {
+        "points": [
+          { "lat": 48, "lon": 2, "at": 0, "seconds": 0 },
+          { "lat": 48.001, "lon": 2, "at": 111, "seconds": 20 },
+          { "lat": 48.002, "lon": 2, "at": 222, "seconds": 40 }
+        ],
+        "instructions": [
+          { "at": 0, "text": "Continuez", "sign": 0, "name": "Rue A" },
+          { "at": 220, "text": "Tournez à droite", "sign": 2, "name": "Rue B" },
+          { "at": 200, "text": "Tournez à droite", "sign": 2, "name": "Rue B" },
+          { "at": 222, "text": "Vous êtes arrivé", "sign": 4, "name": "" }
+        ],
+        "length": 222,
+        "seconds": 40
+      }
+    },
+    {
+      "name": "manœuvre sans nom",
+      "valid": false,
+      "route": {
+        "points": [
+          { "lat": 48, "lon": 2, "at": 0, "seconds": 0 },
+          { "lat": 48.001, "lon": 2, "at": 111, "seconds": 20 },
+          { "lat": 48.002, "lon": 2, "at": 222, "seconds": 40 }
+        ],
+        "instructions": [
+          { "at": 0, "text": "Continuez", "sign": 0, "name": "Rue A" },
+          { "at": 111, "text": "Tournez à droite", "sign": 2 },
+          { "at": 222, "text": "Vous êtes arrivé", "sign": 4, "name": "" }
+        ],
+        "length": 222,
+        "seconds": 40
+      }
+    },
+    {
+      "name": "limite de vitesse aberrante",
+      "valid": false,
+      "route": {
+        "points": [
+          { "lat": 48, "lon": 2, "at": 0, "seconds": 0 },
+          { "lat": 48.001, "lon": 2, "at": 111, "seconds": 20, "speedLimit": 300 },
+          { "lat": 48.002, "lon": 2, "at": 222, "seconds": 40 }
+        ],
+        "instructions": [
+          { "at": 0, "text": "Continuez", "sign": 0, "name": "Rue A" },
+          { "at": 111, "text": "Tournez à droite", "sign": 2, "name": "Rue B" },
+          { "at": 222, "text": "Vous êtes arrivé", "sign": 4, "name": "" }
+        ],
+        "length": 222,
+        "seconds": 40
+      }
+    },
+    {
+      "name": "étape hors du trajet",
+      "valid": false,
+      "route": {
+        "points": [
+          { "lat": 48, "lon": 2, "at": 0, "seconds": 0 },
+          { "lat": 48.001, "lon": 2, "at": 111, "seconds": 20 },
+          { "lat": 48.002, "lon": 2, "at": 222, "seconds": 40 }
+        ],
+        "instructions": [
+          { "at": 0, "text": "Continuez", "sign": 0, "name": "Rue A" },
+          { "at": 111, "text": "Tournez à droite", "sign": 2, "name": "Rue B" },
+          { "at": 222, "text": "Vous êtes arrivé", "sign": 4, "name": "" }
+        ],
+        "length": 222,
+        "seconds": 40,
+        "waypointAts": [
+          250
+        ]
+      }
+    },
+    {
+      "name": "étapes non croissantes",
+      "valid": false,
+      "route": {
+        "points": [
+          { "lat": 48, "lon": 2, "at": 0, "seconds": 0 },
+          { "lat": 48.001, "lon": 2, "at": 111, "seconds": 20 },
+          { "lat": 48.002, "lon": 2, "at": 222, "seconds": 40 }
+        ],
+        "instructions": [
+          { "at": 0, "text": "Continuez", "sign": 0, "name": "Rue A" },
+          { "at": 111, "text": "Tournez à droite", "sign": 2, "name": "Rue B" },
+          { "at": 222, "text": "Vous êtes arrivé", "sign": 4, "name": "" }
+        ],
+        "length": 222,
+        "seconds": 40,
+        "waypointAts": [
+          150,
+          100
+        ]
+      }
+    },
+    {
+      "name": "plus de huit étapes",
+      "valid": false,
+      "route": {
+        "points": [
+          { "lat": 48, "lon": 2, "at": 0, "seconds": 0 },
+          { "lat": 48.001, "lon": 2, "at": 111, "seconds": 20 },
+          { "lat": 48.002, "lon": 2, "at": 222, "seconds": 40 }
+        ],
+        "instructions": [
+          { "at": 0, "text": "Continuez", "sign": 0, "name": "Rue A" },
+          { "at": 111, "text": "Tournez à droite", "sign": 2, "name": "Rue B" },
+          { "at": 222, "text": "Vous êtes arrivé", "sign": 4, "name": "" }
+        ],
+        "length": 222,
+        "seconds": 40,
+        "waypointAts": [
+          10,
+          20,
+          30,
+          40,
+          50,
+          60,
+          70,
+          80,
+          90
+        ]
+      }
+    }
+  ],
+  "tracking": [
+    {
+      "name": "progression, positions rejetées puis arrivée",
+      "route": "straight",
+      "updates": [
+        {
+          "fix": { "lat": 48.0005, "lon": 2, "accuracy": 5, "timestamp": 100000, "speed": 0 },
+          "expect": { "status": "on-route", "at": 55.5, "nextIndex": 1, "toTurn": 55.5 }
+        },
+        {
+          "fix": { "lat": 48.001, "lon": 2, "accuracy": 5, "timestamp": 100000, "speed": 0 },
+          "expect": { "status": "uncertain" }
+        },
+        {
+          "fix": { "lat": 48.001, "lon": 2, "accuracy": 100, "timestamp": 102000, "speed": 0 },
+          "expect": { "status": "uncertain" }
+        },
+        {
+          "fix": { "lat": 48.001, "lon": 2, "accuracy": 5, "timestamp": 103000, "speed": 0 },
+          "now": 130000,
+          "expect": { "status": "uncertain" }
+        },
+        {
+          "fix": { "lat": 48.001, "lon": 2.01, "accuracy": 5, "timestamp": 140000, "speed": 0 },
+          "expect": { "status": "off-route" }
+        },
+        {
+          "fix": { "lat": 48.0015, "lon": 2, "accuracy": 5, "timestamp": 180000, "speed": 0 },
+          "expect": { "status": "on-route", "at": 166.5, "nextIndex": 2, "toTurn": 55.5 }
+        },
+        {
+          "fix": { "lat": 48.002, "lon": 2, "accuracy": 5, "timestamp": 182000, "speed": 0 },
+          "expect": { "status": "on-route", "at": 222, "nextIndex": 2, "toTurn": 0 }
+        },
+        {
+          "fix": { "lat": 48.002, "lon": 2, "accuracy": 5, "timestamp": 186000, "speed": 0 },
+          "expect": { "status": "arrived" }
+        }
+      ]
+    },
+    {
+      "name": "approche puis arrivée seulement à l’arrêt",
+      "route": "straight",
+      "updates": [
+        {
+          "fix": { "lat": 48, "lon": 2.005, "accuracy": 5, "timestamp": 100000, "speed": 0 },
+          "expect": { "status": "approach" }
+        },
+        {
+          "fix": { "lat": 48.002, "lon": 2, "accuracy": 5, "timestamp": 104000, "speed": 15 },
+          "expect": { "status": "on-route", "at": 222 }
+        },
+        {
+          "fix": { "lat": 48.002, "lon": 2, "accuracy": 5, "timestamp": 108000, "speed": 15 },
+          "expect": { "status": "on-route", "at": 222 }
+        },
+        {
+          "fix": { "lat": 48.002, "lon": 2, "accuracy": 5, "timestamp": 110000, "speed": null },
+          "expect": { "status": "on-route", "at": 222 }
+        },
+        {
+          "fix": { "lat": 48.002, "lon": 2, "accuracy": 5, "timestamp": 114000, "speed": null },
+          "expect": { "status": "arrived" }
+        }
+      ]
+    },
+    {
+      "name": "le cap choisit la voie parallèle en mouvement",
+      "route": "parallel",
+      "updates": [
+        {
+          "fix": { "lat": 48.0005, "lon": 2, "accuracy": 5, "timestamp": 100000, "speed": 10, "heading": 0 },
+          "expect": { "status": "on-route", "at": 181.5 }
+        }
+      ]
+    },
+    {
+      "name": "à l’arrêt, le cap est ignoré",
+      "route": "parallel",
+      "updates": [
+        {
+          "fix": { "lat": 48.0005, "lon": 2, "accuracy": 5, "timestamp": 100000, "speed": 0, "heading": 0 },
+          "expect": { "status": "on-route", "at": 55.5 }
+        }
+      ]
+    },
+    {
+      "name": "un long segment reste éligible au-delà de la fenêtre de continuité",
+      "route": "long",
+      "updates": [
+        {
+          "fix": { "lat": 48.0049, "lon": 2, "accuracy": 5, "timestamp": 100000, "speed": 0 },
+          "expect": { "status": "on-route", "at": 490 }
+        },
+        {
+          "fix": { "lat": 48.005, "lon": 2, "accuracy": 5, "timestamp": 101000, "speed": 0 },
+          "expect": { "status": "on-route", "at": 500 }
+        }
+      ]
+    },
+    {
+      "name": "boucle superposée : passage tardif",
+      "route": "loop0",
+      "updates": [
+        {
+          "fix": { "lat": 48.000089932, "lon": 2.000134401, "accuracy": 5, "timestamp": 100000, "speed": 10, "heading": 180 },
+          "expect": { "status": "on-route", "at": 60 }
+        },
+        {
+          "fix": { "lat": 48.000134898, "lon": 2, "accuracy": 5, "timestamp": 103500, "speed": 10, "heading": 0 },
+          "expect": { "status": "on-route", "at": 95 }
+        }
+      ]
+    },
+    {
+      "name": "boucle superposée : premier passage",
+      "route": "loop0",
+      "updates": [
+        {
+          "fix": { "lat": 48.000089932, "lon": 2, "accuracy": 5, "timestamp": 100000, "speed": 10, "heading": 0 },
+          "expect": { "status": "on-route", "at": 10 }
+        },
+        {
+          "fix": { "lat": 48.000179864, "lon": 2, "accuracy": 5, "timestamp": 101000, "speed": 10, "heading": 0 },
+          "expect": { "status": "on-route", "at": 20 }
+        }
+      ]
+    },
+    {
+      "name": "boucle superposée décalée : passage tardif",
+      "route": "loop5",
+      "updates": [
+        {
+          "fix": { "lat": 48.000089932, "lon": 2.000134401, "accuracy": 5, "timestamp": 100000, "speed": 10, "heading": 180 },
+          "expect": { "status": "on-route", "at": 60 }
+        },
+        {
+          "fix": { "lat": 48.000134898, "lon": 2.000067201, "accuracy": 5, "timestamp": 103500, "speed": 10, "heading": 0 },
+          "expect": { "status": "on-route", "at": 90 }
+        }
+      ]
+    },
+    {
+      "name": "boucle superposée décalée : premier passage",
+      "route": "loop5",
+      "updates": [
+        {
+          "fix": { "lat": 48.000089932, "lon": 2, "accuracy": 5, "timestamp": 100000, "speed": 10, "heading": 0 },
+          "expect": { "status": "on-route", "at": 10 }
+        },
+        {
+          "fix": { "lat": 48.000179864, "lon": 2.000067201, "accuracy": 5, "timestamp": 101000, "speed": 10, "heading": 0 },
+          "expect": { "status": "on-route", "at": 20 }
+        }
+      ]
+    }
+  ],
+  "voiceStage": [
+    { "distance": 400, "speed": 0, "expect": "far" },
+    { "distance": 400, "speed": 30, "expect": "near" },
+    { "distance": 80, "speed": 30, "expect": "now" },
+    { "distance": 80, "speed": null, "expect": "near" },
+    { "distance": 400, "speed": null, "expect": "far" },
+    { "distance": 600, "speed": 100, "expect": "far" },
+    { "distance": 30, "speed": 0, "expect": "now" }
+  ],
+  "acceptsReroute": [
+    {
+      "name": "déjà sur le nouveau trajet",
+      "state": "on-route",
+      "origin": { "lat": 48, "lon": 2, "accuracy": 5, "timestamp": 100000, "speed": 0 },
+      "latest": { "lat": 48.01, "lon": 2, "accuracy": 5, "timestamp": 101000, "speed": 0 },
+      "expect": true
+    },
+    {
+      "name": "approche sans déplacement notable",
+      "state": "approach",
+      "origin": { "lat": 48, "lon": 2, "accuracy": 5, "timestamp": 100000, "speed": 0 },
+      "latest": { "lat": 48.0001, "lon": 2, "accuracy": 5, "timestamp": 101000, "speed": 0 },
+      "expect": true
+    },
+    {
+      "name": "approche après un déplacement de 111 m",
+      "state": "approach",
+      "origin": { "lat": 48, "lon": 2, "accuracy": 5, "timestamp": 100000, "speed": 0 },
+      "latest": { "lat": 48.001, "lon": 2, "accuracy": 5, "timestamp": 101000, "speed": 0 },
+      "expect": false
+    },
+    {
+      "name": "position incertaine",
+      "state": "uncertain",
+      "origin": { "lat": 48, "lon": 2, "accuracy": 5, "timestamp": 100000, "speed": 0 },
+      "latest": { "lat": 48, "lon": 2, "accuracy": 5, "timestamp": 100000, "speed": 0 },
+      "expect": false
+    },
+    {
+      "name": "hors trajet",
+      "state": "off-route",
+      "origin": { "lat": 48, "lon": 2, "accuracy": 5, "timestamp": 100000, "speed": 0 },
+      "latest": { "lat": 48, "lon": 2, "accuracy": 5, "timestamp": 100000, "speed": 0 },
+      "expect": false
+    }
+  ]
+}

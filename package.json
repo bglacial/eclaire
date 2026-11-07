@@ -1,6 +1,6 @@
 {
   "name": "eclaire",
-  "version": "1.1.0-alpha.19",
+  "version": "1.1.0-alpha.21",
   "private": true,
   "type": "module",
   "scripts": {
@@ -19,19 +19,19 @@
     "ios:open": "cap open ios"
   },
   "dependencies": {
-    "@capacitor/android": "^8.0.0",
-    "@capacitor/core": "^8.0.0",
+    "@capacitor/android": "^8.6.0",
+    "@capacitor/core": "^8.6.0",
     "@capacitor/geolocation": "^8.0.0",
-    "@capacitor/ios": "^8.5.3",
+    "@capacitor/ios": "^8.6.0",
     "@tomickigrzegorz/leaflet-rotate": "^0.3.0",
     "leaflet": "^1.9.4"
   },
   "devDependencies": {
-    "@capacitor/cli": "^8.0.0",
+    "@capacitor/cli": "^8.6.0",
     "@types/leaflet": "^1.9.20",
     "tsx": "^4.20.0",
-    "typescript": "^5.9.3",
-    "vite": "^7.3.1"
+    "typescript": "^7.0.2",
+    "vite": "^8.3.6"
   },
   "overrides": {
     "xcode": {

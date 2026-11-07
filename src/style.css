@@ -172,6 +172,8 @@ input[type=search]::-webkit-search-cancel-button { display: none; }
 .suggestion > small { color: var(--muted); font-size: 13px; }
 .map-tools { position: absolute; top: calc(96px + var(--safe-top)); right: calc(24px + var(--safe-right)); z-index: 450; display: flex; flex-direction: column; gap: 8px; }
 .map-tools .icon-button { background: var(--surface); }
+.charging-marker span { display: grid; place-items: center; width: 30px; height: 30px; border: 2px solid white; border-radius: 50%; background: #126c57; color: white; font-size: 19px; box-shadow: 0 1px 4px #0008; }
+.charging-status { max-width: 220px; padding: 6px 9px; border-radius: 6px; background: var(--surface); color: var(--ink); font-size: 12px; }
 .zoom-controls { display: flex; flex-direction: column; gap: 8px; }
 .france-button { font-size: 14px; font-weight: 600; }
 .map-legend { position: absolute; z-index: 420; top: calc(90px + var(--safe-top)); left: calc(24px + var(--safe-left)); display: none; align-items: center; gap: 16px; padding: 10px 14px; border-radius: 10px; background: var(--surface); pointer-events: none; }

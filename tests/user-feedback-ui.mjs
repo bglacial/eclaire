@@ -243,7 +243,7 @@ try {
   await editing.page.locator('#navigation-edit-stops').click();
   assert.equal(await editing.page.locator('#trip-stops li').count(), 2);
   assert.match(await editing.page.locator('#trip-stops li').first().textContent(), /Station sur le trajet/);
-  await editing.page.screenshot({ path: '/private/tmp/eclaire-trip-editor.png' });
+  await editing.page.screenshot({ path: '/tmp/eclaire-trip-editor.png' });
   await editing.page.getByRole('button', { name: 'Retirer second arrêt', exact: true }).click();
   await editing.page.evaluate(() => {
     const route = window.testNativeStarts.at(-1).route, at = route.waypointAts[1];

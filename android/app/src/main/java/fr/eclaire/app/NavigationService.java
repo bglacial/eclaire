@@ -223,7 +223,14 @@ public final class NavigationService extends Service implements LocationListener
     private Notification notification() {
         var open = PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         var stop = PendingIntent.getService(this, 1, new Intent(this, NavigationService.class).setAction("stop"), PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-        return new NotificationCompat.Builder(this, CHANNEL).setSmallIcon(R.drawable.ic_navigation).setContentTitle("Éclaire · Guidage GPS").setContentText(message).setStyle(new NotificationCompat.BigTextStyle().bigText(message)).setContentIntent(open).setOngoing(true).setOnlyAlertOnce(true).setCategory(NotificationCompat.CATEGORY_NAVIGATION).addAction(0, "Arrêter le guidage", stop).build();
+        var state = CarGuidance.current();
+        String content = message;
+        if (state != null && "on-route".equals(state.status()) && state.progress() != null) {
+            var end = state.route().points.get(state.route().points.size() - 1);
+            String arrival = ArrivalClock.format(System.currentTimeMillis(), Math.max(0, end.seconds() - state.progress().seconds()));
+            if (!arrival.isEmpty()) content += " · Arrivée vers " + arrival;
+        }
+        return new NotificationCompat.Builder(this, CHANNEL).setSmallIcon(R.drawable.ic_navigation).setContentTitle("Éclaire · Guidage GPS").setContentText(content).setStyle(new NotificationCompat.BigTextStyle().bigText(content)).setContentIntent(open).setOngoing(true).setOnlyAlertOnce(true).setCategory(NotificationCompat.CATEGORY_NAVIGATION).addAction(0, "Arrêter le guidage", stop).build();
     }
     private void updateNotification() { ((NotificationManager) getSystemService(NOTIFICATION_SERVICE)).notify(NOTIFICATION, notification()); }
     @Override public void onProviderDisabled(String provider) { message = "Localisation désactivée. Vérifiez les réglages du téléphone."; silence(); publish("uncertain", active, null, null); updateNotification(); }
