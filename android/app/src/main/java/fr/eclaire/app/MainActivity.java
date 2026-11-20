@@ -4,6 +4,7 @@ import com.getcapacitor.BridgeActivity;
 import com.getcapacitor.WebViewListener;
 import androidx.activity.EdgeToEdge;
 import androidx.activity.OnBackPressedCallback;
+import androidx.car.app.connection.CarConnection;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
@@ -17,14 +18,19 @@ import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.util.Rational;
 import android.os.Build;
+import android.view.Gravity;
 import android.view.View;
+import android.view.inputmethod.InputMethodManager;
 import android.webkit.WebView;
+import android.widget.TextView;
 import java.util.Locale;
 import java.util.Arrays;
 
 public class MainActivity extends BridgeActivity {
     AppUpdater updater;
     private PipGuidanceView pipView;
+    private TextView projectionNotice;
+    private boolean projected;
     private boolean pipEnabled, pipActive, pipVoice;
     private final Runnable guidanceChanged = this::updatePip;
 
@@ -35,9 +41,11 @@ public class MainActivity extends BridgeActivity {
         EdgeToEdge.enable(this);
         enableLegacyEdgeToEdge();
         updater = new AppUpdater(this);
+        new CarConnection(this).getType().observe(this, type -> setProjected(Integer.valueOf(CarConnection.CONNECTION_TYPE_PROJECTION).equals(type)));
         CarGuidance.observe(guidanceChanged);
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override public void handleOnBackPressed() {
+                if (projected) { moveTaskToBack(true); return; }
                 getBridge().getWebView().evaluateJavascript("!window.dispatchEvent(new Event('eclaire-back', {cancelable:true}))", handled -> {
                     if ("true".equals(handled)) return;
                     setEnabled(false);
@@ -46,6 +54,33 @@ public class MainActivity extends BridgeActivity {
                 });
             }
         });
+    }
+
+    void setProjected(boolean connected) {
+        if (projected == connected) return;
+        projected = connected;
+        if (connected && projectionNotice == null) {
+            projectionNotice = new TextView(this);
+            projectionNotice.setText("Utilisez Éclaire sur l’écran de la voiture.");
+            projectionNotice.setTextSize(20);
+            projectionNotice.setGravity(Gravity.CENTER);
+            boolean night = (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
+            projectionNotice.setBackgroundColor(night ? 0xff152019 : 0xfff5f9f5);
+            projectionNotice.setTextColor(night ? 0xfff5f9f5 : 0xff152019);
+            addContentView(projectionNotice, new android.view.ViewGroup.LayoutParams(-1, -1));
+        }
+        var webView = getBridge().getWebView();
+        if (connected) {
+            getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            getSystemService(InputMethodManager.class).hideSoftInputFromWindow(webView.getWindowToken(), 0);
+        }
+        webView.setVisibility(connected ? View.INVISIBLE : View.VISIBLE);
+        if (projectionNotice != null) {
+            projectionNotice.setVisibility(connected ? View.VISIBLE : View.GONE);
+            if (connected) projectionNotice.bringToFront();
+        }
+        if (pipView != null) pipView.setVisibility(connected ? View.GONE : View.VISIBLE);
+        updatePip();
     }
 
     private void enableLegacyEdgeToEdge() {
@@ -96,7 +131,7 @@ public class MainActivity extends BridgeActivity {
             builder.setActions(Arrays.asList(new RemoteAction(Icon.createWithResource(this, state.voice() ? android.R.drawable.ic_lock_silent_mode : android.R.drawable.ic_lock_silent_mode_off), label, label, voice),
                     new RemoteAction(Icon.createWithResource(this, android.R.drawable.ic_menu_close_clear_cancel), "Arrêter le guidage", "Arrêter le guidage", stop)));
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) builder.setAutoEnterEnabled(state != null && pipAutomatic()).setSeamlessResizeEnabled(false);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) builder.setAutoEnterEnabled(state != null && pipAutomatic() && !projected).setSeamlessResizeEnabled(false);
         return builder.build();
     }
 
@@ -104,14 +139,14 @@ public class MainActivity extends BridgeActivity {
         var state = CarGuidance.current();
         if (pipView != null) pipView.update(state);
         if (!pipSupported()) return;
-        boolean active = state != null, enabled = active && pipAutomatic(), voice = active && state.voice();
+        boolean active = state != null && !projected, enabled = active && pipAutomatic(), voice = active && state.voice();
         if (pipEnabled == enabled && pipActive == active && pipVoice == voice) return;
         pipEnabled = enabled; pipActive = active; pipVoice = voice;
-        setPictureInPictureParams(pipParams(state));
+        setPictureInPictureParams(pipParams(projected ? null : state));
     }
 
     boolean enterPip() {
-        if (!pipSupported() || CarGuidance.current() == null) return false;
+        if (projected || !pipSupported() || CarGuidance.current() == null) return false;
         try { return enterPictureInPictureMode(pipParams(CarGuidance.current())); }
         catch (IllegalStateException | SecurityException ignored) { return false; }
     }
@@ -126,6 +161,7 @@ public class MainActivity extends BridgeActivity {
         if (inPip && pipView == null) {
             pipView = new PipGuidanceView(this);
             addContentView(pipView, new android.view.ViewGroup.LayoutParams(-1, -1));
+            if (projected) pipView.setVisibility(View.GONE);
             pipView.update(CarGuidance.current());
         } else if (!inPip && pipView != null) {
             pipView.close();
@@ -136,7 +172,7 @@ public class MainActivity extends BridgeActivity {
 
     @Override public void onResume() {
         super.onResume();
-        if (updater != null) updater.onResume();
+        if (updater != null && !projected) updater.onResume();
     }
 
     @Override public void onPause() {

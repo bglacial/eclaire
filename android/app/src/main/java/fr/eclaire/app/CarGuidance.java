@@ -5,7 +5,11 @@ import java.util.Set;
 
 /** In-memory snapshot of the one guidance session shared by phone and car. */
 final class CarGuidance {
-    record Snapshot(GuidanceTracker route, GuidanceTracker.Fix fix, GuidanceTracker.State progress, String status, String message, boolean voice) {}
+    record Snapshot(GuidanceTracker route, GuidanceTracker.Fix fix, GuidanceTracker.State progress, String status, String message, boolean voice, String destination) {
+        Snapshot(GuidanceTracker route, GuidanceTracker.Fix fix, GuidanceTracker.State progress, String status, String message, boolean voice) {
+            this(route, fix, progress, status, message, voice, null);
+        }
+    }
     private static final Set<Runnable> listeners = new LinkedHashSet<>();
     private static volatile Snapshot current;
 

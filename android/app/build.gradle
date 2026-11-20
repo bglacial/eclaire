@@ -11,8 +11,8 @@ android {
         applicationId "fr.eclaire.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 25
-        versionName "1.1.0-alpha.21"
+        versionCode 26
+        versionName "1.1.0-alpha.22"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -33,8 +33,8 @@ android {
     buildTypes {
         release {
             if (signingFile.exists()) signingConfig signingConfigs.play
-            minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
     testOptions { unitTests.includeAndroidResources = true }
@@ -66,6 +66,40 @@ dependencies {
 }
 
 apply from: 'capacitor.build.gradle'
+
+tasks.register('verifyReleaseDex') {
+    group = 'verification'
+    description = 'Checks code optimization and uncompressed DEX size in the Play bundle.'
+    dependsOn 'bundleRelease'
+    def bundle = layout.buildDirectory.file('outputs/bundle/release/app-release.aab')
+    inputs.file(bundle)
+
+    doLast {
+        new java.util.zip.ZipFile(bundle.get().asFile).withCloseable { zip ->
+            def dex = zip.entries().findAll { it.name ==~ /[^\/]+\/dex\/classes\d*\.dex/ }
+            def metadata = zip.getEntry('BUNDLE-METADATA/com.android.tools/r8.json')
+            if (dex.isEmpty() || metadata == null) throw new GradleException('The Play bundle must contain DEX files and R8 metrics.')
+
+            def r8 = zip.getInputStream(metadata).withCloseable { new groovy.json.JsonSlurper().parse(it) }
+            def checksums = dex.collect { entry ->
+                zip.getInputStream(entry).withCloseable { stream ->
+                    java.security.MessageDigest.getInstance('SHA-256').digest(stream.bytes).encodeHex().toString()
+                }
+            }
+            if (checksums.sort() != r8.dexFiles*.checksum.sort()) throw new GradleException('R8 metrics do not match the packaged DEX files.')
+            logger.lifecycle("Uncompressed DEX: ${dex.sum { it.size }} bytes (${dex.size()} files)")
+            [shrinking: 'noShrinkingPercentage', optimization: 'noOptimizationPercentage', obfuscation: 'noObfuscationPercentage'].each { name, key ->
+                def unoptimized = r8.stats?.get(key)
+                if (!(unoptimized instanceof Number) || unoptimized < 0 || unoptimized > 100) throw new GradleException("Invalid R8 ${name} metric.")
+                def score = 100 - unoptimized
+                logger.lifecycle("R8 ${name}: ${score}%")
+                if (score < 25) throw new GradleException("R8 ${name} is below the 25% Play threshold.")
+            }
+        }
+    }
+}
+
+tasks.named('check') { dependsOn 'verifyReleaseDex' }
 
 try {
     def servicesJSON = file('google-services.json')

@@ -31,6 +31,8 @@ public final class NavigationService extends Service implements LocationListener
     private AudioManager audio;
     private final AudioManager.OnAudioFocusChangeListener focus = change -> { if (change < 0 && speech != null) silence(); };
     private boolean voice, speechReady, active, waypointReached;
+    private boolean foreground;
+    private String carDestination;
     private int waypointsReached;
     private GuidanceTracker tracker;
     private Consumer<JSObject> listener;
@@ -53,7 +55,14 @@ public final class NavigationService extends Service implements LocationListener
         locations = (LocationManager) getSystemService(LOCATION_SERVICE);
         audio = (AudioManager) getSystemService(AUDIO_SERVICE);
         if (Build.VERSION.SDK_INT >= 26) ((NotificationManager) getSystemService(NOTIFICATION_SERVICE)).createNotificationChannel(new NotificationChannel(CHANNEL, "Guidage GPS", NotificationManager.IMPORTANCE_LOW));
-        ServiceCompat.startForeground(this, NOTIFICATION, notification(), Build.VERSION.SDK_INT >= 29 ? ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION : 0);
+        try {
+            ServiceCompat.startForeground(this, NOTIFICATION, notification(), Build.VERSION.SDK_INT >= 29 ? ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION : 0);
+            foreground = true;
+        } catch (SecurityException | IllegalStateException error) {
+            android.util.Log.w("EclaireNavigation", "Service de localisation indisponible", error);
+            stopSelf();
+            return;
+        }
         speech = new TextToSpeech(this, status -> {
             if (status == TextToSpeech.SUCCESS) {
                 int language = speech.setLanguage(Locale.FRANCE);
@@ -73,8 +82,18 @@ public final class NavigationService extends Service implements LocationListener
     }
 
     void start(GuidanceTracker route, boolean enabled, Consumer<JSObject> events, JSONObject wire, NativeRouting.Config config) {
-        cancelRoute(); handler.removeCallbacks(checkSignal); locations.removeUpdates(this); silence(); spoken.clear(); message = "Recherche de votre position…";
-        tracker = route; voice = enabled; listener = events; active = true; lastGoodAt = System.currentTimeMillis();
+        start(route, enabled, events, wire, config, null);
+    }
+
+    void startFromCar(NativeRouting.Result route, NativeRouting.Config config, String destination) {
+        start(route.tracker(), true, null, route.route(), config, destination);
+    }
+
+    private void start(GuidanceTracker route, boolean enabled, Consumer<JSObject> events, JSONObject wire,
+            NativeRouting.Config config, String destination) {
+        if (!foreground) { stopSelf(); throw new IllegalStateException("Service de localisation indisponible."); }
+        cancelRoute(); handler.removeCallbacksAndMessages(null); locations.removeUpdates(this); silence(); spoken.clear(); message = "Recherche de votre position…";
+        tracker = route; voice = enabled; listener = events; active = true; lastGoodAt = System.currentTimeMillis(); carDestination = destination;
         routeWire = wire; routing = config; routeVersion = 1; offRouteCount = 0; retryAfter = 0; latestFix = null; waypointReached = false; waypointsReached = 0;
         latest = new JSObject().put("active", true).put("status", "starting").put("voice", voice).put("nativeRerouting", routing != null).put("routeVersion", routeVersion);
         try {
@@ -85,7 +104,8 @@ public final class NavigationService extends Service implements LocationListener
                 locations.requestLocationUpdates(provider, 1000, 0, this, Looper.getMainLooper()); requested = true;
             }
             if (!requested) throw new IllegalStateException("Activez la localisation du téléphone.");
-            CarGuidance.update(new CarGuidance.Snapshot(tracker, null, null, "starting", message, voice));
+            CarGuidance.update(new CarGuidance.Snapshot(tracker, null, null, "starting", message, voice, carDestination));
+            updateNotification();
             handler.post(checkSignal);
         } catch (RuntimeException error) { stopSelf(); throw error; }
     }
@@ -113,7 +133,7 @@ public final class NavigationService extends Service implements LocationListener
         }
         return START_NOT_STICKY;
     }
-    @Override public void onTaskRemoved(Intent rootIntent) { stopSelf(); }
+    @Override public void onTaskRemoved(Intent rootIntent) { if (carDestination == null) stopSelf(); }
 
     private final Runnable checkSignal = new Runnable() {
         @Override public void run() {
@@ -203,8 +223,11 @@ public final class NavigationService extends Service implements LocationListener
         if (request != null) request.cancel();
     }
 
-    private void finishArrival() { audio.abandonAudioFocus(focus); speech.shutdown(); speechReady = false; handler.removeCallbacksAndMessages(null); stopForeground(STOP_FOREGROUND_REMOVE); stopSelf(); }
-    private void silence() { speech.stop(); audio.abandonAudioFocus(focus); }
+    private void finishArrival() {
+        if (!"arrived".equals(latest.optString("status"))) return;
+        audio.abandonAudioFocus(focus); handler.removeCallbacksAndMessages(null); stopForeground(STOP_FOREGROUND_REMOVE); stopSelf();
+    }
+    private void silence() { if (speech != null) speech.stop(); audio.abandonAudioFocus(focus); }
 
     private static String distance(double metres) { return metres >= 1000 ? String.format(Locale.FRANCE, "%.1f kilomètres", metres / 1000) : Math.max(0, Math.round(metres / 10) * 10) + " mètres"; }
     private void publish(String status, boolean running, GuidanceTracker.Fix fix, GuidanceTracker.State progress) {
@@ -216,7 +239,7 @@ public final class NavigationService extends Service implements LocationListener
         if (progress != null) event.put("match", new JSObject().put("at", progress.at()).put("seconds", progress.seconds()).put("distance", progress.distance()));
         if (includeRoute && routeWire != null) event.put("route", routeWire);
         latest = event;
-        CarGuidance.update(running ? new CarGuidance.Snapshot(tracker, fix, progress, status, message, voice) : null);
+        CarGuidance.update(running ? new CarGuidance.Snapshot(tracker, fix, progress, status, message, voice, carDestination) : null);
         if (listener != null) listener.accept(event);
     }
 
@@ -230,15 +253,21 @@ public final class NavigationService extends Service implements LocationListener
             String arrival = ArrivalClock.format(System.currentTimeMillis(), Math.max(0, end.seconds() - state.progress().seconds()));
             if (!arrival.isEmpty()) content += " · Arrivée vers " + arrival;
         }
-        return new NotificationCompat.Builder(this, CHANNEL).setSmallIcon(R.drawable.ic_navigation).setContentTitle("Éclaire · Guidage GPS").setContentText(content).setStyle(new NotificationCompat.BigTextStyle().bigText(content)).setContentIntent(open).setOngoing(true).setOnlyAlertOnce(true).setCategory(NotificationCompat.CATEGORY_NAVIGATION).addAction(0, "Arrêter le guidage", stop).build();
+        var builder = new NotificationCompat.Builder(this, CHANNEL).setSmallIcon(R.drawable.ic_navigation).setContentTitle("Éclaire · Guidage GPS").setContentText(content).setStyle(new NotificationCompat.BigTextStyle().bigText(content)).setOngoing(true).setOnlyAlertOnce(true).setCategory(NotificationCompat.CATEGORY_NAVIGATION).addAction(0, "Arrêter le guidage", stop);
+        if (carDestination == null) builder.setContentIntent(open);
+        if (state != null && state.progress() != null) builder.extend(new androidx.car.app.notification.CarAppExtender.Builder()
+                .setContentTitle(state.route().steps.get(state.progress().nextIndex()).text()).setContentText(distance(state.progress().toTurn()))
+                .setSmallIcon(R.drawable.ic_navigation).setImportance(NotificationManager.IMPORTANCE_DEFAULT).build());
+        return builder.build();
     }
     private void updateNotification() { ((NotificationManager) getSystemService(NOTIFICATION_SERVICE)).notify(NOTIFICATION, notification()); }
     @Override public void onProviderDisabled(String provider) { message = "Localisation désactivée. Vérifiez les réglages du téléphone."; silence(); publish("uncertain", active, null, null); updateNotification(); }
 
     @Override public void onDestroy() {
         active = false; cancelRoute(); routingWorker.shutdownNow(); handler.removeCallbacksAndMessages(null); locations.removeUpdates(this);
-        speech.stop(); speech.shutdown(); audio.abandonAudioFocus(focus);
-        if (!"arrived".equals(latest.optString("status"))) publish("stopped", false, null, null);
+        silence();
+        if (speech != null) speech.shutdown();
+        if (tracker != null && !"arrived".equals(latest.optString("status"))) publish("stopped", false, null, null);
         stopForeground(STOP_FOREGROUND_REMOVE); super.onDestroy();
     }
 }

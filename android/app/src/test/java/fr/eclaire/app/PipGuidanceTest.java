@@ -1,17 +1,47 @@
 package fr.eclaire.app;
 
 import static org.junit.Assert.*;
+import android.content.pm.PackageInfo;
+import android.os.Bundle;
+import android.view.View;
 import android.widget.TextView;
+import com.getcapacitor.CapConfig;
 import java.util.List;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
+import org.robolectric.shadows.ShadowWebView;
 
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = 28)
 public class PipGuidanceTest {
+    public static class TestActivity extends MainActivity {
+        @Override protected void onCreate(Bundle savedInstanceState) {
+            config = new CapConfig.Builder(this).setResolveServiceWorkerRequests(false).create();
+            super.onCreate(savedInstanceState);
+        }
+    }
+
+    @Test public void androidAutoProjectionSuspendsTheInteractivePhoneViewUntilDisconnect() {
+        var webViewPackage = new PackageInfo();
+        webViewPackage.packageName = "com.android.webview";
+        webViewPackage.versionName = "150";
+        ShadowWebView.setCurrentWebViewPackage(webViewPackage);
+        var controller = Robolectric.buildActivity(TestActivity.class).create();
+        try {
+            var activity = controller.get();
+            var webView = activity.getBridge().getWebView();
+            activity.setProjected(true);
+            assertEquals(View.INVISIBLE, webView.getVisibility());
+            assertFalse(activity.enterPip());
+            activity.setProjected(false);
+            assertEquals(View.VISIBLE, webView.getVisibility());
+        } finally { controller.destroy(); }
+    }
+
     @Test public void compactViewFollowsLiveGuidanceAndReportsItsEnd() {
         var view = new PipGuidanceView(RuntimeEnvironment.getApplication());
         var route = new GuidanceTracker(List.of(new GuidanceTracker.Point(48, 2, 0, 0), new GuidanceTracker.Point(48.01, 2, 1000, 100)),

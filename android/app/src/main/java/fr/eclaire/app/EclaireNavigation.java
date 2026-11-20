@@ -18,7 +18,7 @@ public class EclaireNavigation extends Plugin {
     private GuidanceTracker route;
     private JSONObject routeWire;
     private NativeRouting.Config routing;
-    private boolean bound;
+    private boolean bound, started;
     private JSObject latest = new JSObject().put("active", false).put("status", "stopped");
     private final ServiceConnection connection = new ServiceConnection() {
         @Override public void onServiceConnected(ComponentName name, IBinder binder) {
@@ -35,6 +35,7 @@ public class EclaireNavigation extends Plugin {
     };
 
     @PluginMethod public void start(PluginCall call) {
+        if (pending != null || bound || CarGuidance.current() != null) { call.reject("Un guidage est déjà actif."); return; }
         try {
             var data = call.getObject("route");
             if (data == null) throw new IllegalArgumentException();
@@ -53,13 +54,14 @@ public class EclaireNavigation extends Plugin {
     }
     private void begin(PluginCall call) {
         getActivity().runOnUiThread(() -> {
-            if (pending != null || bound) { call.reject("Un guidage est déjà actif."); return; }
+            if (pending != null || bound || CarGuidance.current() != null) { call.reject("Un guidage est déjà actif."); return; }
             if (!getActivity().getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.RESUMED)) { call.reject("Ouvrez Éclaire pour démarrer le guidage."); return; }
             if (ContextCompat.checkSelfPermission(getContext(), Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) { call.reject("Autorisez la localisation précise dans les réglages du téléphone."); return; }
             try {
                 var intent = new Intent(getContext(), NavigationService.class);
                 pending = call;
                 ContextCompat.startForegroundService(getContext(), intent);
+                started = true;
                 bound = getContext().bindService(intent, connection, Context.BIND_AUTO_CREATE);
                 if (!bound) throw new IllegalStateException();
             } catch (RuntimeException error) { pending = null; close(); call.reject("Impossible de démarrer le guidage en arrière-plan.", error); }
@@ -70,7 +72,8 @@ public class EclaireNavigation extends Plugin {
     @PluginMethod public void stop(PluginCall call) { getActivity().runOnUiThread(() -> { close(); call.resolve(); }); }
     private void close() {
         if (bound) { getContext().unbindService(connection); bound = false; }
-        getContext().stopService(new Intent(getContext(), NavigationService.class)); service = null; route = null; routeWire = null; routing = null;
+        if (started) { getContext().stopService(new Intent(getContext(), NavigationService.class)); started = false; }
+        service = null; route = null; routeWire = null; routing = null;
         latest = new JSObject().put("active", false).put("status", "stopped");
     }
     @Override protected void handleOnDestroy() { getActivity().runOnUiThread(this::close); }
